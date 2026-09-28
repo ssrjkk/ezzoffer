@@ -1,0 +1,156 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { Badge, Panel, btnPrimary, btnGhost } from "@/components/dashboard/ui";
+
+type HhStatus = {
+  configured: boolean;
+  connected: boolean;
+  resume_id: string | null;
+  expires_at: number | null;
+};
+
+const HH_ERROR_MESSAGES: Record<string, string> = {
+  error: "Отказ в авторизации на hh.ru",
+  expired: "Ссылка авторизации устарела, попробуйте снова",
+  failed: "Не удалось подключить аккаунт hh.ru",
+  "no-resume": "На аккаунте hh.ru не найдено резюме — создайте хотя бы одно",
+};
+
+export function HhConnect() {
+  const [status, setStatus] = useState<HhStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [connecting, setConnecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const hhCode = searchParams.get("hh");
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/hh/status", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      setStatus(data as HhStatus);
+    } catch {
+      setError("Не удалось проверить подключение к hh.ru");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (hhCode) {
+      // Убираем параметр результата OAuth из URL (без обновления состояния).
+      router.replace(window.location.pathname);
+    }
+    let alive = true;
+    fetch("/api/hh/status", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data: HhStatus) => {
+        if (alive) setStatus(data);
+      })
+      .catch(() => {
+        if (alive) setError("Не удалось проверить подключение к hh.ru");
+      })
+      .finally(() => {
+        if (alive) setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [hhCode, router]);
+
+  const connect = async () => {
+    setConnecting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/hh/connect", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        setError(data.error ?? "Подключение к hh.ru недоступно");
+        return;
+      }
+      window.location.assign(data.url as string);
+    } catch {
+      setError("Не удалось начать подключение");
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const disconnect = async () => {
+    setConnecting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/hh/disconnect", { method: "POST" });
+      if (!res.ok) return;
+      await load();
+    } catch {
+      setError("Не удалось отключить аккаунт");
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  return (
+    <Panel>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-semibold tracking-tight">Автоотклики на hh.ru</h2>
+          <p className="mt-1 text-sm text-muted">
+            Подключите аккаунт hh.ru — сервис будет отправлять реальные отклики по вашим поискам через API.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {loading ? (
+            <Badge tone="neutral">Проверка…</Badge>
+          ) : status?.connected ? (
+            <Badge tone="success">Подключён</Badge>
+          ) : status && !status.configured ? (
+            <Badge tone="warn">Не настроено на сервере</Badge>
+          ) : (
+            <Badge tone="neutral">Не подключён</Badge>
+          )}
+        </div>
+      </div>
+
+      {error || (hhCode && hhCode !== "ok" && HH_ERROR_MESSAGES[hhCode]) ? (
+        <p className="mt-3 rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-300">
+          {error ?? HH_ERROR_MESSAGES[hhCode ?? ""]}
+        </p>
+      ) : null}
+
+      {!loading && status && (
+        <div className="mt-4">
+          {status.connected ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted">
+                Резюме на hh.ru: <span className="font-mono text-xs">{status.resume_id ?? "—"}</span>
+                {status.expires_at ? (
+                  <span className="block text-xs">Доступ до {new Date(status.expires_at).toLocaleString("ru-RU")}</span>
+                ) : null}
+              </p>
+              <p className="text-sm text-muted">
+                Автоотклики отправляются автоматически по активным поискам (интервал настраивается через env).
+              </p>
+              <button type="button" disabled={connecting} onClick={disconnect} className={btnGhost}>
+                {connecting ? "Отключаем…" : "Отключить аккаунт"}
+              </button>
+            </div>
+          ) : status.configured ? (
+            <button type="button" disabled={connecting} onClick={connect} className={btnPrimary}>
+              {connecting ? "Перенаправляем…" : "Подключить аккаунт hh.ru"}
+            </button>
+          ) : (
+            <p className="text-sm text-muted">
+              Администратор не настроил OAuth-приложение hh.ru (нужны HH_CLIENT_ID, HH_CLIENT_SECRET, HH_REDIRECT_URI).
+            </p>
+          )}
+        </div>
+      )}
+    </Panel>
+  );
+}
