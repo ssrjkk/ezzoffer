@@ -59,5 +59,8 @@ export interface VacancyProvider {
   label: string;
   isAvailable(): boolean;
   fetchVacancies(query: VacancyQuery): Promise<VacancyFetchResult>;
-  apply?(vacancy: Vacancy, ctx: { resumeId: string; message?: string }): Promise<VacancyApplyResult>;
+  apply?(
+    vacancy: Vacancy,
+    ctx: { resumeId: string; message?: string; accessToken?: string },
+  ): Promise<VacancyApplyResult>;
 }

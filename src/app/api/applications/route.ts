@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireUser, unauthorized, readJson } from "@/lib/api";
-import { db } from "@/lib/db";
+import { db, type User } from "@/lib/db";
 import { isPlanActive, planDailyLimit } from "@/lib/plans";
 import { listApplications, serializeApplication, type ApplicationRow } from "@/lib/applications";
 import { getVacancyBySlug } from "@/lib/vacancies";
+import { hhProvider } from "@/lib/vacancies/hh";
+import { getValidHhToken } from "@/lib/hh-oauth";
 import { personalizeLetter } from "@/lib/cover-letter";
 import { NO_STORE_HEADERS } from "@/lib/http";
 
@@ -101,6 +103,44 @@ export async function POST(request: Request) {
   }
 
   const now = Date.now();
+
+  // Реальная отправка на hh.ru: если вакансия с hh.ru и аккаунт подключён —
+  // отклик уходит через API, и только при успехе записывается в кабинет.
+  if (vacancy.source === "hh") {
+    const fresh = db.prepare("SELECT * FROM users WHERE id = ?").get(user.id) as User;
+    const hhResumeId = fresh.hh_resume_id?.trim();
+    if (!hhResumeId) {
+      return NextResponse.json(
+        {
+          error:
+            "Для отклика на вакансию hh.ru подключите аккаунт hh.ru в разделе «Настройки» (нужно резюме на hh.ru).",
+        },
+        { status: 400 },
+      );
+    }
+    const valid = await getValidHhToken(fresh);
+    if (!valid) {
+      return NextResponse.json(
+        { error: "Подключение к hh.ru истекло. Переподключите аккаунт в «Настройках»." },
+        { status: 401 },
+      );
+    }
+    if (!hhProvider.apply) {
+      return NextResponse.json({ error: "Отклики на hh.ru недоступны" }, { status: 502 });
+    }
+    const sent = await hhProvider.apply(vacancy, {
+      resumeId: hhResumeId,
+      message: message || undefined,
+      accessToken: valid.token,
+    });
+    if (!sent.ok) {
+      return NextResponse.json(
+        { error: `hh.ru отклонил отклик: ${sent.error ?? "неизвестная ошибка"}` },
+        { status: 502 },
+      );
+    }
+  }
+
   const result = db
     .prepare(
       `INSERT INTO applications (user_id, job_slug, search_id, resume_id, letter_id, status, message, sent_at)
@@ -110,5 +150,5 @@ export async function POST(request: Request) {
   const row = db
     .prepare("SELECT * FROM applications WHERE id = ?")
     .get(result.lastInsertRowid) as ApplicationRow;
-  return Response.json({ application: serializeApplication(row) }, { status: 201 });
+  return Response.json({ application: serializeApplication(row) }, { status: 201, headers: NO_STORE_HEADERS });
 }

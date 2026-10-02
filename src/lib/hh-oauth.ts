@@ -98,16 +98,42 @@ export function saveHhConnection(
   resumeId: string,
 ): void {
   db.prepare(
-    `UPDATE users SET hh_token = ?, hh_token_expires_at = ?, hh_resume_id = ? WHERE id = ?`,
-  ).run(token, Date.now() + Math.max(expiresIn, 60) * 1000, resumeId, user.id);
+    `UPDATE users SET hh_token = ?, hh_token_expires_at = ?, hh_refresh_token = ?, hh_resume_id = ? WHERE id = ?`,
+  ).run(token, Date.now() + Math.max(expiresIn, 60) * 1000, refreshToken ?? null, resumeId, user.id);
 }
 
 export function clearHhConnection(userId: number): void {
   db.prepare(
-    "UPDATE users SET hh_token = NULL, hh_token_expires_at = NULL, hh_resume_id = NULL WHERE id = ?",
+    "UPDATE users SET hh_token = NULL, hh_token_expires_at = NULL, hh_refresh_token = NULL, hh_resume_id = NULL WHERE id = ?",
   ).run(userId);
 }
 
 export function generateOauthState(): string {
   return randomBytes(24).toString("hex");
+}
+
+/**
+ * Возвращает актуальный access-токен пользователя, автоматически обновляя
+ * протухший токен через refresh_token. Если обновить нечем — null.
+ */
+export async function getValidHhToken(
+  user: Pick<User, "id" | "hh_token" | "hh_token_expires_at" | "hh_refresh_token">,
+): Promise<{ token: string } | null> {
+  if (!user.hh_token) return null;
+  if (user.hh_token_expires_at && user.hh_token_expires_at > Date.now() + 60_000) {
+    return { token: user.hh_token };
+  }
+  if (!user.hh_refresh_token || !hhConfigured()) return null;
+
+  const refreshed = await refreshAccessToken(user.hh_refresh_token);
+  if (!refreshed.access_token) return null;
+  db.prepare(
+    `UPDATE users SET hh_token = ?, hh_token_expires_at = ?, hh_refresh_token = ? WHERE id = ?`,
+  ).run(
+    refreshed.access_token,
+    Date.now() + Math.max(refreshed.expires_in ?? 3600, 60) * 1000,
+    refreshed.refresh_token ?? user.hh_refresh_token,
+    user.id,
+  );
+  return { token: refreshed.access_token };
 }

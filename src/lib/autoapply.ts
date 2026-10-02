@@ -3,6 +3,7 @@ import { isPlanActive, planDailyLimit } from "./plans";
 import { matchesSearch, type SearchRow } from "./matcher";
 import { getCatalog } from "./vacancies";
 import { hhProvider } from "./vacancies/hh";
+import { getValidHhToken } from "./hh-oauth";
 import { createPacing, zeroPacing, type PacingConfig } from "./anti-ban";
 import { effectivePacing } from "./config";
 import { logError, logInfo } from "./logger";
@@ -80,8 +81,10 @@ export async function runAutoApply(opts?: { pacing?: Partial<PacingConfig> }): P
       : zeroPacing();
 
     const appliedSet = new Set<string>();
-    const token = user.hh_token?.trim();
     const resumeId = user.hh_resume_id?.trim();
+    // Актуальный токен пользователя (с авто-обновлением протухшего).
+    const valid = resumeId ? await getValidHhToken(user) : null;
+    const token = valid?.token ?? null;
 
     for (const search of activeSearches) {
       if (appliedSet.size >= remaining) break;
@@ -113,7 +116,11 @@ export async function runAutoApply(opts?: { pacing?: Partial<PacingConfig> }): P
         if (already) continue;
 
         if (!hhProvider.apply) break;
-        const result = await hhProvider.apply(vacancy, { resumeId, message: undefined });
+        const result = await hhProvider.apply(vacancy, {
+          resumeId,
+          message: undefined,
+          accessToken: token,
+        });
         if (!result.ok) {
           failed++;
           pacing.recordFailure("platform");
