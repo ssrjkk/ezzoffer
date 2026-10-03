@@ -2,8 +2,6 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { isPlanActive, planDailyLimit, planLabel, daysLeft } from "@/lib/plans";
 import { DashboardNav } from "@/components/dashboard/nav";
-import { QuickActions } from "@/components/dashboard/quick-actions";
-import { ErrorBoundary } from "@/components/dashboard/error-boundary";
 
 export default async function DashboardLayout({ children }: LayoutProps<"/dashboard">) {
   const user = await getCurrentUser();
@@ -32,12 +30,7 @@ export default async function DashboardLayout({ children }: LayoutProps<"/dashbo
             <div className="mb-6 lg:hidden">
               <DashboardNav {...nav} onMobile />
             </div>
-            <div className="mb-6 hidden lg:block">
-              <QuickActions active={active} />
-            </div>
-            <ErrorBoundary>
-              {children}
-            </ErrorBoundary>
+            {children}
           </div>
         </main>
       </div>
