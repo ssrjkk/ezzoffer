@@ -2,24 +2,17 @@ import { db } from "./db";
 import { refreshProviders } from "./vacancies";
 import { runAutoApply } from "./autoapply";
 import { syncAllHhUsers } from "./hh-sync";
-import { sendDigestEmail, smtpConfigured } from "./notify";
-import { sendDigestToUser, telegramConfigured } from "./telegram";
-import { isPlanActive } from "./plans";
-import type { User } from "./db";
 import { logError, logInfo } from "./logger";
-import { startBackupScheduler } from "./backup";
 
 /**
  * Центральный планировщик реальных фоновых задач (однопоточный, с блокировкой от перекрытия):
  *  1. Обновление каталога вакансий (если устарел);
  *  2. Автоотклики через анти-бан паузер;
- *  3. Синхронизация статусов с hh.ru;
- *  4. Дневные отчёты (email + Telegram) — раз в сутки на пользователя.
+ *  3. Синхронизация статусов с hh.ru.
  */
 
 const LOCK_KEY = "scheduler:lock";
 const CATALOG_REFRESH_KEY = "scheduler:catalog_refresh";
-const DIGEST_DAY_KEY = "scheduler:digest_day";
 
 function getMeta(key: string): string | null {
   const row = db.prepare("SELECT value FROM meta WHERE key = ?").get(key) as { value: string } | undefined;
@@ -45,23 +38,6 @@ async function refreshCatalogIfStale(now: number): Promise<void> {
   }
 }
 
-async function runDigests(now: number): Promise<void> {
-  if (!smtpConfigured() && !telegramConfigured()) return;
-  const dayKey = Math.floor(now / (24 * 60 * 60 * 1000));
-  if (getMeta(DIGEST_DAY_KEY) === String(dayKey)) return;
-
-  const users = db.prepare("SELECT * FROM users").all() as User[];
-  let sent = 0;
-  for (const user of users) {
-    if (!isPlanActive(user)) continue;
-    const emailOk = await sendDigestEmail(user.id);
-    const tgOk = telegramConfigured() ? await sendDigestToUser(user.id) : false;
-    if (emailOk || tgOk) sent++;
-  }
-  setMeta(DIGEST_DAY_KEY, String(dayKey));
-  if (sent > 0) logInfo("scheduler", `отчётов отправлено: ${sent}`);
-}
-
 export async function runScheduledJobs(): Promise<void> {
   const now = Date.now();
   const lockAt = Number(getMeta(LOCK_KEY) ?? 0);
@@ -69,11 +45,9 @@ export async function runScheduledJobs(): Promise<void> {
   setMeta(LOCK_KEY, String(now));
 
   try {
-    startBackupScheduler();
     await refreshCatalogIfStale(now);
     await runAutoApply();
     await syncAllHhUsers();
-    await runDigests(now);
   } catch (err) {
     logError("scheduler", err);
   } finally {

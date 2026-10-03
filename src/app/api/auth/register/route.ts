@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
-import { randomBytes } from "node:crypto";
+
 import { db, getUserByEmail } from "@/lib/db";
 import { createSession, hashPassword, publicUser, SESSION_COOKIE, isHttpsRequest } from "@/lib/auth";
 import { readJson } from "@/lib/api";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 import { isUniqueViolation } from "@/lib/http";
-import { sendVerificationEmail } from "@/lib/notify";
-
-const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
 export async function POST(request: Request) {
   const ip = clientIp(request);
@@ -54,13 +51,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Пользователь с таким email уже существует" }, { status: 409 });
   }
 
-  const verificationToken = randomBytes(32).toString("hex");
-  const verificationValue = `${verificationToken}.${Date.now() + VERIFICATION_TTL_MS}`;
-
   try {
     db.prepare(
-      "INSERT INTO users (email, name, password_hash, created_at, email_verification_token) VALUES (?, ?, ?, ?, ?)",
-    ).run(email, name, hashPassword(password), Date.now(), verificationValue);
+      "INSERT INTO users (email, name, password_hash, email_verified, created_at) VALUES (?, ?, ?, 1, ?)",
+    ).run(email, name, hashPassword(password), Date.now());
   } catch (err) {
     if (isUniqueViolation(err)) {
       return NextResponse.json({ error: "Пользователь с таким email уже существует" }, { status: 409 });
@@ -68,7 +62,6 @@ export async function POST(request: Request) {
     throw err;
   }
   const user = getUserByEmail(email)!;
-  await sendVerificationEmail(user.email, verificationValue);
   const session = createSession(user.id);
 
   const res = NextResponse.json({ user: publicUser(user) }, { status: 201 });

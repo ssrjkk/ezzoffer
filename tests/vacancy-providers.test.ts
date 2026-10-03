@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mapRemoteOkVacancy, remoteOkSalaryValues } from "../src/lib/vacancies/remoteok";
 import { mapGreenhouseVacancy, parseGreenhouseBoards } from "../src/lib/vacancies/greenhouse";
 import { mapCompanyFeedItem, companyFeedsConfigured } from "../src/lib/vacancies/company";
-import { xProvider, tgProvider, tgChannelsConfigured } from "../src/lib/vacancies/social";
+
 import { mapGeekVacancy } from "../src/lib/vacancies/geekjob";
 import { mapJobicyVacancy } from "../src/lib/vacancies/jobicy";
 import { mapWwRItem } from "../src/lib/vacancies/weworkremotely";
@@ -107,48 +107,6 @@ test("companyFeedsConfigured зависит от env", () => {
   assert.equal(companyFeedsConfigured(), true);
   if (old === undefined) delete process.env.COMPANY_JOB_FEEDS;
   else process.env.COMPANY_JOB_FEEDS = old;
-});
-
-test("xProvider.isAvailable без токена false, with true", () => {
-  const old = process.env.X_API_BEARER_TOKEN;
-  delete process.env.X_API_BEARER_TOKEN;
-  assert.equal(xProvider.isAvailable(), false);
-  process.env.X_API_BEARER_TOKEN = "test";
-  assert.equal(xProvider.isAvailable(), true);
-  if (old === undefined) delete process.env.X_API_BEARER_TOKEN;
-  else process.env.X_API_BEARER_TOKEN = old;
-});
-
-test("tgProvider честно недоступен без конфигурации", () => {
-  const oldToken = process.env.TELEGRAM_SOURCE_BOT_TOKEN;
-  const oldChannels = process.env.TELEGRAM_SOURCE_CHANNELS;
-  delete process.env.TELEGRAM_SOURCE_BOT_TOKEN;
-  delete process.env.TELEGRAM_SOURCE_CHANNELS;
-  assert.equal(tgChannelsConfigured(), false);
-  process.env.TELEGRAM_SOURCE_BOT_TOKEN = "t";
-  process.env.TELEGRAM_SOURCE_CHANNELS = "@jobs, careers";
-  assert.equal(tgChannelsConfigured(), true);
-  if (oldToken === undefined) delete process.env.TELEGRAM_SOURCE_BOT_TOKEN;
-  else process.env.TELEGRAM_SOURCE_BOT_TOKEN = oldToken;
-  if (oldChannels === undefined) delete process.env.TELEGRAM_SOURCE_CHANNELS;
-  else process.env.TELEGRAM_SOURCE_CHANNELS = oldChannels;
-});
-
-test("tgProvider.fetchVacancies без конфигурации отдаёт ошибку", async () => {
-  const oldToken = process.env.TELEGRAM_SOURCE_BOT_TOKEN;
-  const oldChannels = process.env.TELEGRAM_SOURCE_CHANNELS;
-  delete process.env.TELEGRAM_SOURCE_BOT_TOKEN;
-  delete process.env.TELEGRAM_SOURCE_CHANNELS;
-  try {
-    const res = await tgProvider.fetchVacancies({});
-    assert.equal(res.ok, false);
-    assert.match(res.error ?? "", /не настроены/i);
-  } finally {
-    if (oldToken === undefined) delete process.env.TELEGRAM_SOURCE_BOT_TOKEN;
-    else process.env.TELEGRAM_SOURCE_BOT_TOKEN = oldToken;
-    if (oldChannels === undefined) delete process.env.TELEGRAM_SOURCE_CHANNELS;
-    else process.env.TELEGRAM_SOURCE_CHANNELS = oldChannels;
-  }
 });
 
 test("parseSalaryText парсит свободную строку зарплаты", () => {

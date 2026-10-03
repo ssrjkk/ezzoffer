@@ -5,7 +5,6 @@ import { isPlanActive, planDailyLimit, planLabel, daysLeft } from "@/lib/plans";
 import { PlanSettings } from "@/components/dashboard/plan-settings";
 import { ProfileForm } from "@/components/dashboard/profile-form";
 import { HhConnect } from "@/components/dashboard/hh-connect";
-import { TelegramConnect } from "@/components/dashboard/telegram-connect";
 import { AutoApplyPause } from "@/components/dashboard/autoapply-pause";
 
 export const metadata: Metadata = { title: "Настройки" };
@@ -27,8 +26,6 @@ export default async function SettingsPage() {
       <HhConnect />
 
       <AutoApplyPause initialPaused={Boolean(user.autoapply_paused)} />
-
-      <TelegramConnect />
 
       <PlanSettings
         plan={user.plan}

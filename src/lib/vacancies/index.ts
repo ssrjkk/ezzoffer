@@ -7,7 +7,6 @@ import { hhProvider } from "./hh";
 import { remoteokProvider } from "./remoteok";
 import { greenhouseProvider } from "./greenhouse";
 import { companyFeedProvider } from "./company";
-import { xProvider, tgProvider } from "./social";
 import { geekjobProvider } from "./geekjob";
 import { jobicyProvider } from "./jobicy";
 import { weworkremotelyProvider } from "./weworkremotely";
@@ -22,8 +21,6 @@ export const SOURCE_LABELS: Record<VacancySource, string> = {
   remoteok: "RemoteOK",
   greenhouse: "Сайты компаний (Greenhouse)",
   company: "Сайты компаний (RSS)",
-  x: "X / Twitter",
-  tg: "Каналы компаний (Telegram)",
   geekjob: "GeekJob",
   jobicy: "Jobicy (remote)",
   weworkremotely: "We Work Remotely",
@@ -47,8 +44,6 @@ const providers: VacancyProvider[] = [
   remoteokProvider,
   greenhouseProvider,
   companyFeedProvider,
-  xProvider,
-  tgProvider,
   geekjobProvider,
   jobicyProvider,
   weworkremotelyProvider,
