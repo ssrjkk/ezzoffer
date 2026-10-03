@@ -51,6 +51,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Неверный email или пароль" }, { status: 401 });
   }
 
+  if (!user.email_verified) {
+    return NextResponse.json(
+      { error: "Подтвердите email по ссылке из письма" },
+      { status: 403 },
+    );
+  }
+
   const session = createSession(user.id);
   const res = NextResponse.json({ user: publicUser(user) });
   res.cookies.set(SESSION_COOKIE, session.token, {

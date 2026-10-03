@@ -11,6 +11,7 @@ import { xProvider, tgProvider } from "./social";
 import { geekjobProvider } from "./geekjob";
 import { jobicyProvider } from "./jobicy";
 import { weworkremotelyProvider } from "./weworkremotely";
+import { rabotaProvider } from "./rabota";
 
 export type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery, VacancySource } from "./types";
 
@@ -26,6 +27,7 @@ export const SOURCE_LABELS: Record<VacancySource, string> = {
   geekjob: "GeekJob",
   jobicy: "Jobicy (remote)",
   weworkremotely: "We Work Remotely",
+  rabota: "Работа.ру",
 };
 
 export type SourceStatus = {
@@ -50,6 +52,7 @@ const providers: VacancyProvider[] = [
   geekjobProvider,
   jobicyProvider,
   weworkremotelyProvider,
+  rabotaProvider,
 ];
 
 const EXTERNAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -214,7 +217,7 @@ export function getCatalog(): Vacancy[] {
          WHEN 'remoteok' THEN 3 WHEN 'greenhouse' THEN 4 WHEN 'company' THEN 5
          WHEN 'x' THEN 6 WHEN 'tg' THEN 7
          WHEN 'geekjob' THEN 8 WHEN 'jobicy' THEN 9
-         WHEN 'weworkremotely' THEN 10 ELSE 11 END, title`,
+         WHEN 'weworkremotely' THEN 10 WHEN 'rabota' THEN 11 ELSE 12 END, title`,
     )
     .all() as VacancyRow[];
   catalogCache = rows.map(rowToVacancy);

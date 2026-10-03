@@ -12,6 +12,7 @@ export type ApplicationRow = {
   response: string;
   response_note: string;
   message: string;
+  external_url: string | null;
   sent_at: number;
   viewed_at: number | null;
   responded_at: number | null;
@@ -41,6 +42,7 @@ function serializeApplicationWith(row: ApplicationRow, vacancy: ReturnType<typeo
     response: row.response,
     response_note: row.response_note,
     message: row.message,
+    external_url: row.external_url,
     sent_at: row.sent_at,
     viewed_at: row.viewed_at,
     responded_at: row.responded_at,

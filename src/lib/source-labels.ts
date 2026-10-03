@@ -10,4 +10,5 @@ export const SOURCE_LABELS: Record<string, string> = {
   geekjob: "GeekJob",
   jobicy: "Jobicy (remote)",
   weworkremotely: "We Work Remotely",
+  rabota: "Работа.ру",
 };

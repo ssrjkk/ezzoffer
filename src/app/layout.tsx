@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { ErrorBoundary } from "@/components/dashboard/error-boundary";
 
 const inter = Inter({
   subsets: ["latin", "cyrillic"],
@@ -52,9 +53,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${inter.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-bg font-sans text-ink">
-        <SiteHeader />
-        <main className="flex-1">{children}</main>
-        <SiteFooter />
+        <ErrorBoundary>
+          <SiteHeader />
+          <main className="flex-1">{children}</main>
+          <SiteFooter />
+        </ErrorBoundary>
       </body>
     </html>
   );

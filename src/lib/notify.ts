@@ -138,7 +138,41 @@ export async function runDailyDigests(): Promise<number> {
   return sent;
 }
 
-async function sendEmail(to: string, subject: string, text: string): Promise<boolean> {
+function appBaseUrl(): string {
+  return (
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    process.env.APP_URL?.trim() ||
+    "http://localhost:3000"
+  ).replace(/\/+$/, "");
+}
+
+export async function sendVerificationEmail(email: string, token: string): Promise<boolean> {
+  const link = `${appBaseUrl()}/api/auth/verify-email?token=${token}`;
+  const text = [
+    "Добро пожаловать в EZOffer!",
+    "",
+    "Перейдите по ссылке, чтобы подтвердить email:",
+    link,
+    "",
+    "Ссылка действует 24 часа.",
+  ].join("\n");
+  return sendEmail(email, "EZOffer — подтвердите email", text);
+}
+
+export async function sendPasswordResetEmail(email: string, token: string): Promise<boolean> {
+  const link = `${appBaseUrl()}/api/auth/reset-password?token=${token}`;
+  const text = [
+    "Сброс пароля EZOffer",
+    "",
+    "Перейдите по ссылке, чтобы задать новый пароль:",
+    link,
+    "",
+    "Ссылка действует 1 час. Если вы не запрашивали сброс пароля, проигнорируйте письмо.",
+  ].join("\n");
+  return sendEmail(email, "EZOffer — сброс пароля", text);
+}
+
+export async function sendEmail(to: string, subject: string, text: string): Promise<boolean> {
   const host = process.env.SMTP_HOST?.trim();
   const from = process.env.SMTP_FROM?.trim();
   if (!host || !from) return false;
@@ -168,4 +202,37 @@ async function sendEmail(to: string, subject: string, text: string): Promise<boo
     logError("notify:email", e, { to });
     return false;
   }
+}
+
+/**
+ * Рассылка резюме напрямую на email компании (рекрутёра).
+ * Для вакансий с contact_email (trudvsem, geekjob и др.).
+ * Требует настроенного SMTP. Возвращает { ok, error? }.
+ */
+export async function sendResumeEmail(opts: {
+  to: string;
+  company: string;
+  vacancyTitle: string;
+  candidateName: string;
+  resumeText: string;
+  message: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  if (!smtpConfigured()) {
+    return { ok: false, error: "SMTP не настроен на сервере — добавьте SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM в .env" };
+  }
+  const subject = `Отклик: ${opts.vacancyTitle} — ${opts.candidateName}`;
+  const text = [
+    `Здравствуйте!`,
+    ``,
+    `Отклик на вакансию «${opts.vacancyTitle}» в компании ${opts.company}.`,
+    ``,
+    opts.message.trim() ? opts.message.trim() : "Рассматривайте моё резюме, пожалуйста.",
+    ``,
+    `---`,
+    `Резюме кандидата:`,
+    ``,
+    opts.resumeText.slice(0, 20_000),
+  ].join("\n");
+  const sent = await sendEmail(opts.to, subject, text);
+  return sent ? { ok: true } : { ok: false, error: "Не удалось отправить email" };
 }

@@ -21,7 +21,7 @@ type Search = {
   created_at: number;
   match_count: number;
 };
-type Application = { id: number; job_slug: string; withdrawable?: boolean };
+type Application = { id: number; job_slug: string; external_url?: string | null; withdrawable?: boolean };
 type Source = { source: string; label: string; available: boolean; count: number };
 
 import { SOURCE_LABELS } from "@/lib/source-labels";
@@ -61,10 +61,16 @@ export function JobExplorer() {
   const [notice, setNotice] = useState<string | null>(null);
   const [draft, setDraft] = useState(emptySearch);
   const [creating, setCreating] = useState(false);
-  const [vacancies, setVacancies] = useState<Vacancy[]>([]);
+  const [page, setPage] = useState(1);
+  const perPage = 20;
+  const totalPages = Math.ceil(filtered.length / perPage);
+  const paginated = filtered.slice((page - 1) * perPage, page * perPage);
   const [sources, setSources] = useState<Source[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [externalUrl, setExternalUrl] = useState<Record<string, string>>({});
+  const [markingExternal, setMarkingExternal] = useState("");
+  const [sendingEmail, setSendingEmail] = useState("");
   const vacanciesRef = useRef<Vacancy[]>([]);
 
   useEffect(() => {
@@ -182,6 +188,50 @@ export function JobExplorer() {
       setNotice(`Отклик отправлен: ${data.application?.job?.title ?? slug} — статус ведётся в разделе «Отклики».`);
     } finally {
       setBusy("");
+    }
+  };
+
+  const markAsExternal = async (slug: string) => {
+    setMarkingExternal(slug);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobSlug: slug, externalUrl: externalUrl[slug] || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Не удалось отметить отклик");
+        return;
+      }
+      setApplied((prev) => new Set(prev).add(slug));
+      setNotice(`Отклик отмечен: ${data.application?.job?.title ?? slug}`);
+    } finally {
+      setMarkingExternal("");
+    }
+  };
+
+  const sendByEmail = async (slug: string) => {
+    setSendingEmail(slug);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/applications/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobSlug: slug, resumeId: appliedId || null, letterId: letterId || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Не удалось отправить резюме по email");
+        return;
+      }
+      setApplied((prev) => new Set(prev).add(slug));
+      setNotice(data.note ?? "Резюме отправлено по email");
+    } finally {
+      setSendingEmail("");
     }
   };
 
@@ -399,12 +449,21 @@ export function JobExplorer() {
         </div>
 
         {loading ? (
-          <EmptyState title="Загружаем каталог…" text="Мгновение, собираем вакансии из всех источников." />
+          <div className="grid gap-3 md:grid-cols-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="animate-pulse rounded-xl border border-line bg-surface p-5">
+                <div className="h-4 w-3/4 rounded bg-surface-2" />
+                <div className="mt-2 h-3 w-1/2 rounded bg-surface-2" />
+                <div className="mt-4 h-6 w-1/3 rounded bg-surface-2" />
+                <div className="mt-2 h-3 w-full rounded bg-surface-2" />
+              </div>
+            ))}
+          </div>
         ) : filtered.length === 0 ? (
           <EmptyState title="Ничего не найдено" text="Попробуйте смягчить фильтры или нажмите «Обновить вакансии»." />
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
-            {filtered.map((v) => (
+            {paginated.map((v) => (
               <div key={v.slug} className="flex flex-col gap-3 rounded-xl border border-line bg-white/[0.03] p-5">
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -426,30 +485,84 @@ export function JobExplorer() {
                   <Badge>{v.format}</Badge>
                   <Badge>{v.category}</Badge>
                 </div>
-                <div className="mt-1 flex gap-2">
-                  <button
-                    type="button"
-                    disabled={busy === v.slug || applied.has(v.slug)}
-                    onClick={() => apply(v.slug)}
-                    className={applied.has(v.slug) ? `${btnGhost} flex-1 disabled:opacity-60` : `${btnPrimary} flex-1`}
-                  >
-                    {busy === v.slug ? "Отправляем…" : applied.has(v.slug) ? "Уже откликнулись" : "Откликнуться сейчас"}
-                  </button>
-                  {v.source_url ? (
-                    <a
-                      href={v.source_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`${btnGhost} shrink-0`}
+                <div className="mt-1 flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={busy === v.slug || applied.has(v.slug)}
+                      onClick={() => apply(v.slug)}
+                      className={applied.has(v.slug) ? `${btnGhost} flex-1 disabled:opacity-60` : `${btnPrimary} flex-1`}
                     >
-                      На сайте
-                    </a>
+                      {busy === v.slug ? "Отправляем…" : applied.has(v.slug) ? "Уже откликнулись" : "Откликнуться сейчас"}
+                    </button>
+                    {v.contact_email ? (
+                      <button
+                        type="button"
+                        disabled={sendingEmail === v.slug || applied.has(v.slug)}
+                        onClick={() => sendByEmail(v.slug)}
+                        title={`Отправить резюме на ${v.contact_email}`}
+                        className={`${btnGhost} shrink-0`}
+                      >
+                        {sendingEmail === v.slug ? "Отправляем…" : "📧 По email"}
+                      </button>
+                    ) : null}
+                    {v.source_url ? (
+                      <a
+                        href={v.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`${btnGhost} shrink-0`}
+                      >
+                        На сайте
+                      </a>
+                    ) : null}
+                  </div>
+                  {!applied.has(v.slug) && v.source !== "hh" ? (
+                    <div className="flex gap-2">
+                      <input
+                        className={`${inputCls} flex-1`}
+                        placeholder="Ссылка на отклик (необязательно)"
+                        value={externalUrl[v.slug] ?? ""}
+                        onChange={(e) => setExternalUrl((prev) => ({ ...prev, [v.slug]: e.target.value }))}
+                      />
+                      <button
+                        type="button"
+                        disabled={markingExternal === v.slug}
+                        onClick={() => markAsExternal(v.slug)}
+                        className={`${btnGhost} shrink-0`}
+                      >
+                        {markingExternal === v.slug ? "Отмечаем…" : "Отметить отклик"}
+                      </button>
+                    </div>
                   ) : null}
                 </div>
               </div>
             ))}
           </div>
         )}
+        {totalPages > 1 ? (
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+              className={btnGhost}
+            >
+              Назад
+            </button>
+            <span className="text-sm text-muted">
+              {page} / {totalPages}
+            </span>
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+              className={btnGhost}
+            >
+              Вперёд
+            </button>
+          </div>
+        ) : null}
       </Panel>
     </div>
   );

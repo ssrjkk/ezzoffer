@@ -34,18 +34,18 @@ export function PlanBanner({
   };
 
   return (
-    <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-accent/30 bg-gradient-to-r from-accent/15 via-accent/5 to-transparent p-5 sm:flex-row sm:items-center sm:justify-between">
+    <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-violet-500/30 bg-gradient-to-r from-violet-500/15 via-slate-900/50 to-cyan-500/10 p-5 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent/20 text-accent">
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-violet-500/20 text-violet-300">
           <svg viewBox="0 0 24 24" className="size-5" fill="none">
             <path d="M13 2 4.5 13.5h6L11 22l8.5-11.5h-6L13 2Z" fill="currentColor" />
           </svg>
         </span>
         <div>
-          <p className="font-semibold">
+          <p className="font-semibold text-white">
             {trialStarted ? "Пробный период завершён" : "Запустите поиск прямо сейчас"}
           </p>
-          <p className="mt-0.5 text-sm text-muted">
+          <p className="mt-0.5 text-sm text-slate-400">
             {trialStarted
               ? "Продлите тариф или попробуйте снова — отклики, вакансии и статистика доступны после активации."
               : "24 часа бесплатно, 50 откликов в день, без привязки карты."}
@@ -58,7 +58,7 @@ export function PlanBanner({
           type="button"
           onClick={startTrial}
           disabled={busy}
-          className="inline-flex flex-none items-center justify-center gap-2 rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
+          className="inline-flex flex-none items-center justify-center gap-2 rounded-full bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_0_28px_-8px_rgba(124,92,255,0.8)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? "Активация…" : "Активировать бесплатно"}
         </button>
@@ -74,21 +74,21 @@ export function PlanBanner({
 export function TodayLimitBar({ today, todayLimit }: { today: number; todayLimit: number }) {
   const pct = todayLimit > 0 ? Math.min(100, Math.round((today / todayLimit) * 100)) : 0;
   return (
-    <div className="glass rounded-2xl p-5">
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-sm text-muted">Откликов за сегодня</span>
-        <span className="text-2xl font-semibold tabular-nums">
+        <span className="text-sm text-slate-400">Откликов за сегодня</span>
+        <span className="text-2xl font-semibold tabular-nums text-white">
           {today}
-          <span className="text-sm font-normal text-muted"> / {todayLimit}</span>
+          <span className="text-sm font-normal text-slate-500"> / {todayLimit}</span>
         </span>
       </div>
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/5">
         <div
-          className={`h-full rounded-full transition-all duration-700 ${pct >= 100 ? "bg-warn" : "bg-gradient-to-r from-accent to-accent-2"}`}
+          className={`h-full rounded-full transition-all duration-700 ${pct >= 100 ? "bg-amber-400" : "bg-gradient-to-r from-violet-500 to-cyan-400"}`}
           style={{ width: `${pct}%` }}
         />
       </div>
-      <p className="mt-2 text-xs text-muted">
+      <p className="mt-2 text-xs text-slate-500">
         {pct >= 100 ? "Лимит исчерпан — сброс в полночь" : `Осталось ${todayLimit - today} откликов`}
       </p>
     </div>

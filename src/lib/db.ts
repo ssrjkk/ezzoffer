@@ -22,7 +22,11 @@ CREATE TABLE IF NOT EXISTS users (
   hh_refresh_token TEXT,
   hh_resume_id TEXT,
   telegram_chat_id TEXT,
-  autoapply_paused INTEGER NOT NULL DEFAULT 0
+  autoapply_paused INTEGER NOT NULL DEFAULT 0,
+  email_verified INTEGER NOT NULL DEFAULT 0,
+  email_verification_token TEXT,
+  password_reset_token TEXT,
+  password_reset_expires INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -97,6 +101,7 @@ CREATE TABLE IF NOT EXISTS applications (
   response TEXT NOT NULL DEFAULT '',
   response_note TEXT NOT NULL DEFAULT '',
   message TEXT NOT NULL DEFAULT '',
+  external_url TEXT,
   sent_at INTEGER NOT NULL,
   viewed_at INTEGER,
   responded_at INTEGER,
@@ -176,12 +181,19 @@ function migrate(instance: Database.Database): void {
   if (!userCols.has("hh_resume_id")) additions.push(["hh_resume_id", "TEXT"]);
   if (!userCols.has("telegram_chat_id")) additions.push(["telegram_chat_id", "TEXT"]);
   if (!userCols.has("autoapply_paused")) additions.push(["autoapply_paused", "INTEGER NOT NULL DEFAULT 0"]);
+  if (!userCols.has("email_verified")) additions.push(["email_verified", "INTEGER NOT NULL DEFAULT 0"]);
+  if (!userCols.has("email_verification_token")) additions.push(["email_verification_token", "TEXT"]);
+  if (!userCols.has("password_reset_token")) additions.push(["password_reset_token", "TEXT"]);
+  if (!userCols.has("password_reset_expires")) additions.push(["password_reset_expires", "INTEGER"]);
   for (const [name, type] of additions) {
     instance.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
   }
   const appCols = columnNames(instance, "applications");
   if (!appCols.has("message")) {
     instance.exec("ALTER TABLE applications ADD COLUMN message TEXT NOT NULL DEFAULT ''");
+  }
+  if (!appCols.has("external_url")) {
+    instance.exec("ALTER TABLE applications ADD COLUMN external_url TEXT");
   }
 }
 
@@ -204,6 +216,10 @@ export type User = {
   hh_resume_id: string | null;
   telegram_chat_id: string | null;
   autoapply_paused: number;
+  email_verified: number;
+  email_verification_token: string | null;
+  password_reset_token: string | null;
+  password_reset_expires: number | null;
 };
 
 export function getUserById(id: number): User | undefined {

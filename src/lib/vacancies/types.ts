@@ -11,7 +11,8 @@ export type VacancySource =
   | "tg" // Telegram-каналы компаний
   | "geekjob"
   | "jobicy"
-  | "weworkremotely";
+  | "weworkremotely"
+  | "rabota";
 
 export type Vacancy = {
   slug: string;

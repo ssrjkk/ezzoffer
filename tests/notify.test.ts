@@ -60,3 +60,57 @@ test("collectDigest без данных возвращает нули", () => {
   assert.equal(d.activeSearches, 0);
   assert.equal(d.newResponses.length, 0);
 });
+
+test("sendResumeEmail без SMTP честно сообщает об ошибке", async () => {
+  const saved = {
+    host: process.env.SMTP_HOST,
+    from: process.env.SMTP_FROM,
+  };
+  delete process.env.SMTP_HOST;
+  delete process.env.SMTP_FROM;
+  try {
+    const { sendResumeEmail } = await import("../src/lib/notify");
+    const res = await sendResumeEmail({
+      to: "hr@example.com",
+      company: "Acme",
+      vacancyTitle: "Senior Dev",
+      candidateName: "Иван",
+      resumeText: "Опыт 5 лет",
+      message: "Здравствуйте!",
+    });
+    assert.equal(res.ok, false);
+    assert.match(res.error ?? "", /SMTP/i);
+  } finally {
+    if (saved.host === undefined) delete process.env.SMTP_HOST;
+    else process.env.SMTP_HOST = saved.host;
+    if (saved.from === undefined) delete process.env.SMTP_FROM;
+    else process.env.SMTP_FROM = saved.from;
+  }
+});
+
+test("sendResumeEmail с SMTP настроен вызывает sendEmail", async () => {
+  const saved = {
+    host: process.env.SMTP_HOST,
+    from: process.env.SMTP_FROM,
+  };
+  process.env.SMTP_HOST = "localhost";
+  process.env.SMTP_FROM = "test@example.com";
+  try {
+    const { sendResumeEmail } = await import("../src/lib/notify");
+    const res = await sendResumeEmail({
+      to: "hr@example.com",
+      company: "Acme",
+      vacancyTitle: "Senior Dev",
+      candidateName: "Иван",
+      resumeText: "Опыт 5 лет",
+      message: "Здравствуйте!",
+    });
+    assert.equal(res.ok, false);
+    assert.match(res.error ?? "", /email/i);
+  } finally {
+    if (saved.host === undefined) delete process.env.SMTP_HOST;
+    else process.env.SMTP_HOST = saved.host;
+    if (saved.from === undefined) delete process.env.SMTP_FROM;
+    else process.env.SMTP_FROM = saved.from;
+  }
+});

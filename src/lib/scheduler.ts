@@ -7,6 +7,7 @@ import { sendDigestToUser, telegramConfigured } from "./telegram";
 import { isPlanActive } from "./plans";
 import type { User } from "./db";
 import { logError, logInfo } from "./logger";
+import { startBackupScheduler } from "./backup";
 
 /**
  * Центральный планировщик реальных фоновых задач (однопоточный, с блокировкой от перекрытия):
@@ -64,11 +65,11 @@ async function runDigests(now: number): Promise<void> {
 export async function runScheduledJobs(): Promise<void> {
   const now = Date.now();
   const lockAt = Number(getMeta(LOCK_KEY) ?? 0);
-  // Блокировка на 30 минут — защита от перекрытия при повторном запуске.
   if (now - lockAt < 30 * 60 * 1000) return;
   setMeta(LOCK_KEY, String(now));
 
   try {
+    startBackupScheduler();
     await refreshCatalogIfStale(now);
     await runAutoApply();
     await syncAllHhUsers();

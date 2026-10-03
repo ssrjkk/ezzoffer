@@ -127,7 +127,7 @@ if (existing) {
   for (const t of ["sessions", "oauth_states", "consultations", "letters", "searches", "applications", "resumes"]) {
     db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(userId);
   }
-  db.prepare("UPDATE users SET name = ?, password_hash = ?, plan = ?, plan_period = ?, plan_activated_at = ?, plan_expires_at = ?, trial_started_at = ? WHERE id = ?").run(
+  db.prepare("UPDATE users SET name = ?, password_hash = ?, email_verified = 1, plan = ?, plan_period = ?, plan_activated_at = ?, plan_expires_at = ?, trial_started_at = ? WHERE id = ?").run(
     "Демо Пользователь",
     hashPassword(PASSWORD),
     "pro",
@@ -139,7 +139,7 @@ if (existing) {
   );
 } else {
   const r = db
-    .prepare("INSERT INTO users (email, name, password_hash, created_at, plan, plan_period, plan_activated_at, plan_expires_at, trial_started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .prepare("INSERT INTO users (email, name, password_hash, email_verified, created_at, plan, plan_period, plan_activated_at, plan_expires_at, trial_started_at) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?)")
     .run(
       EMAIL,
       "Демо Пользователь",
