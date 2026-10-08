@@ -49,6 +49,8 @@ export function ConsultationsManager({ initial }: { initial: Consultation[] }) {
       setItems((prev) => [data.consultation, ...prev]);
       setNote("");
       setNotice("Заявка принята. Эксперт свяжется с вами в течение дня для выбора времени.");
+    } catch {
+      setError("Сеть недоступна — заявка не отправлена");
     } finally {
       setBusy(false);
     }

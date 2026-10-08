@@ -5,108 +5,31 @@
  * Создаёт аккаунт demo@ezoffer.ru (пароль demo123) с резюме, письмом
  * и активным автопоиском. Отклики НЕ создаются — статистика отражает реальные данные.
  * Повторный запуск перезаписывает демо-аккаунт, не трогая других пользователей.
+ *
+ * Схема берётся из src/lib/db.ts (SCHEMA_SQL), а не дублируется здесь: своя
+ * копия разошлась с приложением — в ней не было email_verified, message,
+ * external_url и таблицы vacancies, поэтому `npm run seed` падал с
+ * "table users has no column named email_verified", а каталог вакансий
+ * вообще не создавался.
  */
-const Database = require("better-sqlite3");
+// db.ts на верхнем уровне открывает БД по умолчанию и пишет в лог. Seed открывает
+// свою (возможно, по EZOFFER_DB_PATH), поэтому гасим логгер — вывод у скрипта свой.
+process.env.EZOFFER_SILENT = process.env.EZOFFER_SILENT ?? "1";
+
+require("tsx/cjs");
 const crypto = require("crypto");
 const path = require("path");
+const fs = require("fs");
+const { createDatabase } = require("../src/lib/db.ts");
 
-const db = new Database(path.join(process.cwd(), "data", "ezoffer.db"), { timeout: 8000 });
+const dbPath =
+  (process.env.EZOFFER_DB_PATH || "").trim() ||
+  path.join(process.cwd(), "data", "ezoffer.db");
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
-db.pragma("journal_mode = WAL");
-db.exec(`
-CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  email TEXT NOT NULL UNIQUE,
-  name TEXT NOT NULL DEFAULT '',
-  password_hash TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  plan TEXT NOT NULL DEFAULT 'none',
-  plan_period INTEGER,
-  plan_activated_at INTEGER,
-  plan_expires_at INTEGER,
-  trial_started_at INTEGER,
-  hh_token TEXT,
-  hh_token_expires_at INTEGER,
-  hh_resume_id TEXT,
-  telegram_chat_id TEXT,
-  autoapply_paused INTEGER NOT NULL DEFAULT 0
-);
-CREATE TABLE IF NOT EXISTS sessions (
-  token TEXT PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id),
-  expires_at INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS oauth_states (
-  token TEXT PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id),
-  expires_at INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS telegram_codes (
-  code TEXT PRIMARY KEY,
-  user_id INTEGER NOT NULL REFERENCES users(id),
-  expires_at INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS meta (
-  key TEXT PRIMARY KEY,
-  value TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS resumes (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL REFERENCES users(id),
-  title TEXT NOT NULL,
-  content TEXT NOT NULL,
-  years_label TEXT NOT NULL DEFAULT '',
-  ai_improved INTEGER NOT NULL DEFAULT 0,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS letters (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL REFERENCES users(id),
-  title TEXT NOT NULL,
-  content TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS searches (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL REFERENCES users(id),
-  title TEXT NOT NULL,
-  keywords TEXT NOT NULL DEFAULT '',
-  salary_min INTEGER,
-  salary_max INTEGER,
-  format TEXT NOT NULL DEFAULT '',
-  city TEXT NOT NULL DEFAULT '',
-  level TEXT NOT NULL DEFAULT '',
-  company_blacklist TEXT NOT NULL DEFAULT '',
-  active INTEGER NOT NULL DEFAULT 0,
-  started_at INTEGER,
-  created_at INTEGER NOT NULL
-);
-CREATE TABLE IF NOT EXISTS applications (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL REFERENCES users(id),
-  job_slug TEXT NOT NULL,
-  search_id INTEGER,
-  resume_id INTEGER,
-  letter_id INTEGER,
-  status TEXT NOT NULL DEFAULT 'sent',
-  response TEXT NOT NULL DEFAULT '',
-  response_note TEXT NOT NULL DEFAULT '',
-  sent_at INTEGER NOT NULL,
-  viewed_at INTEGER,
-  responded_at INTEGER,
-  withdrawn INTEGER NOT NULL DEFAULT 0
-);
-CREATE TABLE IF NOT EXISTS consultations (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL REFERENCES users(id),
-  theme TEXT NOT NULL,
-  note TEXT NOT NULL DEFAULT '',
-  booked_at INTEGER NOT NULL,
-  done INTEGER NOT NULL DEFAULT 0
-);
-`);
+// createDatabase применяет SCHEMA_SQL и идемпотентные миграции — тот же путь,
+// что и у приложения, поэтому схема не может разойтись.
+const db = createDatabase(dbPath);
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -124,10 +47,11 @@ const existing = db.prepare("SELECT id FROM users WHERE email = ?").get(EMAIL);
 let userId;
 if (existing) {
   userId = existing.id;
-  for (const t of ["sessions", "oauth_states", "consultations", "letters", "searches", "applications", "resumes"]) {
+  // telegram_codes тоже: иначе код привязки демо-аккаунта переживал бы reseed.
+  for (const t of ["sessions", "oauth_states", "telegram_codes", "consultations", "letters", "searches", "applications", "resumes"]) {
     db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(userId);
   }
-  db.prepare("UPDATE users SET name = ?, password_hash = ?, plan = ?, plan_period = ?, plan_activated_at = ?, plan_expires_at = ?, trial_started_at = ? WHERE id = ?").run(
+  db.prepare("UPDATE users SET name = ?, password_hash = ?, email_verified = 1, plan = ?, plan_period = ?, plan_activated_at = ?, plan_expires_at = ?, trial_started_at = ? WHERE id = ?").run(
     "Демо Пользователь",
     hashPassword(PASSWORD),
     "pro",
@@ -139,7 +63,7 @@ if (existing) {
   );
 } else {
   const r = db
-    .prepare("INSERT INTO users (email, name, password_hash, created_at, plan, plan_period, plan_activated_at, plan_expires_at, trial_started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .prepare("INSERT INTO users (email, name, password_hash, email_verified, created_at, plan, plan_period, plan_activated_at, plan_expires_at, trial_started_at) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?)")
     .run(
       EMAIL,
       "Демо Пользователь",

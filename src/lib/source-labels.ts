@@ -6,8 +6,9 @@ export const SOURCE_LABELS: Record<string, string> = {
   greenhouse: "Сайты компаний",
   company: "Сайты компаний (RSS)",
   x: "X / Twitter",
-  tg: "Каналы компаний (TG)",
+  tg: "Telegram-каналы",
   geekjob: "GeekJob",
   jobicy: "Jobicy (remote)",
   weworkremotely: "We Work Remotely",
+  rabota: "Работа.ру",
 };

@@ -11,7 +11,8 @@ export type VacancySource =
   | "tg" // Telegram-каналы компаний
   | "geekjob"
   | "jobicy"
-  | "weworkremotely";
+  | "weworkremotely"
+  | "rabota";
 
 export type Vacancy = {
   slug: string;
@@ -59,5 +60,8 @@ export interface VacancyProvider {
   label: string;
   isAvailable(): boolean;
   fetchVacancies(query: VacancyQuery): Promise<VacancyFetchResult>;
-  apply?(vacancy: Vacancy, ctx: { resumeId: string; message?: string }): Promise<VacancyApplyResult>;
+  apply?(
+    vacancy: Vacancy,
+    ctx: { resumeId: string; message?: string; accessToken?: string },
+  ): Promise<VacancyApplyResult>;
 }

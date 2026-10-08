@@ -25,9 +25,26 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/scripts ./scripts
 
-RUN mkdir -p /app/data && chown -R appuser:appuser /app/data
+# Динамический доступ к файловой системе (путь к SQLite и к TTF-шрифту
+# вычисляется в рантайме) заставляет Turbopack включить в .next/standalone весь
+# проект. Локальные данные — единственное, что здесь опасно: ezoffer.db с
+# хэшами паролей и OAuth-токенами. Данные приходят только из volume, поэтому
+# содержимое /app/data не важно, а исходники и тесты просто не нужны в образе.
+RUN rm -rf /app/data ./src ./tests \
+ && mkdir -p /app/data \
+ && chown -R appuser:appuser /app/data
+
+# Шрифт с кириллицей для PDF-экспорта. Копируется явно: outputFileTracingIncludes
+# не годится — он разворачивает в трассировку весь проект целиком.
+RUN mkdir -p /app/node_modules/dejavu-fonts-ttf/ttf \
+ && cp /app/node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf /app/node_modules/dejavu-fonts-ttf/ttf/DejaVuSansCondensed.ttf \
+    /app/node_modules/dejavu-fonts-ttf/ttf/ \
+ && chown -R appuser:appuser /app/node_modules/dejavu-fonts-ttf
 
 USER appuser
 EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD node -e "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 CMD ["node", "server.js"]

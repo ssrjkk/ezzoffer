@@ -112,7 +112,8 @@ export const hhProvider: VacancyProvider = {
   label: "hh.ru",
   isAvailable: () => Boolean(getToken()),
   async apply(vacancy, ctx): Promise<VacancyApplyResult> {
-    const token = getToken();
+    // Токен из контекста (аккаунт пользователя) с фолбэком на глобальный HH_ACCESS_TOKEN.
+    const token = ctx.accessToken?.trim() || getToken();
     if (!token) {
       return { ok: false, error: "HH_ACCESS_TOKEN не настроен" };
     }

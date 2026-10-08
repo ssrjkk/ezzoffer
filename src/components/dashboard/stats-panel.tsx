@@ -17,7 +17,6 @@ export function StatsPanel({ initial }: { initial: Stats }) {
         const data = await res.json();
         if (alive && data.stats) setStats(data.stats);
       } catch {
-        /* ignore */
       }
     };
     const id = setInterval(tick, 5000);
@@ -31,15 +30,6 @@ export function StatsPanel({ initial }: { initial: Stats }) {
 
   return (
     <div className="space-y-6">
-      {stats.hint ? (
-        <div className="flex items-start gap-3 rounded-2xl border border-accent-2/30 bg-accent-2/10 p-4 text-sm leading-relaxed text-ink">
-          <svg viewBox="0 0 24 24" className="mt-0.5 size-5 shrink-0 text-accent-2" fill="none">
-            <path d="M12 8v4m0 4h.01M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-          </svg>
-          <p>{stats.hint}</p>
-        </div>
-      ) : null}
-
       <TodayLimitBar today={stats.today} todayLimit={stats.todayLimit} />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
@@ -53,31 +43,31 @@ export function StatsPanel({ initial }: { initial: Stats }) {
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <Panel className="flex items-center justify-between">
-          <span className="text-sm text-muted">Просмотры</span>
-          <span className="text-xl font-semibold tabular-nums">{stats.viewRate}%</span>
+          <span className="text-sm text-slate-400">Просмотры</span>
+          <span className="text-xl font-semibold tabular-nums text-white">{stats.viewRate}%</span>
         </Panel>
         <Panel className="flex items-center justify-between">
-          <span className="text-sm text-muted">Ответы HR</span>
-          <span className="text-xl font-semibold tabular-nums">{stats.respondRate}%</span>
+          <span className="text-sm text-slate-400">Отответы HR</span>
+          <span className="text-xl font-semibold tabular-nums text-white">{stats.respondRate}%</span>
         </Panel>
         <Panel className="flex items-center justify-between">
-          <span className="text-sm text-muted">Приглашения</span>
-          <span className="text-xl font-semibold tabular-nums">{stats.inviteRate}%</span>
+          <span className="text-sm text-slate-400">Приглашения</span>
+          <span className="text-xl font-semibold tabular-nums text-white">{stats.inviteRate}%</span>
         </Panel>
       </div>
 
       <Panel>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-semibold tracking-tight">Динамика за 7 дней</h2>
-          <div className="flex items-center gap-4 text-xs text-muted">
+          <h2 className="font-semibold tracking-tight text-white">Динамика за 7 дней</h2>
+          <div className="flex items-center gap-4 text-xs text-slate-400">
             <span className="flex items-center gap-1.5">
-              <span className="size-2.5 rounded-sm bg-accent" /> Отправлено
+              <span className="size-2.5 rounded-sm bg-violet-500" /> Отправлено
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="size-2.5 rounded-sm bg-accent-2" /> Просмотрено
+              <span className="size-2.5 rounded-sm bg-cyan-400" /> Просмотрено
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="size-2.5 rounded-sm bg-success" /> Приглашения
+              <span className="size-2.5 rounded-sm bg-emerald-400" /> Приглашения
             </span>
           </div>
         </div>
@@ -86,22 +76,22 @@ export function StatsPanel({ initial }: { initial: Stats }) {
             <div key={d.label} className="flex flex-1 flex-col items-center gap-2">
               <div className="flex h-36 w-full items-end justify-center gap-1">
                 <div
-                  className="w-2.5 rounded-t bg-accent/80"
+                  className="w-2.5 rounded-t bg-violet-500/80 transition-all hover:bg-violet-400"
                   style={{ height: `${(d.sent / max) * 100}%` }}
                   title={`${d.label}: ${d.sent} отправлено`}
                 />
                 <div
-                  className="w-2.5 rounded-t bg-accent-2/80"
+                  className="w-2.5 rounded-t bg-cyan-400/80 transition-all hover:bg-cyan-300"
                   style={{ height: `${(d.viewed / max) * 100}%` }}
                   title={`${d.label}: ${d.viewed} просмотрено`}
                 />
                 <div
-                  className="w-2.5 rounded-t bg-success/80"
+                  className="w-2.5 rounded-t bg-emerald-400/80 transition-all hover:bg-emerald-300"
                   style={{ height: `${(d.invited / max) * 100}%` }}
                   title={`${d.label}: ${d.invited} приглашений`}
                 />
               </div>
-              <span className="text-[10px] text-muted">{d.label}</span>
+              <span className="text-[10px] text-slate-500">{d.label}</span>
             </div>
           ))}
         </div>

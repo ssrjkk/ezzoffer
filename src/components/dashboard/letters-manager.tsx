@@ -33,15 +33,26 @@ export function LettersManager({ initial }: { initial: Letter[] }) {
       const saved = data.letter as Letter;
       setLetters((prev) => (draft.id ? prev.map((l) => (l.id === saved.id ? saved : l)) : [saved, ...prev]));
       setDraft(null);
+    } catch {
+      setError("Сеть недоступна — письмо не сохранено");
     } finally {
       setSaving(false);
     }
   };
 
   const remove = async (id: number) => {
-    const res = await fetch(`/api/letters/${id}`, { method: "DELETE" });
-    if (!res.ok) return;
-    setLetters((prev) => prev.filter((l) => l.id !== id));
+    setError(null);
+    try {
+      const res = await fetch(`/api/letters/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Не удалось удалить письмо");
+        return;
+      }
+      setLetters((prev) => prev.filter((l) => l.id !== id));
+    } catch {
+      setError("Сеть недоступна — письмо не удалено");
+    }
   };
 
   const fillTemplate = () => {

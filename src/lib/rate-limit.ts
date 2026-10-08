@@ -42,6 +42,11 @@ export function rateLimit(
   if (bucket.timestamps.length >= max) {
     const oldest = bucket.timestamps[0];
     const retryAfterSeconds = Math.max(1, Math.ceil((oldest + windowMs - now) / 1000));
+    // Отклонённый запрос тоже должен сохранить очищенный бакет: иначе
+    // просроченные метки остаются в памяти до следующего успешного запроса
+    // и buckets-карта растёт без границ.
+    state.buckets.set(key, bucket);
+    cleanup(state);
     return { allowed: false, retryAfterSeconds };
   }
 

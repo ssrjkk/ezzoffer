@@ -30,6 +30,8 @@ export function ProfileForm({ name, email }: { name: string; email: string }) {
       }
       setDraft((d) => ({ ...d, password: "", currentPassword: "" }));
       setMessage({ ok: true, text: "Данные обновлены." });
+    } catch {
+      setMessage({ ok: false, text: "Сеть недоступна — данные не сохранены" });
     } finally {
       setSaving(false);
     }

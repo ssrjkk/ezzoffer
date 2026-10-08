@@ -52,6 +52,8 @@ export function PlanSettings({
       }
       setNotice(data.note ?? "Тариф активирован.");
       router.refresh();
+    } catch {
+      setError("Сеть недоступна — тариф не активирован");
     } finally {
       setBusy(false);
     }
@@ -70,6 +72,8 @@ export function PlanSettings({
       }
       setNotice("Пробный период активирован на 24 часа.");
       router.refresh();
+    } catch {
+      setError("Сеть недоступна — пробный период не активирован");
     } finally {
       setBusy(false);
     }

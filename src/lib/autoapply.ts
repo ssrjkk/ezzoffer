@@ -3,7 +3,8 @@ import { isPlanActive, planDailyLimit } from "./plans";
 import { matchesSearch, type SearchRow } from "./matcher";
 import { getCatalog } from "./vacancies";
 import { hhProvider } from "./vacancies/hh";
-import { createPacing, zeroPacing, type PacingConfig } from "./anti-ban";
+import { getValidHhToken } from "./hh-oauth";
+import { createPacing, type Pacing, type PacingConfig } from "./anti-ban";
 import { effectivePacing } from "./config";
 import { logError, logInfo } from "./logger";
 
@@ -43,7 +44,31 @@ function getActiveSearches(userId: number): SearchRow[] {
     .all(userId) as SearchRow[];
 }
 
-export async function runAutoApply(opts?: { pacing?: Partial<PacingConfig> }): Promise<AutoApplyRun> {
+/**
+ * Паузер живёт в модульной памяти и переживает вызовы runAutoApply: иначе
+ * часовой и суточный лимиты сбрасывались бы на каждом тике планировщика,
+ * и AntiBan не ограничивал бы ничего. Ключ — id пользователя.
+ */
+const pacingByUser = new Map<number, Pacing>();
+
+function pacingFor(userId: number, cfg: Partial<PacingConfig>, nowFn: () => number): Pacing {
+  const existing = pacingByUser.get(userId);
+  if (existing) return existing;
+  const created = createPacing(cfg, nowFn);
+  pacingByUser.set(userId, created);
+  return created;
+}
+
+/** Сброс паузеров (используется в тестах). */
+export function resetPacing(): void {
+  pacingByUser.clear();
+}
+
+export async function runAutoApply(opts?: {
+  pacing?: Partial<PacingConfig>;
+  now?: () => number;
+}): Promise<AutoApplyRun> {
+  const nowFn = opts?.now ?? (() => Date.now());
   const users = db.prepare("SELECT * FROM users").all() as User[];
   let searches = 0;
   let applied = 0;
@@ -75,13 +100,22 @@ export async function runAutoApply(opts?: { pacing?: Partial<PacingConfig> }): P
     // Анти-бан: суточный лимит = остаток от тарифа (с учётом глобального потолка),
     // часовой лимит и паузы — из конфигурации.
     const base = effectivePacing(limit);
+    // Раньше паузер создавался только при opts.pacing, а рабочий планировщик
+    // вызывал runAutoApply() без opts — то есть в бою AntiBan не работал вовсе:
+    // ни рабочих часов, ни часового лимита, ни backoff после ошибок.
+    const effectiveDaily = Math.min(remaining, base.dailyCap);
     const pacing = opts?.pacing
-      ? createPacing({ ...opts.pacing, dailyLimit: Math.min(remaining, base.dailyCap) }, () => Date.now())
-      : zeroPacing();
+      ? createPacing({ ...opts.pacing, dailyLimit: effectiveDaily }, nowFn)
+      : pacingFor(user.id, { ...base, dailyLimit: effectiveDaily }, nowFn);
+    // Остаток дневного лимита меняется каждый тик, а паузер переиспользуется
+    // между вызовами — синхронизируем лимиты с текущим остатком.
+    pacing.configure({ ...base, dailyLimit: effectiveDaily });
 
     const appliedSet = new Set<string>();
-    const token = user.hh_token?.trim();
     const resumeId = user.hh_resume_id?.trim();
+    // Актуальный токен пользователя (с авто-обновлением протухшего).
+    const valid = resumeId ? await getValidHhToken(user) : null;
+    const token = valid?.token ?? null;
 
     for (const search of activeSearches) {
       if (appliedSet.size >= remaining) break;
@@ -102,9 +136,12 @@ export async function runAutoApply(opts?: { pacing?: Partial<PacingConfig> }): P
 
         const decision = pacing.decide();
         if (!decision.allowed) {
+          // Любой отказ AntiBan останавливает пользователя до следующего тика.
+          // Раньше условие `reason !== "night"` пропускало ночные отказы: код
+          // выходил из цикла только если причина была не "night", поэтому ночью
+          // отказы по часовому/суточному лимиту игнорировались.
           pausedFor = decision.reason;
-          // В режиме реального планировщика просто останавливаемся до следующего тика.
-          if (decision.reason !== "night" || decision.retryAfterMs <= 0) break;
+          break;
         }
 
         const already = db
@@ -113,7 +150,11 @@ export async function runAutoApply(opts?: { pacing?: Partial<PacingConfig> }): P
         if (already) continue;
 
         if (!hhProvider.apply) break;
-        const result = await hhProvider.apply(vacancy, { resumeId, message: undefined });
+        const result = await hhProvider.apply(vacancy, {
+          resumeId,
+          message: undefined,
+          accessToken: token,
+        });
         if (!result.ok) {
           failed++;
           pacing.recordFailure("platform");

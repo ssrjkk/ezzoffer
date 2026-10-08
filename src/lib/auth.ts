@@ -42,6 +42,21 @@ export function getSessionUser(token?: string): User | undefined {
   return getUserById(session.user_id);
 }
 
+export function rotateSession(token: string): { token: string; expiresAt: number } | null {
+  const session = db.prepare("SELECT * FROM sessions WHERE token = ?").get(token) as
+    | { user_id: number; expires_at: number }
+    | undefined;
+  if (!session || session.expires_at <= Date.now()) return null;
+  const newToken = randomBytes(32).toString("hex");
+  const expiresAt = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000;
+  db.prepare("UPDATE sessions SET token = ?, expires_at = ? WHERE token = ?").run(
+    newToken,
+    expiresAt,
+    token,
+  );
+  return { token: newToken, expiresAt };
+}
+
 export async function getCurrentUser(): Promise<User | undefined> {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;

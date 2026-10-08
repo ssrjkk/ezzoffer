@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Vacancy } from "@/lib/vacancies";
 import { Badge, EmptyState, Field, Panel, btnPrimary, btnGhost, btnDanger, inputCls } from "@/components/dashboard/ui";
+import { Sparkles } from "lucide-react";
 
 type Resume = { id: number; title: string; content: string; years_label: string; ai_improved: number };
 type Letter = { id: number; title: string; content: string };
@@ -21,7 +22,7 @@ type Search = {
   created_at: number;
   match_count: number;
 };
-type Application = { id: number; job_slug: string; withdrawable?: boolean };
+type Application = { id: number; job_slug: string; external_url?: string | null; withdrawable?: boolean };
 type Source = { source: string; label: string; available: boolean; count: number };
 
 import { SOURCE_LABELS } from "@/lib/source-labels";
@@ -61,15 +62,36 @@ export function JobExplorer() {
   const [notice, setNotice] = useState<string | null>(null);
   const [draft, setDraft] = useState(emptySearch);
   const [creating, setCreating] = useState(false);
+  const [page, setPage] = useState(1);
+  const perPage = 20;
   const [vacancies, setVacancies] = useState<Vacancy[]>([]);
+  const [aiRecommendations, setAiRecommendations] = useState<string[]>([]);
   const [sources, setSources] = useState<Source[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [externalUrl, setExternalUrl] = useState<Record<string, string>>({});
+  const [markingExternal, setMarkingExternal] = useState("");
   const vacanciesRef = useRef<Vacancy[]>([]);
 
   useEffect(() => {
     vacanciesRef.current = vacancies;
   }, [vacancies]);
+
+  const filtered = useMemo(() => {
+    const query = q.trim().toLowerCase();
+    const min = Number(minSalary) || 0;
+    return vacancies.filter((v) => {
+      if (query && !`${v.title} ${v.company} ${v.category}`.toLowerCase().includes(query)) return false;
+      if (level && v.level !== level) return false;
+      if (format && v.format !== format) return false;
+      const salary = v.salary_min ?? parseSalary(v.salary);
+      if (min > 0 && salary > 0 && salary < min) return false;
+      return true;
+    });
+  }, [vacancies, q, level, format, minSalary]);
+
+  const totalPages = Math.ceil(filtered.length / perPage);
+  const paginated = filtered.slice((page - 1) * perPage, page * perPage);
 
   const loadVacancies = useCallback(
     async (withRefresh: boolean) => {
@@ -101,12 +123,13 @@ export function JobExplorer() {
     let alive = true;
     (async () => {
       try {
-        const [r, l, s, a, jobs] = await Promise.all([
+        const [r, l, s, a, jobs, ai] = await Promise.all([
           fetch("/api/resumes").then((x) => x.json()),
           fetch("/api/letters").then((x) => x.json()),
           fetch("/api/searches").then((x) => x.json()),
           fetch("/api/applications").then((x) => x.json()),
           fetch("/api/jobs").then((x) => x.json()),
+          fetch("/api/ai-recommendations").then((x) => x.json()),
         ]);
         if (!alive) return;
         setResumes(r.resumes ?? []);
@@ -117,6 +140,7 @@ export function JobExplorer() {
         setLetterId((l.letters?.[0]?.id as number) ?? 0);
         if (Array.isArray(jobs.vacancies)) setVacancies(jobs.vacancies);
         if (Array.isArray(jobs.sources)) setSources(jobs.sources);
+        if (Array.isArray(ai.recommendations)) setAiRecommendations(ai.recommendations);
       } catch {
         if (alive) setError("Не удалось загрузить данные кабинета");
       } finally {
@@ -150,19 +174,6 @@ export function JobExplorer() {
     };
   }, []);
 
-  const filtered = useMemo(() => {
-    const query = q.trim().toLowerCase();
-    const min = Number(minSalary) || 0;
-    return vacancies.filter((v) => {
-      if (query && !`${v.title} ${v.company} ${v.category}`.toLowerCase().includes(query)) return false;
-      if (level && v.level !== level) return false;
-      if (format && v.format !== format) return false;
-      const salary = v.salary_min ?? parseSalary(v.salary);
-      if (min > 0 && salary > 0 && salary < min) return false;
-      return true;
-    });
-  }, [vacancies, q, level, format, minSalary]);
-
   const apply = async (slug: string) => {
     setBusy(slug);
     setError(null);
@@ -185,15 +196,45 @@ export function JobExplorer() {
     }
   };
 
+  const markAsExternal = async (slug: string) => {
+    setMarkingExternal(slug);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/applications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobSlug: slug, externalUrl: externalUrl[slug] || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error ?? "Не удалось отметить отклик");
+        return;
+      }
+      setApplied((prev) => new Set(prev).add(slug));
+      setNotice(`Отклик отмечен: ${data.application?.job?.title ?? slug}`);
+    } finally {
+      setMarkingExternal("");
+    }
+  };
+
   const toggleSearch = async (id: number, active: boolean) => {
-    const res = await fetch(`/api/searches/${id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ active }),
-    });
-    if (!res.ok) return;
-    const data = await res.json();
-    setSearches((prev) => prev.map((s) => (s.id === id ? (data.search as Search) : s)));
+    setError(null);
+    try {
+      const res = await fetch(`/api/searches/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active }),
+      });
+      if (!res.ok) {
+        setError("Не удалось изменить состояние поиска");
+        return;
+      }
+      const data = await res.json();
+      setSearches((prev) => prev.map((s) => (s.id === id ? (data.search as Search) : s)));
+    } catch {
+      setError("Сеть недоступна — состояние поиска не изменено");
+    }
   };
 
   const removeSearch = async (id: number) => {
@@ -239,6 +280,8 @@ export function JobExplorer() {
       setSearches((prev) => [search, ...prev]);
       setDraft(emptySearch);
       setNotice(autoRun ? `Автопоиск «${search.title}» запущен — отклики начнут уходить.` : "Поиск сохранён. Нажмите «Запустить», чтобы активировать.");
+    } catch {
+      setError("Сеть недоступна — поиск не создан");
     } finally {
       setCreating(false);
     }
@@ -398,13 +441,39 @@ export function JobExplorer() {
           </select>
         </div>
 
+        {aiRecommendations.length > 0 ? (
+          <div className="mb-4 rounded-xl border border-accent/20 bg-accent/5 p-4">
+            <div className="mb-2 flex items-center gap-2">
+              <Sparkles className="size-4 text-accent" />
+              <span className="text-sm font-semibold text-ink">AI-рекомендации</span>
+            </div>
+            <ul className="space-y-1.5">
+              {aiRecommendations.map((rec, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-muted">
+                  <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-accent" />
+                  {rec}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
         {loading ? (
-          <EmptyState title="Загружаем каталог…" text="Мгновение, собираем вакансии из всех источников." />
+          <div className="grid gap-3 md:grid-cols-2">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="animate-pulse rounded-xl border border-line bg-surface p-5">
+                <div className="h-4 w-3/4 rounded bg-surface-2" />
+                <div className="mt-2 h-3 w-1/2 rounded bg-surface-2" />
+                <div className="mt-4 h-6 w-1/3 rounded bg-surface-2" />
+                <div className="mt-2 h-3 w-full rounded bg-surface-2" />
+              </div>
+            ))}
+          </div>
         ) : filtered.length === 0 ? (
           <EmptyState title="Ничего не найдено" text="Попробуйте смягчить фильтры или нажмите «Обновить вакансии»." />
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
-            {filtered.map((v) => (
+            {paginated.map((v) => (
               <div key={v.slug} className="flex flex-col gap-3 rounded-xl border border-line bg-white/[0.03] p-5">
                 <div className="flex items-start justify-between gap-2">
                   <div>
@@ -426,30 +495,73 @@ export function JobExplorer() {
                   <Badge>{v.format}</Badge>
                   <Badge>{v.category}</Badge>
                 </div>
-                <div className="mt-1 flex gap-2">
-                  <button
-                    type="button"
-                    disabled={busy === v.slug || applied.has(v.slug)}
-                    onClick={() => apply(v.slug)}
-                    className={applied.has(v.slug) ? `${btnGhost} flex-1 disabled:opacity-60` : `${btnPrimary} flex-1`}
-                  >
-                    {busy === v.slug ? "Отправляем…" : applied.has(v.slug) ? "Уже откликнулись" : "Откликнуться сейчас"}
-                  </button>
-                  {v.source_url ? (
-                    <a
-                      href={v.source_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className={`${btnGhost} shrink-0`}
+                <div className="mt-1 flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      disabled={busy === v.slug || applied.has(v.slug)}
+                      onClick={() => apply(v.slug)}
+                      className={applied.has(v.slug) ? `${btnGhost} flex-1 disabled:opacity-60` : `${btnPrimary} flex-1`}
                     >
-                      На сайте
-                    </a>
+                      {busy === v.slug ? "Отправляем…" : applied.has(v.slug) ? "Уже откликнулись" : "Откликнуться сейчас"}
+                    </button>
+                    {v.source_url ? (
+                      <a
+                        href={v.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={`${btnGhost} shrink-0`}
+                      >
+                        На сайте
+                      </a>
+                    ) : null}
+                  </div>
+                  {!applied.has(v.slug) && v.source !== "hh" ? (
+                    <div className="flex gap-2">
+                      <input
+                        className={`${inputCls} flex-1`}
+                        placeholder="Ссылка на отклик (необязательно)"
+                        value={externalUrl[v.slug] ?? ""}
+                        onChange={(e) => setExternalUrl((prev) => ({ ...prev, [v.slug]: e.target.value }))}
+                      />
+                      <button
+                        type="button"
+                        disabled={markingExternal === v.slug}
+                        onClick={() => markAsExternal(v.slug)}
+                        className={`${btnGhost} shrink-0`}
+                      >
+                        {markingExternal === v.slug ? "Отмечаем…" : "Отметить отклик"}
+                      </button>
+                    </div>
                   ) : null}
                 </div>
               </div>
             ))}
           </div>
         )}
+        {totalPages > 1 ? (
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => p - 1)}
+              className={btnGhost}
+            >
+              Назад
+            </button>
+            <span className="text-sm text-muted">
+              {page} / {totalPages}
+            </span>
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => setPage((p) => p + 1)}
+              className={btnGhost}
+            >
+              Вперёд
+            </button>
+          </div>
+        ) : null}
       </Panel>
     </div>
   );

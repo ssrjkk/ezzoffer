@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { envBaseUrl } from "@/lib/env";
 
 const inter = Inter({
   subsets: ["latin", "cyrillic"],
@@ -10,9 +11,11 @@ const inter = Inter({
   display: "swap",
 });
 
-const siteUrl = process.env.SITE_URL ?? "https://ezoffer.ru";
+const siteUrl = envBaseUrl(process.env, "SITE_URL", "https://ezoffer.ru");
 
 export const metadata: Metadata = {
+  // envBaseUrl, а не `process.env.SITE_URL ?? ...`: пустое значение из
+  // .env.example доходило до new URL("") и роняло сборку на Invalid URL.
   metadataBase: new URL(siteUrl),
   title: {
     default: "EZOffer — поиск работы без стресса и отказов",

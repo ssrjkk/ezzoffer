@@ -42,6 +42,8 @@ export type Pacing = {
   decide(now?: number): PaceDecision;
   recordSent(now?: number): void;
   recordFailure(kind: "platform" | "network", now?: number): void;
+  /** Обновляет лимиты на ходу: остаток дневного лимита меняется каждый тик. */
+  configure(patch: Partial<PacingConfig>): void;
 };
 
 function startOfLocalHour(now: number, hour: number): number {
@@ -67,6 +69,10 @@ export function createPacing(config: Partial<PacingConfig> = {}, nowFn: () => nu
   const sentTimestamps: number[] = [];
   let lastFailureAt = 0;
   let failureStreak = 0;
+  /** Пауза до следующей отправки: реальный планировщик зовёт decide() один раз на тик. */
+  let cooldownUntil = 0;
+  /** Задержка, возвращённая последним разрешённым decide(); применяется в recordSent. */
+  let pendingDelayMs = 0;
 
   const randomDelay = (): number => {
     const base = Math.round(cfg.minDelayMs + Math.random() * (cfg.maxDelayMs - cfg.minDelayMs));
@@ -81,8 +87,17 @@ export function createPacing(config: Partial<PacingConfig> = {}, nowFn: () => nu
   };
 
   return {
+    configure(patch: Partial<PacingConfig>): void {
+      Object.assign(cfg, patch);
+    },
+
     decide(now = nowFn()): PaceDecision {
       const t = now;
+
+      // Выдержка после предыдущей отправки внутри того же процесса.
+      if (cooldownUntil > t) {
+        return { allowed: false, reason: "backoff", retryAfterMs: cooldownUntil - t };
+      }
 
       // Ночь: пауза до начала рабочего дня.
       const hour = new Date(t).getHours();
@@ -113,12 +128,17 @@ export function createPacing(config: Partial<PacingConfig> = {}, nowFn: () => nu
         return { allowed: false, reason: "daily", retryAfterMs: nextDay - t };
       }
 
-      // Джиттер-пауза между откликами.
-      return { allowed: true, delayMs: randomDelay() };
+      // Джиттер-пауза между откликами. Вызывающий код обязан ждать delayMs
+      // перед фактической отправкой — иначе паузы не существует.
+      const delayMs = randomDelay();
+      pendingDelayMs = delayMs;
+      return { allowed: true, delayMs };
     },
 
     recordSent(now = nowFn()): void {
       sentTimestamps.push(now);
+      cooldownUntil = now + pendingDelayMs;
+      pendingDelayMs = 0;
       // Храним только последние 24 часа.
       const cutoff = now - 24 * 60 * 60 * 1000;
       for (let i = 0; i < sentTimestamps.length; i++) {
@@ -142,11 +162,12 @@ export function createPacing(config: Partial<PacingConfig> = {}, nowFn: () => nu
   };
 }
 
-/** Тестовый хелпер: мгновенная пауза. */
+/** Тестовый хелпер: мгновенная пауза, без лимитов и задержек. */
 export function zeroPacing(): Pacing {
   return {
     decide: () => ({ allowed: true, delayMs: 0 }),
     recordSent: () => undefined,
     recordFailure: () => undefined,
+    configure: () => undefined,
   };
 }

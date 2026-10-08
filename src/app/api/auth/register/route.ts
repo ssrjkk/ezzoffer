@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+
 import { db, getUserByEmail } from "@/lib/db";
 import { createSession, hashPassword, publicUser, SESSION_COOKIE, isHttpsRequest } from "@/lib/auth";
 import { readJson } from "@/lib/api";
@@ -51,12 +52,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    db.prepare("INSERT INTO users (email, name, password_hash, created_at) VALUES (?, ?, ?, ?)").run(
-      email,
-      name,
-      hashPassword(password),
-      Date.now(),
-    );
+    db.prepare(
+      "INSERT INTO users (email, name, password_hash, email_verified, created_at) VALUES (?, ?, ?, 1, ?)",
+    ).run(email, name, hashPassword(password), Date.now());
   } catch (err) {
     if (isUniqueViolation(err)) {
       return NextResponse.json({ error: "Пользователь с таким email уже существует" }, { status: 409 });

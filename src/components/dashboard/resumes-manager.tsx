@@ -3,6 +3,8 @@
 import { useState, type FormEvent } from "react";
 import { ScoreBadge } from "./score-badge";
 import { Badge, EmptyState, Field, btnPrimary, btnGhost, btnDanger, inputCls } from "@/components/dashboard/ui";
+import { RESUME_TEMPLATES } from "@/lib/data";
+import { FileDown, Sparkles } from "lucide-react";
 
 type Resume = {
   id: number;
@@ -54,15 +56,26 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
           : [saved, ...prev],
       );
       setDraft(null);
+    } catch {
+      setError("Сеть недоступна — изменения не сохранены");
     } finally {
       setSaving(false);
     }
   };
 
   const remove = async (id: number) => {
-    const res = await fetch(`/api/resumes/${id}`, { method: "DELETE" });
-    if (!res.ok) return;
-    setResumes((prev) => prev.filter((r) => r.id !== id));
+    setError(null);
+    try {
+      const res = await fetch(`/api/resumes/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Не удалось удалить резюме");
+        return;
+      }
+      setResumes((prev) => prev.filter((r) => r.id !== id));
+    } catch {
+      setError("Сеть недоступна — резюме не удалено");
+    }
   };
 
   const improve = async (id: number) => {
@@ -77,6 +90,8 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
       }
       setResumes((prev) => prev.map((r) => (r.id === id ? (data.resume as Resume) : r)));
       setImproveResult(data);
+    } catch {
+      setError("Сеть недоступна — улучшение не применено");
     } finally {
       setImprovingId(null);
     }
@@ -84,13 +99,31 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
 
   return (
     <div className="space-y-5">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center gap-2">
         <button type="button" className={btnPrimary} onClick={() => { setDraft(emptyDraft); setImproveResult(null); }}>
           <svg viewBox="0 0 24 24" className="size-4" fill="none">
             <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
           Создать резюме
         </button>
+        <div className="relative group">
+          <button type="button" className={btnGhost}>
+            <Sparkles className="size-4" />
+            Шаблоны
+          </button>
+          <div className="absolute right-0 top-full z-10 mt-2 w-64 rounded-xl border border-line bg-surface p-2 opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
+            {RESUME_TEMPLATES.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className="w-full rounded-lg px-3 py-2 text-left text-sm text-ink transition-colors hover:bg-surface-2"
+                onClick={() => { setDraft({ id: null, title: t.title, years_label: "", content: t.content }); setImproveResult(null); }}
+              >
+                {t.title}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {error ? (
@@ -163,15 +196,23 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
                   Обновлено {new Date(r.updated_at).toLocaleDateString("ru-RU")}
                 </p>
               </div>
-              <div className="flex shrink-0 flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
                   disabled={improvingId === r.id}
                   className={btnGhost}
                   onClick={() => improve(r.id)}
                 >
+                  <Sparkles className="size-4" />
                   {improvingId === r.id ? "Усиляем…" : "Улучшить с AI"}
                 </button>
+                <a
+                  href={`/api/resumes/export?resumeId=${r.id}`}
+                  className={btnGhost}
+                >
+                  <FileDown className="size-4" />
+                  PDF
+                </a>
                 <button
                   type="button"
                   className={btnGhost}

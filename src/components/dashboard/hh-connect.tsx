@@ -7,6 +7,7 @@ import { Badge, Panel, btnPrimary, btnGhost } from "@/components/dashboard/ui";
 type HhStatus = {
   configured: boolean;
   connected: boolean;
+  refreshable?: boolean;
   resume_id: string | null;
   expires_at: number | null;
 };
@@ -18,6 +19,13 @@ const HH_ERROR_MESSAGES: Record<string, string> = {
   "no-resume": "На аккаунте hh.ru не найдено резюме — создайте хотя бы одно",
 };
 
+/** Единственный источник данных о подключении: и эффект, и кнопка «Отключить». */
+async function fetchHhStatus(): Promise<HhStatus | null> {
+  const res = await fetch("/api/hh/status", { cache: "no-store" });
+  if (!res.ok) return null;
+  return (await res.json()) as HhStatus;
+}
+
 export function HhConnect() {
   const [status, setStatus] = useState<HhStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -28,18 +36,20 @@ export function HhConnect() {
 
   const hhCode = searchParams.get("hh");
 
+  const applyStatus = useCallback((data: HhStatus) => {
+    setStatus(data);
+    setLoading(false);
+  }, []);
+
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/hh/status", { cache: "no-store" });
-      if (!res.ok) return;
-      const data = await res.json();
-      setStatus(data as HhStatus);
+      const data = await fetchHhStatus();
+      if (data) applyStatus(data);
     } catch {
       setError("Не удалось проверить подключение к hh.ru");
-    } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applyStatus]);
 
   useEffect(() => {
     if (hhCode) {
@@ -47,21 +57,20 @@ export function HhConnect() {
       router.replace(window.location.pathname);
     }
     let alive = true;
-    fetch("/api/hh/status", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((data: HhStatus) => {
-        if (alive) setStatus(data);
+    fetchHhStatus()
+      .then((data) => {
+        if (alive && data) applyStatus(data);
       })
       .catch(() => {
-        if (alive) setError("Не удалось проверить подключение к hh.ru");
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
+        if (alive) {
+          setError("Не удалось проверить подключение к hh.ru");
+          setLoading(false);
+        }
       });
     return () => {
       alive = false;
     };
-  }, [hhCode, router]);
+  }, [hhCode, router, applyStatus]);
 
   const connect = async () => {
     setConnecting(true);
@@ -108,7 +117,9 @@ export function HhConnect() {
           {loading ? (
             <Badge tone="neutral">Проверка…</Badge>
           ) : status?.connected ? (
-            <Badge tone="success">Подключён</Badge>
+            <Badge tone={status.refreshable ? "warn" : "success"}>
+              {status.refreshable ? "Подключён · токен обновится" : "Подключён"}
+            </Badge>
           ) : status && !status.configured ? (
             <Badge tone="warn">Не настроено на сервере</Badge>
           ) : (
@@ -129,7 +140,12 @@ export function HhConnect() {
             <div className="space-y-3">
               <p className="text-sm text-muted">
                 Резюме на hh.ru: <span className="font-mono text-xs">{status.resume_id ?? "—"}</span>
-                {status.expires_at ? (
+                {status.refreshable && status.expires_at ? (
+                  <span className="block text-xs text-warn">
+                    Сеанс истёк {new Date(status.expires_at).toLocaleString("ru-RU")} — доступ обновится
+                    автоматически при следующем отклике.
+                  </span>
+                ) : status.expires_at ? (
                   <span className="block text-xs">Доступ до {new Date(status.expires_at).toLocaleString("ru-RU")}</span>
                 ) : null}
               </p>

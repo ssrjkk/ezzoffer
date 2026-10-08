@@ -1,4 +1,5 @@
 import { db, type User } from "./db";
+import { getValidHhToken } from "./hh-oauth";
 import { logError, logInfo } from "./logger";
 
 /**
@@ -23,8 +24,8 @@ type HhNegotiationsResponse = {
 export async function syncHhStatuses(userId: number): Promise<{ updated: number; error?: string }> {
   const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as User | undefined;
   if (!user) return { updated: 0 };
-  const token = user.hh_token;
-  if (!token || !user.hh_token_expires_at || user.hh_token_expires_at <= Date.now()) {
+  const token = (await getValidHhToken(user))?.token;
+  if (!token || !user.hh_resume_id) {
     return { updated: 0 };
   }
 

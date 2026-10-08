@@ -5,6 +5,7 @@ import { Security } from "@/components/home/security";
 import { Stories } from "@/components/home/stories";
 import { Advantages } from "@/components/home/advantages";
 import { ResumeSlider } from "@/components/home/resume-slider";
+import { TelegramBot } from "@/components/home/telegram-bot";
 import { PricingSection } from "@/components/home/pricing";
 import { ReviewsPreview } from "@/components/home/reviews-preview";
 import { FaqAccordion } from "@/components/home/faq";
@@ -13,6 +14,7 @@ import { JobsPreview } from "@/components/home/jobs-preview";
 import { BlogPreview } from "@/components/home/blog-preview";
 import { CtaBanner } from "@/components/home/cta";
 import { JsonLd } from "@/components/json-ld";
+import { envBaseUrl } from "@/lib/env";
 
 export const metadata: Metadata = {
   title: "Поиск работы без стресса и отказов",
@@ -20,7 +22,7 @@ export const metadata: Metadata = {
     "AI-агент для поиска работы: улучшает резюме, подбирает вакансии и отправляет до 100 персональных откликов в день.",
 };
 
-const siteUrl = process.env.SITE_URL ?? "https://ezoffer.ru";
+const siteUrl = envBaseUrl(process.env, "SITE_URL", "https://ezoffer.ru");
 
 export default function Home() {
   return (
@@ -50,6 +52,7 @@ export default function Home() {
       <Stories />
       <Advantages />
       <ResumeSlider />
+      <TelegramBot />
       <PricingSection />
       <ReviewsPreview />
       <FaqAccordion />

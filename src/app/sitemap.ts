@@ -1,11 +1,15 @@
 import type { MetadataRoute } from "next";
-import { jobs } from "@/lib/data";
-import { articles } from "@/lib/data";
+import { jobs, articles, resumeExamples } from "@/lib/data";
+import { envBaseUrl } from "@/lib/env";
 
-const base = process.env.SITE_URL ?? "https://ezoffer.ru";
+// SITE_URL= (пусто, как в .env.example после копирования) не должен давать
+// относительные URL: sitemap с url="/jobs" невалиден.
+const base = envBaseUrl(process.env, "SITE_URL", "https://ezoffer.ru");
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
+  // Все публичные страницы. Раньше /internships, /platform-rules и
+  // /resume-examples отсутствовали, хотя они отдают 200 и индексируемы.
   const staticRoutes = [
     "",
     "/reviews",
@@ -14,10 +18,14 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/jobs",
     "/pricing",
     "/blog",
+    "/internships",
+    "/platform-rules",
+    "/resume-examples",
   ];
   const dynamic = [
     ...jobs.map((j) => `/jobs/${j.slug}`),
     ...articles.map((a) => `/blog/${a.slug}`),
+    ...resumeExamples.map((r) => `/resume-examples/${r.slug}`),
   ];
 
   return [...staticRoutes, ...dynamic].map((route) => ({
