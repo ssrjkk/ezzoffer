@@ -11,12 +11,16 @@
     "test": "node --import tsx --test \"tests/*.test.ts\"",
     "seed": "node scripts/seed.js"
   },
+  "overrides": {
+    "source-map-js": "1.2.2",
+    "braces": "3.0.3"
+  },
   "dependencies": {
     "better-sqlite3": "12.11.1",
     "dejavu-fonts-ttf": "^2.37.3",
     "framer-motion": "^14.0.0",
     "lucide-react": "^1.51.0",
-    "next": "16.3.6",
+    "next": "16.4.0",
     "nodemailer": "^10.0.10",
     "pdfkit": "^0.20.2",
     "react": "19.2.8",
@@ -25,12 +29,12 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^9.6.0",
-    "@types/node": "^20",
+    "@types/node": "^26",
     "@types/pdfkit": "^0.17.6",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.3.6",
+    "eslint-config-next": "16.4.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"

@@ -1,5 +1,11 @@
 # EZOffer
 
+[![CI](https://github.com/ssrjkk/ezzoffer/actions/workflows/ci.yml/badge.svg)](https://github.com/ssrjkk/ezzoffer/actions/workflows/ci.yml)
+[typescript](https://img.shields.io/badge/typescript-blue.svg)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+
+
 Копия и улучшение сервиса автооткликов на вакансии (по мотивам quick-offer.ru) — полноценное приложение на **Next.js 16 + Tailwind CSS v4 + SQLite (better-sqlite3)**.
 
 ## Возможности
@@ -123,3 +129,17 @@ docker compose up -d --build   # поднимет ezoffer на :3000
 Next.js 16 (Turbopack), React 19, Tailwind CSS v4, TypeScript, better-sqlite3, ESLint.
 
 > Платёжная система и интеграция с реальными job-платформами (hh.ru и др.) заменяются на боевые отдельно. Все данные каталога демонстрационные.
+
+## Installation
+
+```bash
+git clone https://github.com/ssrjkk/ezzoffer.git
+cd ezzoffer
+npm install
+```
+
+## Usage
+
+```bash
+npm run dev
+```

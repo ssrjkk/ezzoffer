@@ -3,7 +3,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { isPlanActive, planDailyLimit, planLabel, daysLeft } from "@/lib/plans";
 import { DashboardNav } from "@/components/dashboard/nav";
 
-export default async function DashboardLayout({ children }: LayoutProps<"/dashboard">) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 

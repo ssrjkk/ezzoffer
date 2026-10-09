@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { parseParamId } from "@/lib/http";
 import { sanitizeExternalUrl } from "@/lib/vacancies/util";
 
-export async function PATCH(request: Request, ctx: RouteContext<"/api/applications/[id]">) {
+export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   if (!user) return unauthorized();
   const { id: rawId } = await ctx.params;
@@ -43,7 +43,7 @@ export async function PATCH(request: Request, ctx: RouteContext<"/api/applicatio
   return Response.json({ ok: true });
 }
 
-export async function DELETE(_request: Request, ctx: RouteContext<"/api/applications/[id]">) {
+export async function DELETE(_request: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   if (!user) return unauthorized();
   const { id: rawId } = await ctx.params;

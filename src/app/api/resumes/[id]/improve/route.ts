@@ -5,7 +5,7 @@ import { enhanceResume, scoreResume, detectKeywords } from "@/lib/resume-enhance
 import { enhanceResumeWithAi } from "@/lib/ai";
 import { parseParamId } from "@/lib/http";
 
-export async function POST(_request: Request, ctx: RouteContext<"/api/resumes/[id]/improve">) {
+export async function POST(_request: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   if (!user) return unauthorized();
   const { id: rawId } = await ctx.params;

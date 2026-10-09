@@ -3,7 +3,7 @@ import { requireUser, unauthorized, readJson } from "@/lib/api";
 import { db } from "@/lib/db";
 import { parseParamId } from "@/lib/http";
 
-export async function PUT(request: Request, ctx: RouteContext<"/api/letters/[id]">) {
+export async function PUT(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   if (!user) return unauthorized();
   const { id: rawId } = await ctx.params;
@@ -30,7 +30,7 @@ export async function PUT(request: Request, ctx: RouteContext<"/api/letters/[id]
   return Response.json({ letter: db.prepare("SELECT * FROM letters WHERE id = ?").get(id) });
 }
 
-export async function DELETE(_request: Request, ctx: RouteContext<"/api/letters/[id]">) {
+export async function DELETE(_request: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   if (!user) return unauthorized();
   const { id: rawId } = await ctx.params;

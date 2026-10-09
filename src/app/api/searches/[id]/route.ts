@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { matchCount, type SearchRow } from "@/lib/matcher";
 import { parseParamId } from "@/lib/http";
 
-export async function PUT(request: Request, ctx: RouteContext<"/api/searches/[id]">) {
+export async function PUT(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   if (!user) return unauthorized();
   const { id: rawId } = await ctx.params;
@@ -63,7 +63,7 @@ export async function PUT(request: Request, ctx: RouteContext<"/api/searches/[id
   return Response.json({ search: { ...row, match_count: matchCount(row) } });
 }
 
-export async function DELETE(_request: Request, ctx: RouteContext<"/api/searches/[id]">) {
+export async function DELETE(_request: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   if (!user) return unauthorized();
   const { id: rawId } = await ctx.params;
