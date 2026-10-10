@@ -1,6 +1,7 @@
 import type { Level, WorkFormat } from "../data";
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
 import { cleanHtml, parseSalaryText, sanitizeExternalUrl, unwrapExtended } from "./util";
+import { httpFetch, parseJson } from "../http-client";
 
 const FILTER_URL = "https://geekjob.ru/json/find/vacancy";
 const FETCH_TIMEOUT = 25_000;
@@ -161,33 +162,28 @@ export const geekjobProvider: VacancyProvider = {
     const params = new URLSearchParams({ page: String(page) });
     if (query.text) params.set("qs", query.text);
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-    try {
-      const res = await fetch(`${FILTER_URL}?${params.toString()}`, {
-        signal: controller.signal,
-        headers: { Accept: "application/json", "Content-Type": "application/json" },
-        cache: "no-store",
-      });
-      if (!res.ok) return { vacancies: [], provider: "geekjob", ok: false, error: `HTTP ${res.status}` };
-      const data = (await res.json()) as GeekPayload;
-      const seen = new Set<string>();
-      const vacancies = (data.data ?? [])
-        .filter((v) => {
-          const id = String(v.id ?? "");
-          if (!id || seen.has(id)) return false;
-          seen.add(id);
-          return true;
-        })
-        .map(mapGeekVacancy)
-        .filter((v): v is Vacancy => Boolean(v));
-      const limit = Math.min(Math.max(1, query.limit ?? 20), 50);
-      return { vacancies: vacancies.slice(0, limit), provider: "geekjob", ok: true };
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "network error";
-      return { vacancies: [], provider: "geekjob", ok: false, error: msg };
-    } finally {
-      clearTimeout(timer);
+    const res = await httpFetch(`${FILTER_URL}?${params.toString()}`, {
+      timeoutMs: FETCH_TIMEOUT,
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) {
+      return { vacancies: [], provider: "geekjob", ok: false, error: res.error ?? "network error" };
     }
+    const data = parseJson<GeekPayload>(res.body);
+    if (data === null) {
+      return { vacancies: [], provider: "geekjob", ok: false, error: "некорректный JSON" };
+    }
+    const seen = new Set<string>();
+    const vacancies = (data.data ?? [])
+      .filter((v) => {
+        const id = String(v.id ?? "");
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      })
+      .map(mapGeekVacancy)
+      .filter((v): v is Vacancy => Boolean(v));
+    const limit = Math.min(Math.max(1, query.limit ?? 20), 50);
+    return { vacancies: vacancies.slice(0, limit), provider: "geekjob", ok: true };
   },
 };

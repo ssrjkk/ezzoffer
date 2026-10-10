@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { parseCommand, replyFor } from "../src/lib/telegram-bot";
+import { parseCommand, replyFor, markUpdateSeen, resetSeenUpdates } from "../src/lib/telegram-bot";
 import type { User } from "../src/lib/db";
 
 function user(over: Partial<User> = {}): User {
@@ -128,4 +128,31 @@ test("ответы не содержат незакрытых фигурных �
   for (const r of replies) {
     assert.ok(!r.text.includes("{"), `в ответе остался шаблон: ${r.text}`);
   }
+});
+
+/**
+ * Telegram ретраит доставку апдейта при не-2xx ответе, поэтому один и тот же
+ * update_id может прийти повторно. Без отсечки команда выполнялась бы дважды
+ * и пользователь получил бы дубликат ответа.
+ */
+test("повторный апдейт с тем же update_id отбрасывается (regression)", () => {
+  resetSeenUpdates();
+  assert.equal(markUpdateSeen(42), true, "первый апдейт обрабатывается");
+  assert.equal(markUpdateSeen(42), false, "дубликат отбрасывается");
+  assert.equal(markUpdateSeen(43), true, "новый апдейт обрабатывается");
+});
+
+test("апдейт без update_id обрабатывается всегда", () => {
+  resetSeenUpdates();
+  assert.equal(markUpdateSeen(undefined), true);
+  assert.equal(markUpdateSeen(undefined), true);
+});
+
+test("набор seen-апдейтов ограничен по размеру", () => {
+  resetSeenUpdates();
+  for (let i = 0; i < 1500; i++) markUpdateSeen(i);
+  // После вытеснения самые старые id забыты, и память не растёт бесконечно.
+  assert.equal(markUpdateSeen(0), true, "давно забытый id снова считается новым");
+  assert.equal(markUpdateSeen(1499), false, "свежий id всё ещё помнится");
+  resetSeenUpdates();
 });

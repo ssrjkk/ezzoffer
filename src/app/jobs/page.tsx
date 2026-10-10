@@ -15,7 +15,7 @@ export default function JobsPage() {
           eyebrow="Вакансии"
           title={
             <>
-              Тысячи вакансий — <span className="text-gradient">в одном месте</span>
+              Тысячи вакансий — <span className="text-accent">в одном месте</span>
             </>
           }
           sub="Откликаемся на них за вас автоматически: персональное письмо, релевантные фильтры и скорость первым среди соискателей"
@@ -25,11 +25,9 @@ export default function JobsPage() {
       <Section id="jobs-list" className="pt-0">
         <JobsGrid />
 
-        <div className="mt-14 rounded-3xl border border-line bg-gradient-to-r from-accent/15 to-accent-2/10 p-8 text-center md:p-12">
-          <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
-            Не нашли свою вакансию?
-          </h2>
-          <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-muted md:text-base">
+        <div className="mt-14 border-t-2 border-ink pt-10">
+          <h2 className="font-serif text-2xl md:text-3xl">Не нашли свою вакансию?</h2>
+          <p className="measure mt-3 leading-relaxed text-muted">
             Мы подберём вакансии под ваше резюме, опыт и зарплатные ожидания — и начнём
             откликаться уже сегодня.
           </p>

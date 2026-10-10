@@ -1,6 +1,7 @@
 import type { Level, WorkFormat } from "../data";
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
 import { cleanHtml, sanitizeExternalUrl, toSalaryNumber } from "./util";
+import { httpFetch, parseJson } from "../http-client";
 
 const BASE = "https://remoteok.com/api";
 const FETCH_TIMEOUT = 25_000;
@@ -102,39 +103,33 @@ export const remoteokProvider: VacancyProvider = {
   label: "RemoteOK",
   isAvailable: () => true,
   async fetchVacancies(query: VacancyQuery): Promise<VacancyFetchResult> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-    try {
-      const res = await fetch(BASE, {
-        signal: controller.signal,
-        headers: {
-          Accept: "application/json",
-          "User-Agent": "EZOffer/1.0 (vacancy aggregator)",
-          Referer: "https://ezoffer.local/",
-        },
-        cache: "no-store",
-      });
-      if (!res.ok) {
-        return { vacancies: [], provider: "remoteok", ok: false, error: `HTTP ${res.status}` };
-      }
-      const data = (await res.json()) as RemoteOkRaw[];
-      // Первый элемент — служебный (legal/terms), пропускаем.
-      const items = Array.isArray(data) ? data.slice(1) : [];
-      let vacancies = items.map(mapRemoteOkVacancy).filter((v): v is Vacancy => Boolean(v));
-
-      if (query.text) {
-        const t = query.text.toLowerCase();
-        vacancies = vacancies.filter((v) =>
-          `${v.title} ${v.company} ${v.requirements.join(" ")}`.toLowerCase().includes(t),
-        );
-      }
-      const limit = Math.min(Math.max(1, query.limit ?? 50), 100);
-      return { vacancies: vacancies.slice(0, limit), provider: "remoteok", ok: true };
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "network error";
-      return { vacancies: [], provider: "remoteok", ok: false, error: msg };
-    } finally {
-      clearTimeout(timer);
+    const res = await httpFetch(BASE, {
+      timeoutMs: FETCH_TIMEOUT,
+      headers: {
+        Accept: "application/json",
+        "User-Agent": "EZOffer/1.0 (vacancy aggregator)",
+        Referer: "https://ezoffer.local/",
+      },
+    });
+    if (!res.ok) {
+      return { vacancies: [], provider: "remoteok", ok: false, error: res.error ?? "network error" };
     }
+    const data = parseJson<RemoteOkRaw[]>(res.body);
+    if (data === null) {
+      return { vacancies: [], provider: "remoteok", ok: false, error: "некорректный JSON" };
+    }
+
+    // Первый элемент — служебный (legal/terms), пропускаем.
+    const items = Array.isArray(data) ? data.slice(1) : [];
+    let vacancies = items.map(mapRemoteOkVacancy).filter((v): v is Vacancy => Boolean(v));
+
+    if (query.text) {
+      const t = query.text.toLowerCase();
+      vacancies = vacancies.filter((v) =>
+        `${v.title} ${v.company} ${v.requirements.join(" ")}`.toLowerCase().includes(t),
+      );
+    }
+    const limit = Math.min(Math.max(1, query.limit ?? 50), 100);
+    return { vacancies: vacancies.slice(0, limit), provider: "remoteok", ok: true };
   },
 };

@@ -1,6 +1,7 @@
 import type { Level, WorkFormat } from "../data";
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
 import { cleanHtml, sanitizeExternalUrl } from "./util";
+import { httpFetch, parseJson } from "../http-client";
 
 const DEFAULT_BOARDS = ["mozilla", "airbnb", "spotify", "stripe", "gitlab", "netflix"];
 const FETCH_TIMEOUT = 25_000;
@@ -116,23 +117,18 @@ export const greenhouseProvider: VacancyProvider = {
 
     await Promise.all(
       boards.map(async (board) => {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-        try {
-          const url = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(board)}/jobs?content=true`;
-          const res = await fetch(url, { signal: controller.signal, cache: "no-store" });
-          if (!res.ok) return;
-          const data = (await res.json()) as { jobs?: GreenhouseJob[] };
-          const company = board.charAt(0).toUpperCase() + board.slice(1);
-          for (const job of data.jobs ?? []) {
-            if (jobs.size >= (query.limit ?? 50)) break;
-            const v = mapGreenhouseVacancy(job, company);
-            if (v && !jobs.has(v.slug)) jobs.set(v.slug, v);
-          }
-        } catch {
-          /* доска недоступна — пропускаем */
-        } finally {
-          clearTimeout(timer);
+        // У одной доски 2 попытки вместо общих 3: досок бывает десятки,
+        // и на каждой полная лестница повторов растягивала бы обновление каталога.
+        const url = `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(board)}/jobs?content=true`;
+        const res = await httpFetch(url, { timeoutMs: FETCH_TIMEOUT, attempts: 2 });
+        if (!res.ok) return;
+        const data = parseJson<{ jobs?: GreenhouseJob[] }>(res.body);
+        if (data === null) return;
+        const company = board.charAt(0).toUpperCase() + board.slice(1);
+        for (const job of data.jobs ?? []) {
+          if (jobs.size >= (query.limit ?? 50)) break;
+          const v = mapGreenhouseVacancy(job, company);
+          if (v && !jobs.has(v.slug)) jobs.set(v.slug, v);
         }
       }),
     );

@@ -1,23 +1,137 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { hhConfigured } from "@/lib/hh-oauth";
+import { mailConfigured } from "@/lib/mail";
+import { telegramConfigured, telegramWebhookSecret } from "@/lib/telegram";
+import { envStr } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
 /**
- * Healthcheck для Docker и внешних балансировщиков.
- * Проверяет, что процесс отвечает и что SQLite доступна для чтения.
+ * Healthcheck для Docker, внешних балансировщиков и диагностики деплоя.
+ *
+ * Раньше ответ был `{status, db, uptime}` — этого хватало Docker'у, чтобы
+ * понять «жив ли процесс», но совсем ничего не говорило о готовности
+ * функциональности. При неудачном деплое (например, забытый SMTP_HOST при
+ * настроенном восстановлении пароля) процесс оставался «здоровым», а фича
+ * молча не работала.
+ *
+ * Теперь:
+ *  - /api/health — краткий ответ для мониторинга (не раскрывает деталей);
+ *  - /api/health?verbose=1 — диагностика конфигурации и БД для человека.
+ *
+ * Секты (токены, пароли) в ответ не попадают никогда: только факт наличия.
  */
-export function GET() {
+
+type Check = { name: string; ok: boolean; detail?: string };
+
+function checkDatabase(): Check {
+  const started = Date.now();
   try {
-    const row = db.prepare("SELECT 1 AS ok").get() as { ok: number };
-    return NextResponse.json(
-      { status: "ok", db: row.ok === 1 ? "up" : "unknown", uptime: Math.round(process.uptime()) },
-      { headers: { "Cache-Control": "no-store" } },
+    // Простой запрос к таблице, а не «SELECT 1»: проверяем, что схема реально
+    // применена. На битой/старой БД «SELECT 1» проходит, а первый настоящий
+    // запрос падает уже под нагрузкой.
+    const row = db.prepare("SELECT COUNT(*) AS c FROM users").get() as { c: number };
+    return { name: "database", ok: true, detail: `${row.c} users, ${Date.now() - started}ms` };
+  } catch (err) {
+    return {
+      name: "database",
+      ok: false,
+      detail: err instanceof Error ? err.message.slice(0, 200) : "unknown error",
+    };
+  }
+}
+
+function checkWritability(): Check {
+  try {
+    // WAL-база может остаться читаемой после потери прав на каталог с файлом,
+    // поэтому проверяем именно запись — именно она нужна автооткликам.
+    db.prepare("INSERT INTO meta (key, value) VALUES ('health:probe', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(
+      String(Date.now()),
     );
-  } catch {
+    db.prepare("DELETE FROM meta WHERE key = 'health:probe'").run();
+    return { name: "database_write", ok: true };
+  } catch (err) {
+    return {
+      name: "database_write",
+      ok: false,
+      detail: err instanceof Error ? err.message.slice(0, 200) : "unknown error",
+    };
+  }
+}
+
+function integrations(): Check[] {
+  return [
+    { name: "hh_oauth", ok: hhConfigured(), detail: hhConfigured() ? "настроен" : "нет HH_CLIENT_ID/SECRET/REDIRECT_URI" },
+    { name: "hh_global_token", ok: Boolean(envStr(process.env, "HH_ACCESS_TOKEN", "")), detail: "глобальный HH_ACCESS_TOKEN" },
+    { name: "telegram_bot", ok: telegramConfigured(), detail: telegramConfigured() ? "настроен" : "нет TELEGRAM_BOT_TOKEN" },
+    { name: "telegram_webhook_secret", ok: Boolean(telegramWebhookSecret()), detail: "заголовок X-Telegram-Bot-Api-Secret-Token" },
+    { name: "smtp", ok: mailConfigured(), detail: mailConfigured() ? "настроен" : "нет SMTP_HOST — восстановление пароля не работает" },
+    { name: "cron_secret", ok: Boolean(envStr(process.env, "CRON_SECRET", "")), detail: "внешний запуск /api/autoapply/run" },
+  ];
+}
+
+export async function GET(request: Request) {
+  const verbose = new URL(request.url).searchParams.get("verbose") === "1";
+
+  const dbCheck = checkDatabase();
+  const writeCheck = checkWritability();
+
+  // Критично только то, без чего сервис не может принимать отклики.
+  const criticalOk = dbCheck.ok && writeCheck.ok;
+
+  if (!verbose) {
     return NextResponse.json(
-      { status: "degraded", db: "down" },
-      { status: 503, headers: { "Cache-Control": "no-store" } },
+      {
+        status: criticalOk ? "ok" : "degraded",
+        db: dbCheck.ok ? "up" : "down",
+        uptime: Math.round(process.uptime()),
+      },
+      {
+        status: criticalOk ? 200 : 503,
+        headers: { "Cache-Control": "no-store" },
+      },
     );
   }
+
+  const external = integrations();
+  return NextResponse.json(
+    {
+      status: criticalOk ? "ok" : "degraded",
+      uptime: Math.round(process.uptime()),
+      node: process.version,
+      memory: {
+        rssMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
+        heapUsedMb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+      },
+      checks: [dbCheck, writeCheck, ...external],
+      // Подсказки по типовым проблемам деплоя.
+      hints: buildHints(dbCheck, writeCheck, external),
+    },
+    {
+      status: criticalOk ? 200 : 503,
+      headers: { "Cache-Control": "no-store" },
+    },
+  );
+}
+
+/** Человеческие подсказки по типовым проблемам конфигурации. */
+function buildHints(dbCheck: Check, writeCheck: Check, external: Check[]): string[] {
+  const hints: string[] = [];
+  if (!dbCheck.ok) {
+    hints.push("БД недоступна на чтение: проверьте права на каталог data/ и монтирование volume.");
+  }
+  if (!writeCheck.ok) {
+    hints.push("БД доступна только для чтения: автоотклики и регистрация работать не будут.");
+  }
+  const smtp = external.find((c) => c.name === "smtp");
+  if (smtp && !smtp.ok) {
+    hints.push("SMTP не настроен — сброс пароля не пришлёт письмо (остальной сайт работает).");
+  }
+  const cron = external.find((c) => c.name === "cron_secret");
+  if (cron && !cron.ok) {
+    hints.push("CRON_SECRET не задан — внешний планировщик не сможет запускать автоотклики.");
+  }
+  if (hints.length === 0) hints.push("Критичных проблем не обнаружено.");
+  return hints;
 }

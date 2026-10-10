@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { SESSION_COOKIE, rotateSession, isHttpsRequest } from "@/lib/auth";
-import { rateLimit, clientIp } from "@/lib/rate-limit";
+import { rateLimit, rateLimitKey, ANONYMOUS_RATE_LIMIT } from "@/lib/rate-limit";
 
 const API_RATE_LIMIT = { windowMs: 60_000, max: 60 };
 
@@ -59,8 +59,13 @@ export function proxy(request: NextRequest) {
       return NextResponse.json({ error: "Запрос отклонён: чужой Origin" }, { status: 403 });
     }
 
-    const ip = clientIp(request) ?? "unknown";
-    const limiter = rateLimit(`api:${ip}`, API_RATE_LIMIT);
+    const key = rateLimitKey(request, "api");
+    // Общий бакет есть только у анонимов без IP и без сессии — у них потолок
+    // выше, иначе один такой клиент выбивал бы квоту у всех авторизованных.
+    const limiter = rateLimit(
+      key,
+      key.endsWith(":anon") ? ANONYMOUS_RATE_LIMIT : API_RATE_LIMIT,
+    );
     if (!limiter.allowed) {
       return NextResponse.json(
         { error: "Слишком много запросов. Попробуйте позже." },
@@ -70,8 +75,11 @@ export function proxy(request: NextRequest) {
   } else if (method !== "GET" && method !== "HEAD" && method !== "OPTIONS" && pathname.startsWith("/api") && isServerRoute) {
     // Серверные роуты без Origin всё равно ограничиваем — иначе их секрет
     // можно перебирать неограниченное число раз.
-    const ip = clientIp(request) ?? "unknown";
-    const limiter = rateLimit(`srv:${ip}`, { windowMs: 60_000, max: 30 });
+    const key = rateLimitKey(request, "srv");
+    const limiter = rateLimit(
+      key,
+      key.endsWith(":anon") ? ANONYMOUS_RATE_LIMIT : { windowMs: 60_000, max: 30 },
+    );
     if (!limiter.allowed) {
       return NextResponse.json(
         { error: "Слишком много запросов" },

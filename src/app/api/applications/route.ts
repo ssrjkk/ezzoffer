@@ -9,6 +9,7 @@ import { hhProvider } from "@/lib/vacancies/hh";
 import { getValidHhToken } from "@/lib/hh-oauth";
 import { personalizeLetter } from "@/lib/cover-letter";
 import { NO_STORE_HEADERS } from "@/lib/http";
+import { rateLimit } from "@/lib/rate-limit";
 import { rankLettersForVacancy } from "@/lib/ai-matching";
 
 export async function GET(request: Request) {
@@ -23,6 +24,18 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const user = await requireUser();
   if (!user) return unauthorized();
+
+  // Отклик на hh.ru уходит во внешний API и расходует квоту платформы.
+  // Дневной лимит тарифа проверяется ниже по счётчику в БД, но при параллельных
+  // запросах несколько проверок успевают пройти до записи. Этот лимит закрывает
+  // окно гонки и не даёт перебирать вакансии пачками.
+  const limiter = rateLimit(`apply:${user.id}`, { windowMs: 60 * 1000, max: 10 });
+  if (!limiter.allowed) {
+    return NextResponse.json(
+      { error: "Слишком много откликов подряд. Подождите минуту." },
+      { status: 429, headers: { "Retry-After": String(limiter.retryAfterSeconds) } },
+    );
+  }
 
   const { data, error } = await readJson<{
     jobSlug?: string;
@@ -97,11 +110,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Вы уже откликались на эту вакансию" }, { status: 409 });
   }
 
-  // Реальная персонализация письма под вакансию: ИИ (если настроен) с фолбэком на шаблон.
+  // Резюме резолвится ДО проверки лимитов: это тот, который реально уйдёт в
+  // hh.ru, и именно его нужно записать в applications. Раньше туда попадало
+  // необязательное data.resumeId из запроса (null при автовыборе), из-за чего
+  // в кабинете отклик показывался «без резюме», хотя отклик ушёл с ним.
   const resumeRow = data?.resumeId != null
-    ? db.prepare("SELECT content, title FROM resumes WHERE id = ? AND user_id = ?").get(data.resumeId, user.id) as { content: string; title: string } | undefined
-    : (db.prepare("SELECT content, title FROM resumes WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1").get(user.id) as { content: string; title: string } | undefined);
+    ? db.prepare("SELECT id, content, title FROM resumes WHERE id = ? AND user_id = ?").get(data.resumeId, user.id) as { id: number; content: string; title: string } | undefined
+    : (db.prepare("SELECT id, content, title FROM resumes WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1").get(user.id) as { id: number; content: string; title: string } | undefined);
   const resumeContent = resumeRow?.content ?? "";
+  const resumeIdUsed = resumeRow?.id ?? null;
 
   const letters = db
     .prepare("SELECT id, content FROM letters WHERE user_id = ? ORDER BY updated_at DESC")
@@ -129,7 +146,11 @@ export async function POST(request: Request) {
   // Реальная отправка на hh.ru: если вакансия с hh.ru и аккаунт подключён —
   // отклик уходит через API, и только при успехе записывается в кабинет.
   if (vacancy.source === "hh") {
-    const fresh = db.prepare("SELECT * FROM users WHERE id = ?").get(user.id) as User;
+    // Актуальное состояние подключения читаем из БД, а не из объекта сессии.
+    // Отсутствие строки означает недействительную сессию — отвечаем 401,
+    // а не роняем запрос TypeError'ом на fresh.hh_resume_id.
+    const fresh = db.prepare("SELECT * FROM users WHERE id = ?").get(user.id) as User | undefined;
+    if (!fresh) return unauthorized();
     const hhResumeId = fresh.hh_resume_id?.trim();
     if (!hhResumeId) {
       return NextResponse.json(
@@ -168,7 +189,21 @@ export async function POST(request: Request) {
       `INSERT INTO applications (user_id, job_slug, search_id, resume_id, letter_id, status, message, external_url, sent_at)
        VALUES (?, ?, ?, ?, ?, 'sent', ?, ?, ?)`,
     )
-    .run(user.id, vacancy.slug, data?.searchId ?? null, data?.resumeId ?? null, data?.letterId ?? null, message, externalUrl, now);
+    // Пишется именно selectedLetterId, а не переданный data.letterId.
+    // Раньше туда уходил letterId из запроса, который для автоподбора всегда
+    // null: в кабинете отклик показывался без письма, хотя в hh.ru уходило
+    // персонализированное, и статистика «каким письмом откликнулись» была
+    // бессмысленной.
+    .run(
+      user.id,
+      vacancy.slug,
+      data?.searchId ?? null,
+      resumeIdUsed,
+      selectedLetterId,
+      message,
+      externalUrl,
+      now,
+    );
   const row = db
     .prepare("SELECT * FROM applications WHERE id = ?")
     .get(result.lastInsertRowid) as ApplicationRow;

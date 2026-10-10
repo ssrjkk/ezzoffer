@@ -44,7 +44,7 @@ const columns = [
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-line bg-surface/60">
+    <footer className="border-t border-line bg-surface-2">
       <div className="container-x py-14 md:py-16">
         <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(4,1fr)]">
           <div>
@@ -53,14 +53,16 @@ export function SiteFooter() {
               AI-агент для поиска работы: резюме, вакансии и отклики без рутины.
               Пробный период 24 часа без привязки карты.
             </p>
-            <div className="mt-5 flex items-center gap-2 text-sm text-muted">
-              <span className="inline-flex size-2 rounded-full bg-success animate-pulse-dot" />
+            <p className="mt-5 flex items-center gap-2 font-mono text-xs uppercase tracking-[0.1em] text-muted">
+              <span className="inline-block size-1.5 rounded-full bg-success" aria-hidden />
               Сервис работает штатно
-            </div>
+            </p>
           </div>
           {columns.map((col) => (
             <div key={col.title}>
-              <p className="mb-4 text-xs font-semibold uppercase tracking-[0.16em] text-ink">
+              {/* Рубрика моноширинным, как в колонтитуле издания; раньше
+                  здесь был sans-serif с трекингом — вид «стокового лендинга». */}
+              <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.16em] text-accent">
                 {col.title}
               </p>
               <ul className="space-y-2.5">
@@ -68,7 +70,7 @@ export function SiteFooter() {
                   <li key={link.label}>
                     <Link
                       href={link.href}
-                      className="text-sm text-muted transition-colors hover:text-ink"
+                      className="text-sm text-muted transition-colors hover:text-accent"
                     >
                       {link.label}
                     </Link>
@@ -79,7 +81,7 @@ export function SiteFooter() {
           ))}
         </div>
 
-        <div className="mt-12 flex flex-col gap-4 border-t border-line pt-6 text-sm text-muted md:flex-row md:items-center md:justify-between">
+        <div className="mt-12 flex flex-col gap-4 border-t border-line pt-6 font-mono text-xs text-muted md:flex-row md:items-center md:justify-between">
           <p>© {new Date().getFullYear()} EZOffer. Все права защищены.</p>
           <div className="flex flex-wrap gap-x-6 gap-y-2">
             <Link href="/faq" className="transition-colors hover:text-ink">

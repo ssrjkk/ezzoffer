@@ -33,10 +33,27 @@ const db = createDatabase(dbPath);
 
 const DAY = 24 * 60 * 60 * 1000;
 
+/**
+ * Хеш пароля в формате src/lib/password.ts (scrypt$N$r$p$salt$hash).
+ * Формат совпадает с приложением, поэтому демо-аккаунт входит через обычный
+ * /api/auth/login, а needsRehash() не считает его устаревшим.
+ *
+ * Синхронный scrypt здесь оставлен осознанно: скрипт запускается один раз
+ * из CLI, где блокировка event loop не имеет значения.
+ */
+const SCRYPT_N = 65536;
+const SCRYPT_R = 8;
+const SCRYPT_P = 1;
+
 function hashPassword(password) {
-  const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
-  return `${salt}:${hash}`;
+  const salt = crypto.randomBytes(16);
+  const hash = crypto.scryptSync(password, salt, 64, {
+    N: SCRYPT_N,
+    r: SCRYPT_R,
+    p: SCRYPT_P,
+    maxmem: 128 * SCRYPT_N * SCRYPT_R * 2,
+  });
+  return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${salt.toString("hex")}$${hash.toString("hex")}`;
 }
 
 const EMAIL = "demo@ezoffer.ru";

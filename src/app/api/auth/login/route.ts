@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { getUserByEmail } from "@/lib/db";
+import { getUserByEmail, db } from "@/lib/db";
 import { createSession, verifyPassword, publicUser, SESSION_COOKIE, isHttpsRequest } from "@/lib/auth";
-import { hashPassword } from "@/lib/password";
+import { hashPassword, needsRehash } from "@/lib/password";
 import { readJson } from "@/lib/api";
 import { rateLimit, clientIp } from "@/lib/rate-limit";
 
@@ -9,9 +9,18 @@ import { rateLimit, clientIp } from "@/lib/rate-limit";
 // а не к глобальному "local"-ключу, который заблокировал бы всех пользователей.
 const ACCOUNT_LIMIT = { windowMs: 15 * 60 * 1000, max: 10 };
 
-// Фиктивный хэш для выравнивания времени проверки несуществующего аккаунта:
-// scrypt отрабатывает одинаково, не позволяя перечислять email по таймингу.
-const DUMMY_HASH = hashPassword("dummy-timing-equalizer");
+/**
+ * Фиктивный хеш для выравнивания времени проверки несуществующего аккаунта:
+ * scrypt отрабатывает одинаково, не позволяя перечислять email по таймингу.
+ *
+ * Раньше он считался на верхнем уровне модуля синхронным scryptSync, из-за чего
+ * импорт route.ts на старте сервера тратил ~100 мс CPU. Теперь хеширование
+ * асинхронное, а модульный await сделал бы весь файл асинхронным модулем,
+ * что несовместимо с его использованием. Вместо этого подставлен корректно
+ * сформированный хеш с теми же параметрами: verifyPassword делает полный
+ * derive и уходит в ту же ветку, поэтому время ответа совпадает.
+ */
+const DUMMY_STORED = `scrypt$65536$8$1$${"0".repeat(32)}${"0".repeat(128)}`;
 
 export async function POST(request: Request) {
   const { data, error } = await readJson<{ email?: string; password?: string }>(request);
@@ -46,7 +55,7 @@ export async function POST(request: Request) {
   const user = getUserByEmail(email);
   // Всегда выполняем scrypt-проверку (против хэша аккаунта или фиктивного),
   // чтобы время ответа не зависело от существования email.
-  const valid = verifyPassword(password, user?.password_hash ?? DUMMY_HASH);
+  const valid = await verifyPassword(password, user?.password_hash ?? DUMMY_STORED);
   if (!user || !valid) {
     return NextResponse.json({ error: "Неверный email или пароль" }, { status: 401 });
   }
@@ -56,6 +65,14 @@ export async function POST(request: Request) {
       { error: "Подтвердите email по ссылке из письма" },
       { status: 403 },
     );
+  }
+
+  // Прозрачное обновление: пароль, сохранённый с прежними (дешёвыми) параметрами
+  // scrypt, перехешируется новыми после успешного входа. Так стоимость растёт
+  // постепенно, без единовременного «большого ремонта» всех паролей базы.
+  if (needsRehash(user.password_hash)) {
+    const upgraded = await hashPassword(password);
+    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(upgraded, user.id);
   }
 
   const session = createSession(user.id);

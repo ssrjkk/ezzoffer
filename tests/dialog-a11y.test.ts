@@ -1,0 +1,119 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { execSync } from "node:child_process";
+
+/**
+ * Структурные стражи по кабинету.
+ *
+ * Здесь осталось только то, что тесты поведения НЕ покрывают: они рендерят
+ * сам компонент, но ничего не знают о том, что его правильно используют
+ * в менеджерах. Регулярки по поведению (есть ли в коде role="dialog",
+ * совпадает ли текст ветки) вынесены в dialog-behavior.test.tsx и
+ * status-message.test.tsx — там они настоящие.
+ *
+ * Прежняя версия файла проверяла регулярками сам dialog.tsx. Это была
+ * иллюзия покрытия: перепиши функцию эквивалентно — тест сломается;
+ * сломай поведение, оставив текст, — тест пройдёт.
+ */
+
+function dashboardFiles(): string[] {
+  return execSync("git ls-files src", { encoding: "utf8" })
+    .trim()
+    .split("\n")
+    .filter((f) => f.startsWith("src/components/dashboard/"));
+}
+
+test("модальные окна не собираются вручную", () => {
+  const offenders: string[] = [];
+  for (const file of execSync("git ls-files src", { encoding: "utf8" })
+    .trim()
+    .split("\n")
+    .filter((f) => /\.tsx$/.test(f))) {
+    const content = readFileSync(file, "utf8");
+    // Признак самодельного оверлея: fixed inset-0 + затемнение подложки.
+    if (/fixed inset-0/.test(content) && /bg-black\/\d+/.test(content)) {
+      offenders.push(file);
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `ручная вёрстка модалки вместо @/components/dialog:\n${offenders.join("\n")}`,
+  );
+});
+
+test("удаление в менеджерах идёт через подтверждение", () => {
+  const managers = [
+    "src/components/dashboard/resumes-manager.tsx",
+    "src/components/dashboard/letters-manager.tsx",
+    "src/components/dashboard/jobs-explorer.tsx",
+  ];
+  for (const file of managers) {
+    const content = readFileSync(file, "utf8");
+    assert.match(content, /ConfirmDialog/, `${file}: удаление без подтверждения`);
+    // Кнопка должна открывать окно, а не удалять сразу: вызов remove
+    // прямо в обработчике — это удаление в один клик.
+    assert.doesNotMatch(
+      content,
+      /onClick=\{\(\) => remove\(/,
+      `${file}: удаление выполняется напрямую, без подтверждения`,
+    );
+  }
+});
+
+test("удаление защищено от повторного клика", () => {
+  for (const file of [
+    "src/components/dashboard/resumes-manager.tsx",
+    "src/components/dashboard/letters-manager.tsx",
+    "src/components/dashboard/jobs-explorer.tsx",
+  ]) {
+    const content = readFileSync(file, "utf8");
+    assert.match(
+      content,
+      /if \(removingId !== null\) return;/,
+      `${file}: нет защиты от гонки при двойном клике`,
+    );
+  }
+});
+
+test("сообщения форм объявляются скринридеру", () => {
+  // Проверяем все компоненты кашбинета, а не выборочный список: таких мест
+  // было десять, и в каждом атрибут надо было не забыть.
+  const offenders: string[] = [];
+
+  for (const file of dashboardFiles()) {
+    const content = readFileSync(file, "utf8");
+    // Компонент показывает пользователю ошибку или уведомление...
+    if (!/\{error \?|\{notice \?/.test(content)) continue;
+    // ...и при этом не отдаёт её в живую область.
+    const announces =
+      /StatusMessage/.test(content) ||
+      /aria-live=/.test(content) ||
+      /role="status"|role="alert"/.test(content) ||
+      /"status"\s*:\s*"alert"/.test(content);
+    if (!announces) offenders.push(file);
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `сообщение выводится, но не озвучивается:\n${offenders.join("\n")}`,
+  );
+});
+
+test("живая область не смонтирована условно", () => {
+  // {error ? <StatusMessage>{error}</StatusMessage> : null} означает, что
+  // область и текст появляются одним рендером, и часть скринридеров
+  // такую вставку не объявляет.
+  const offenders: string[] = [];
+  for (const file of dashboardFiles()) {
+    const content = readFileSync(file, "utf8");
+    if (/\{(error|notice)[^}]*\?\s*<StatusMessage/.test(content)) offenders.push(file);
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `живая область смонтирована условно:\n${offenders.join("\n")}`,
+  );
+});

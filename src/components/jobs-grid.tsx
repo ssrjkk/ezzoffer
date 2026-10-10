@@ -1,34 +1,60 @@
 import Link from "next/link";
 import { jobs, type Job } from "@/lib/data";
-import { LevelPill } from "@/components/home/jobs-preview";
 
-function JobCard({ job }: { job: Job }) {
+/*
+ * Список вакансий.
+ *
+ * Прежняя версия — сетка карточек: логотип из двух букв в градиентной
+ * плашке, «пилюля» уровня, виляющая карточка при наведении и пульсирующая
+ * точка «свежести». Список вакансий — это табличные данные: их читают,
+ * сравнивают по зарплате и уровню, и карточная сетка для этого хуже
+ * обычного списка — сравнивать не с чем.
+ *
+ * Теперь это полоса в газетном стиле: строки, разделённые линейками,
+ * колонки с фиксированным смыслом. На узком экране строка складывается
+ * в два блока, но порядок «должность → компания → деньги» сохраняется.
+ */
+
+function levelTone(level: Job["level"]): string {
+  return {
+    Intern: "text-accent-2",
+    Junior: "text-accent-2",
+    Middle: "text-ink",
+    Senior: "text-ink",
+  }[level];
+}
+
+function JobRow({ job }: { job: Job }) {
   return (
     <Link
       href={`/jobs/${job.slug}`}
-      className="group flex h-full flex-col rounded-3xl border border-line bg-surface/60 p-6 transition-all duration-300 hover:-translate-y-1 hover:border-accent/40"
+      className="group block border-b border-line py-6 transition-colors hover:bg-surface-2 md:px-4"
     >
-      <div className="flex items-center justify-between gap-3">
-        <span className="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-accent/25 to-accent-2/20 text-sm font-bold ring-1 ring-white/10">
-          {job.company.slice(0, 2)}
-        </span>
-        <LevelPill level={job.level} />
-      </div>
-      <p className="mt-4 text-base font-semibold leading-snug">{job.title}</p>
-      <p className="mt-1.5 text-sm text-muted">{job.company}</p>
-      <div className="mt-auto flex flex-wrap items-center gap-2 pt-5">
-        <span className="text-sm font-semibold text-success">{job.salary}</span>
-        <span className="text-sm text-muted">·</span>
-        <span className="text-sm text-muted">{job.format}</span>
-        <span className="text-sm text-muted">·</span>
-        <span className="text-sm text-muted">{job.city}</span>
-      </div>
-      <div className="mt-4 flex items-center justify-between border-t border-line pt-4">
-        <span className="text-xs text-muted">{job.category}</span>
-        <span className="inline-flex items-center gap-1 text-xs text-accent-2">
-          {job.posted}
-          <span className="inline-flex size-1.5 rounded-full bg-success animate-pulse-dot" />
-        </span>
+      <div className="flex flex-col gap-3 md:flex-row md:items-baseline md:gap-8">
+        {/* Уровень и компания — узкая колонка */}
+        <div className="flex items-baseline gap-3 md:w-44 md:shrink-0 md:flex-col md:gap-1">
+          <span className={`font-mono text-[11px] uppercase tracking-[0.14em] ${levelTone(job.level)}`}>
+            {job.level}
+          </span>
+          <span className="text-sm text-muted">{job.company}</span>
+        </div>
+
+        {/* Должность — главное, поэтому самая широкая колонка */}
+        <div className="min-w-0 flex-1">
+          <p className="font-serif text-xl leading-snug text-ink group-hover:text-accent">
+            {job.title}
+          </p>
+          <p className="mt-1 text-xs text-muted">
+            {job.category} · {job.city} · {job.format}
+          </p>
+        </div>
+
+        {/* Деньги моноширинным: цифры в одной колонке выравниваются,
+            и их можно сравнивать не читая каждую строку целиком. */}
+        <div className="shrink-0 md:w-40 md:text-right">
+          <p className="font-mono text-sm tabular-nums text-ink">{job.salary}</p>
+          <p className="mt-1 font-mono text-[11px] text-muted">{job.posted}</p>
+        </div>
       </div>
     </Link>
   );
@@ -36,10 +62,26 @@ function JobCard({ job }: { job: Job }) {
 
 export function JobsGrid() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {jobs.map((job) => (
-        <JobCard key={job.slug} job={job} />
-      ))}
+    <div>
+      {/* Шапка колонок — только на широком экране, где есть смысл
+          в горизонтальном сравнении. */}
+      <div className="hidden border-b-2 border-ink pb-3 md:flex md:gap-8 md:px-4">
+        <span className="w-44 shrink-0 font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+          Уровень · компания
+        </span>
+        <span className="flex-1 font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+          Вакансия
+        </span>
+        <span className="w-40 shrink-0 text-right font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+          Зарплата
+        </span>
+      </div>
+
+      <div>
+        {jobs.map((job) => (
+          <JobRow key={job.slug} job={job} />
+        ))}
+      </div>
     </div>
   );
 }

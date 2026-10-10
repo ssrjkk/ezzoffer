@@ -1,45 +1,26 @@
-import { envNum } from "@/lib/env";
-
 /**
- * Instrumentation работает и в Edge, и в Node. Node-модули (fs, пути, SQLite)
- * нельзя тянуть в Edge-бандл, поэтому весь Node-код подключается динамическим
- * import() уже после проверки NEXT_RUNTIME — именно это требует документация Next.
+ * Instrumentation работает и в Edge, и в Node.
  *
- * Важно: turbopackIgnore на этих импортах ставить нельзя. Пометка оставляет
- * спецификатор "@/lib/..." как есть, и в собранном сервере он не резолвится:
- * "Cannot find package '@/lib' imported from .next/standalone/.../chunks/
- * src_instrumentation_ts_*.js". Динамический import() и так не выполняется в
- * Edge, а Turbopack при этом корректно бандлит модуль для Node-части.
+ * Весь Node-код (process.on, планировщик, SQLite) вынесен в @/lib/bootstrap
+ * и подключается динамическим import() уже после проверки NEXT_RUNTIME.
+ *
+ * Почему не «просто динамический импорт тут»: Turbopack анализирует тело
+ * этого файла СТАТИЧЕСКИ, независимо от рантайм-проверки. Пока process.on и
+ * setInterval стояли прямо в register(), сборка выдавала
+ * "A Node.js API is used (process.on) which is not supported in the Edge
+ * Runtime" — хотя в Edge код и не выполнялся. Вынос в отдельный модуль
+ * убирает эти API из Edge-бандла целиком.
+ *
+ * Важно: turbopackIgnore на импортах ставить нельзя. Пометка оставляет
+ * "@/lib/bootstrap" как есть, и в собранном сервере он не резолвится:
+ * "Cannot find package '@/lib' imported from .next/standalone/...".
  */
 
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
-  const { logError, logInfo } = await import("@/lib/logger");
-
-  process.on("unhandledRejection", (reason) => {
-    logError("process:unhandledRejection", reason instanceof Error ? reason : new Error(String(reason)));
-  });
-
-  // Планировщик: автоотклики, обновление каталога, синхронизация hh.
-  // envNum, а не Number(process.env.X ?? default): Number("") === 0, и пустая
-  // переменная в .env.example полностью отключала бы планировщик.
-  const intervalMs = envNum(process.env, "SCHEDULER_INTERVAL_MS", 5 * 60 * 1000, { min: 60_000 });
-  if (intervalMs < 60_000) return;
-
-  logInfo("scheduler", `интервал запуска: ${Math.round(intervalMs / 1000)} с`);
-  const tick = async (): Promise<void> => {
-    try {
-      const { runScheduledJobs } = await import("@/lib/scheduler");
-      await runScheduledJobs();
-    } catch (err) {
-      logError("scheduler:schedule", err);
-    }
-  };
-  const id = setInterval(() => {
-    void tick();
-  }, intervalMs);
-  id.unref?.();
+  const { startNodeRuntime } = await import("@/lib/bootstrap");
+  await startNodeRuntime();
 }
 
 export function onRequestError(

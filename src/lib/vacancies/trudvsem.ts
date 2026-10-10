@@ -1,6 +1,7 @@
 import type { Level, WorkFormat } from "../data";
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
 import { sanitizeExternalUrl, toSalaryNumber } from "./util";
+import { httpFetch, parseJson } from "../http-client";
 
 const BASE = "https://opendata.trudvsem.ru/api/v1/vacancies";
 const FETCH_TIMEOUT = 25_000;
@@ -133,26 +134,19 @@ export const trudvsemProvider: VacancyProvider = {
     params.set("limit", String(Math.min(Math.max(1, query.limit ?? 50), 100)));
     params.set("offset", "0");
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-    try {
-      const res = await fetch(`${BASE}?${params.toString()}`, {
-        signal: controller.signal,
-        headers: { Accept: "application/json" },
-        cache: "no-store",
-      });
-      if (!res.ok) {
-        return { vacancies: [], provider: "trudvsem", ok: false, error: `HTTP ${res.status}` };
-      }
-      const data = (await res.json()) as TrudRaw;
-      const rows = data.results?.vacancies ?? [];
-      const vacancies = rows.map((r) => mapTrudVacancy(r.vacancy)).filter((v): v is Vacancy => Boolean(v));
-      return { vacancies, provider: "trudvsem", ok: true };
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "network error";
-      return { vacancies: [], provider: "trudvsem", ok: false, error: msg };
-    } finally {
-      clearTimeout(timer);
+    const res = await httpFetch(`${BASE}?${params.toString()}`, {
+      timeoutMs: FETCH_TIMEOUT,
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) {
+      return { vacancies: [], provider: "trudvsem", ok: false, error: res.error ?? "network error" };
     }
+    const data = parseJson<TrudRaw>(res.body);
+    if (data === null) {
+      return { vacancies: [], provider: "trudvsem", ok: false, error: "некорректный JSON" };
+    }
+    const rows = data.results?.vacancies ?? [];
+    const vacancies = rows.map((r) => mapTrudVacancy(r.vacancy)).filter((v): v is Vacancy => Boolean(v));
+    return { vacancies, provider: "trudvsem", ok: true };
   },
 };

@@ -2,6 +2,18 @@ import { Section, SectionHead, PrimaryButton } from "@/components/ui";
 import { Reveal } from "@/components/reveal";
 import { steps } from "@/lib/data";
 
+/*
+ * «Как это работает».
+ *
+ * Прежняя версия — четыре одинаковые карточки в сетке 2×2, каждая с
+ * размытым пятном, градиентной иконкой, огромным призрачным номером
+ * и пилюлей-плашкой. Сетка карточек — самый шаблонный способ показать
+ * последовательные шаги: он не даёт понять, что шаги идут во времени.
+ *
+ * Теперь это нумерованный перечень: номер моноширинным слева, вертикальная
+ * черта разделяет шаги, порядок читается за счёт структуры, а не заливки.
+ */
+
 const icons: Record<string, React.ReactNode> = {
   link: (
     <path
@@ -43,48 +55,59 @@ const icons: Record<string, React.ReactNode> = {
 
 export function HowItWorks() {
   return (
-    <Section id="how-it-work" className="relative">
-      <div className="pointer-events-none absolute left-1/2 top-1/3 h-96 w-[700px] -translate-x-1/2 rounded-full bg-accent/10 blur-[130px]" />
-
+    <Section id="how-it-work">
       <SectionHead
         eyebrow="Как это работает"
         title={
           <>
-            Меньше усилий — <span className="text-gradient">больше приглашений</span>
+            Меньше усилий — <span className="text-accent">больше приглашений</span>
           </>
         }
         sub="Берём поиск работы на себя и экономим вам до 27 часов в неделю"
       />
 
-      <div className="relative grid gap-5 md:grid-cols-2">
+      <ol className="border-t border-line">
         {steps.map((step, idx) => (
-          <Reveal key={step.title} delay={idx * 90}>
-            <article className="group relative flex h-full flex-col gap-4 overflow-hidden rounded-3xl border border-line bg-surface/70 p-7 transition-all duration-300 hover:-translate-y-1 hover:border-accent/40 md:p-8">
-              <div className="pointer-events-none absolute -right-16 -top-16 size-40 rounded-full bg-accent/10 opacity-0 blur-3xl transition-opacity duration-500 group-hover:opacity-100" />
-              <div className="flex items-start justify-between gap-4">
-                <span className="grid size-12 place-items-center rounded-2xl bg-gradient-to-br from-accent/25 to-accent-2/20 text-ink ring-1 ring-white/10">
-                  <svg viewBox="0 0 24 24" className="size-5.5">
-                    {icons[step.icon]}
-                  </svg>
-                </span>
-                <span className="text-5xl font-semibold text-white/5 tabular-nums">
-                  {String(idx + 1).padStart(2, "0")}
-                </span>
-              </div>
-              <div>
-                <h3 className="text-xl font-semibold tracking-tight md:text-2xl">{step.title}</h3>
-                <p className="mt-3 text-sm leading-relaxed text-muted md:text-base">{step.text}</p>
-              </div>
-              <span className="mt-auto inline-flex w-fit rounded-full bg-accent/15 px-3.5 py-1.5 text-xs font-semibold text-accent-2 ring-1 ring-accent/30">
-                {step.badge}
+          // as="li" обязателен: <ol> допускает только <li> прямыми потомками,
+          // а Reveal по умолчанию рендерит <div> — список перестаёт быть
+          // списком для скринридера.
+          <Reveal
+            as="li"
+            key={step.title}
+            delay={idx * 70}
+            className="grid gap-4 border-b border-line py-8 md:grid-cols-12 md:gap-8"
+          >
+            <div className="flex items-baseline gap-4 md:col-span-1">
+              <span className="font-mono text-sm tabular-nums text-accent">
+                {String(idx + 1).padStart(2, "0")}
               </span>
-            </article>
+              <svg viewBox="0 0 24 24" className="size-5 text-muted md:hidden" aria-hidden>
+                {icons[step.icon]}
+              </svg>
+            </div>
+
+            <div className="md:col-span-4">
+              <h3 className="font-serif text-xl leading-snug md:text-2xl">{step.title}</h3>
+              <p className="mt-2 font-mono text-xs uppercase tracking-[0.1em] text-accent">
+                {step.badge}
+              </p>
+            </div>
+
+            <div className="md:col-span-6">
+              <p className="max-w-prose text-base leading-relaxed text-muted">{step.text}</p>
+              {/* Иконка на широком экране живёт рядом с текстом: раньше она
+                  занимала место карточки, которая сама по себе ничего
+                  не сообщала. */}
+              <svg viewBox="0 0 24 24" className="mt-4 hidden size-6 text-accent-2 md:block" aria-hidden>
+                {icons[step.icon]}
+              </svg>
+            </div>
           </Reveal>
         ))}
-      </div>
+      </ol>
 
       <Reveal delay={120}>
-        <div className="mt-12 text-center">
+        <div className="mt-12">
           <PrimaryButton href="/signup">Начать бесплатно</PrimaryButton>
         </div>
       </Reveal>

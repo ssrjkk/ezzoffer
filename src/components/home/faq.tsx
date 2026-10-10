@@ -14,7 +14,7 @@ export function FaqAccordion() {
         eyebrow="FAQ"
         title={
           <>
-            Ответы на <span className="text-gradient">частые вопросы</span>
+            Ответы на <span className="text-accent">частые вопросы</span>
           </>
         }
         sub="Мы уже ответили на всё, что обычно спрашивают перед стартом"
@@ -26,8 +26,8 @@ export function FaqAccordion() {
           return (
             <Reveal key={item.q} delay={idx * 40}>
               <div
-                className={`overflow-hidden rounded-2xl border transition-all duration-300 ${
-                  open ? "border-accent/40 bg-surface/80" : "border-line bg-surface/50 hover:border-white/20"
+                className={`overflow-hidden border-b transition-colors ${
+                  open ? "border-accent" : "border-line"
                 }`}
               >
                 <button
@@ -36,19 +36,21 @@ export function FaqAccordion() {
                   aria-expanded={open}
                   aria-controls={`faq-panel-${idx}`}
                   id={`faq-button-${idx}`}
-                  className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left"
+                  className="flex w-full items-start justify-between gap-6 py-5 text-left"
                 >
-                  <span className="text-sm font-semibold md:text-base">{item.q}</span>
+                  {/* Вопрос антиквой и крупнее ответа: в FAQ читают вопросы,
+                      ответы проглатывают. Раньше оба были одинакового
+                      кегля sans-serif. */}
+                  <span className="font-serif text-lg leading-snug md:text-xl">{item.q}</span>
+                  {/* Плюс превращается в крест — типографский приём вместо
+                      круглой кнопки с вращающимся плюсом. */}
                   <span
-                    className={`grid size-8 shrink-0 place-items-center rounded-full border transition-all duration-300 ${
-                      open
-                        ? "rotate-45 border-accent bg-accent/20 text-accent-2"
-                        : "border-line text-muted"
+                    aria-hidden
+                    className={`mt-1 shrink-0 font-mono text-xl leading-none transition-transform duration-200 ${
+                      open ? "rotate-45 text-accent" : "text-muted"
                     }`}
                   >
-                    <svg viewBox="0 0 24 24" className="size-4" fill="none">
-                      <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                    </svg>
+                    +
                   </span>
                 </button>
                 <div
@@ -60,7 +62,7 @@ export function FaqAccordion() {
                   }`}
                 >
                   <div className="overflow-hidden">
-                    <p className="px-6 pb-6 text-sm leading-relaxed text-muted md:text-[15px]">
+                    <p className="measure pb-6 text-sm leading-relaxed text-muted md:text-base">
                       {item.a}
                     </p>
                   </div>

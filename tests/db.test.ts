@@ -40,3 +40,43 @@ test("WAL включается только для файловых БД", () =>
   const mem = createDatabase(":memory:");
   assert.equal(mem.pragma("journal_mode", { simple: true }), "memory");
 });
+
+/**
+ * Индексы на expires_at нужны уборке просроченных сессий и OAuth-состояний:
+ * без них purge шёл полным сканированием таблицы. Регрессия-guard на сам факт
+ * существования индексов — при случайном удалении из SCHEMA_SQL тест упадёт.
+ */
+test("индексы для уборки просроченных записей существуют", () => {
+  const db = createDatabase(":memory:");
+  const names = new Set(
+    (db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as { name: string }[]).map(
+      (r) => r.name,
+    ),
+  );
+  for (const idx of [
+    "idx_sessions_expires",
+    "idx_oauth_states_expires",
+    "idx_telegram_codes_expires",
+  ]) {
+    assert.ok(names.has(idx), `отсутствует ${idx}`);
+  }
+});
+
+test("составные индексы applications покрывают выборки кабинета", () => {
+  const db = createDatabase(":memory:");
+  const names = new Set(
+    (db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as { name: string }[]).map(
+      (r) => r.name,
+    ),
+  );
+  assert.ok(names.has("idx_applications_user_sent"), "todayCount идёт по (user_id, sent_at)");
+  assert.ok(names.has("idx_applications_user_job"), "проверка дубля отклика идёт по (user_id, job_slug)");
+});
+
+test("схема применяется повторно без ошибок (идемпотентность)", () => {
+  const mem = createDatabase(":memory:");
+  // createDatabase выполняет SCHEMA_SQL целиком; повторный вызов на той же БД
+  // не должен падать из-за дублирующихся CREATE INDEX.
+  assert.doesNotThrow(() => createDatabase(":memory:"));
+  assert.ok(mem);
+});

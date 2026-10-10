@@ -68,61 +68,65 @@ const icons: Record<string, React.ReactNode> = {
 
 export function Advantages() {
   return (
-    <Section className="relative border-y border-line bg-surface/40">
-      <div className="pointer-events-none absolute right-0 top-1/4 h-80 w-80 rounded-full bg-accent-2/10 blur-[120px]" />
+    <Section>
       <SectionHead
         eyebrow="Преимущества сервиса"
         title={
           <>
-            Всё для <span className="text-gradient">результата</span>
+            Всё для <span className="text-accent">результата</span>
           </>
         }
         sub="Находим лучшие вакансии, анализируем отклики и делаем поиск работы результативным"
       />
 
-      <div className="grid auto-rows-fr gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid border-t border-line sm:grid-cols-2 sm:divide-x sm:divide-line lg:grid-cols-3">
         {advantages.map((item, idx) => (
           <Reveal
             key={item.title}
-            delay={idx * 70}
-            className={item.wide ? "sm:col-span-2 lg:col-span-1 lg:row-span-1" : ""}
+            delay={idx * 60}
+            className={item.wide ? "sm:col-span-2 lg:col-span-1" : ""}
           >
-            <div className="group relative h-full overflow-hidden rounded-3xl border border-line bg-bg/60 p-7 transition-all duration-300 hover:-translate-y-1 hover:border-accent-2/40">
-              <div className="pointer-events-none absolute -bottom-20 -right-14 size-44 rounded-full bg-accent/10 opacity-0 blur-3xl transition-opacity duration-500 group-hover:opacity-100" />
-              <span className="grid size-12 place-items-center rounded-2xl bg-gradient-to-br from-accent/25 to-accent-2/20 ring-1 ring-white/10 transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3">
-                <svg viewBox="0 0 24 24" className="size-5.5">
-                  {icons[item.icon]}
-                </svg>
-              </span>
-              <h3 className="mt-5 text-lg font-semibold tracking-tight md:text-xl">
-                {item.title}
-              </h3>
-              <p className="mt-3 text-sm leading-relaxed text-muted md:text-base">{item.text}</p>
+            {/*
+              Раньше: карточка с градиентной иконкой, размытым пятном при
+              наведении и подъёмом на пиксель. Ни то, ни другое ничего не
+              сообщало: пятно исчезало при отведении мыши, а подъём намекал,
+              что карточка кликабельна, хотя кликабельна она не была.
+              Теперь — линейки и заголовок антиквой.
+            */}
+            <div className="h-full border-b border-line py-8 sm:px-8 sm:py-10 sm:first:pl-0">
+              <svg viewBox="0 0 24 24" className="size-6 text-accent-2" aria-hidden>
+                {icons[item.icon]}
+              </svg>
+              <h3 className="mt-5 font-serif text-xl leading-snug">{item.title}</h3>
+              <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted md:text-base">
+                {item.text}
+              </p>
             </div>
           </Reveal>
         ))}
 
-        <Reveal
-          delay={200}
-          className="sm:col-span-2 lg:col-span-1"
-        >
-          <div className="relative flex h-full flex-col justify-between gap-6 overflow-hidden rounded-3xl bg-gradient-to-br from-accent via-accent/80 to-accent-2 p-7 text-white">
-            <div className="pointer-events-none absolute -right-10 -top-10 size-40 rounded-full bg-white/15 blur-2xl" />
+        <Reveal delay={200} className="sm:col-span-2 lg:col-span-1">
+          {/*
+            Единственная инверсная панель на главной: чёрная полоса с
+            обратной ссылкой. Приём осознанный — он отделяет призыв от
+            перечисления преимуществ, а не добавляет ещё одно преимущество.
+          */}
+          <div className="flex h-full flex-col justify-between gap-6 bg-ink p-8">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-widest text-white/70">
+              <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-paper">
                 Боитесь?
               </p>
-              <h3 className="mt-2 text-2xl font-semibold leading-snug tracking-tight">
+              <h3 className="mt-4 font-serif text-2xl leading-snug text-paper">
                 Делегируйте рутину и займитесь собеседованиями
               </h3>
-              <p className="mt-3 text-sm leading-relaxed text-white/85">
+              <p className="mt-3 max-w-prose text-sm leading-relaxed text-paper">
                 Первые приглашения приходят уже через 2–3 дня. Дальше всё зависит только от вашего
                 опыта — умения заинтересовать работодателя и вести диалог.
               </p>
             </div>
             <Link
               href="/signup"
-              className="inline-flex w-fit items-center gap-2 rounded-full bg-white px-6 py-3 text-sm font-semibold text-accent transition-transform hover:scale-[1.03]"
+              className="inline-flex w-fit items-center gap-2 border-b border-paper pb-0.5 text-sm font-semibold text-paper transition-colors hover:border-accent hover:text-accent"
             >
               Получить первый оффер
               <span aria-hidden>→</span>

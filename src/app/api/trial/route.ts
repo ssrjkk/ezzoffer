@@ -26,7 +26,15 @@ export async function POST() {
     `UPDATE users SET plan = 'trial', plan_period = 1, plan_activated_at = ?, plan_expires_at = ?, trial_started_at = ? WHERE id = ?`,
   ).run(now, now + TRIAL_MS, now, user.id);
 
-  const updated = db.prepare("SELECT * FROM users WHERE id = ?").get(user.id) as User;
+  // Строка пользователя теоретически может исчезнуть между проверкой сессии и
+  // записью (удалили аккаунт, восстановили БД из бэкапа). Раньше здесь стояло
+  // `as User`, и при отсутствии строки `updated.plan` бросал TypeError —
+  // клиент получал 500 вместо внятного ответа. Отвечаем 401: сессия больше
+  // недействительна, пусть перезайдёт.
+  const updated = db.prepare("SELECT * FROM users WHERE id = ?").get(user.id) as User | undefined;
+  if (!updated) {
+    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
+  }
   return Response.json({
     plan: {
       id: updated.plan,

@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { getVacancyBySlug, getVacancyIndex } from "./vacancies";
+import { getVacancyBySlug } from "./vacancies";
 
 export type ApplicationRow = {
   id: number;
@@ -25,6 +25,15 @@ export const STATUS_RU: Record<string, string> = {
   responded: "Ответ HR",
 };
 
+/**
+ * Сериализация одного отклика.
+ *
+ * Раньше здесь вызывался getVacancyIndex() — он строит Map по ВСЕМУ каталогу
+ * вакансий. Для одного отклика (POST /api/applications) это означало загрузку
+ * и разбор сотен-тысяч строк ради одного значения: тяжёлая работа на каждый
+ * клик «Откликнуться». Здесь нужен ровно один slug, поэтому идём точечный
+ * запрос.
+ */
 export function serializeApplication(row: ApplicationRow) {
   const vacancy = getVacancyBySlug(row.job_slug);
   return serializeApplicationWith(row, vacancy);
@@ -62,12 +71,57 @@ function serializeApplicationWith(row: ApplicationRow, vacancy: ReturnType<typeo
   };
 }
 
+/**
+ * Простая выдача откликов без постраничности.
+ *
+ * Оставлена как совместимая обёртка: страница кабинета и публичный API
+ * используют её, а внутри — тот же постраничный путь.
+ */
 export function listApplications(userId: number, limit = 200) {
   const rows = db
-    .prepare(
-      "SELECT * FROM applications WHERE user_id = ? ORDER BY sent_at DESC LIMIT ?",
-    )
-    .all(userId, limit) as ApplicationRow[];
-  const index = getVacancyIndex();
-  return rows.map((row) => serializeApplicationWith(row, index.get(row.job_slug) ?? null));
+    .prepare("SELECT * FROM applications WHERE user_id = ? ORDER BY sent_at DESC, id DESC LIMIT ?")
+    .all(userId, Math.min(Math.max(1, Math.floor(limit)), 200)) as ApplicationRow[];
+  return rows.map((row) => serializeApplicationWith(row, getVacancyBySlug(row.job_slug)));
+}
+
+/**
+ * Постраничная выдача откликов по курсору.
+ *
+ * Ключ — составной (sent_at, id): планировщик может отправить несколько
+ * откликов с одинаковым sent_at, и курсор только по времени пропускал бы
+ * записи на границе страниц. Загружается limit + 1 строка, чтобы понять,
+ * есть ли следующая страница, без отдельного COUNT по всей таблице.
+ */
+export function listApplicationsPage(
+  userId: number,
+  limit = 50,
+  cursor?: { sentAt: number; id: number } | null,
+) {
+  const size = Math.min(Math.max(1, Math.floor(limit)), 200);
+  const rows = (
+    cursor
+      ? db
+          .prepare(
+            `SELECT * FROM applications
+              WHERE user_id = ? AND (sent_at < ? OR (sent_at = ? AND id < ?))
+              ORDER BY sent_at DESC, id DESC LIMIT ?`,
+          )
+          .all(userId, cursor.sentAt, cursor.sentAt, cursor.id, size + 1)
+      : db
+          .prepare(
+            `SELECT * FROM applications
+              WHERE user_id = ?
+              ORDER BY sent_at DESC, id DESC LIMIT ?`,
+          )
+          .all(userId, size + 1)
+  ) as ApplicationRow[];
+
+  const hasMore = rows.length > size;
+  const page = hasMore ? rows.slice(0, size) : rows;
+  const last = page[page.length - 1];
+
+  return {
+    items: page.map((row) => serializeApplicationWith(row, getVacancyBySlug(row.job_slug))),
+    nextCursor: hasMore && last ? { sentAt: last.sent_at, id: last.id } : null,
+  };
 }

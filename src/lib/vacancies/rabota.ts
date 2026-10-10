@@ -1,6 +1,7 @@
 import type { Level, WorkFormat } from "../data";
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
 import { sanitizeExternalUrl, toSalaryNumber } from "./util";
+import { httpFetch } from "../http-client";
 
 const BASE = "https://www.rabota.ru/vacancy/";
 const FETCH_TIMEOUT = 25_000;
@@ -193,42 +194,27 @@ export const rabotaProvider: VacancyProvider = {
     const params = new URLSearchParams();
     if (query.text) params.set("q", query.text);
 
-    let lastError = "network error";
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-      try {
-        const res = await fetch(`${BASE}?${params.toString()}`, {
-          signal: controller.signal,
-          headers: {
-            Accept: "text/html,application/xhtml+xml",
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
-          },
-          cache: "no-store",
-        });
-        if (!res.ok) {
-          lastError = `HTTP ${res.status}`;
-          continue;
-        }
-        const html = await res.text();
-        const rows = extractJsonLd(html);
-        const vacancies = rows.map(mapRabotaVacancy).filter((v): v is Vacancy => Boolean(v));
-
-        const limit = Math.min(Math.max(1, query.limit ?? 50), 100);
-        if (vacancies.length === 0) {
-          return { vacancies: [], provider: "rabota", ok: false, error: "Нет вакансий в ответе Работа.ру" };
-        }
-        return { vacancies: vacancies.slice(0, limit), provider: "rabota", ok: true };
-      } catch (e) {
-        lastError = e instanceof Error ? e.message : "network error";
-        if (attempt < 2) {
-          await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
-        }
-      } finally {
-        clearTimeout(timer);
-      }
+    const res = await httpFetch(`${BASE}?${params.toString()}`, {
+      timeoutMs: FETCH_TIMEOUT,
+      attempts: 3,
+      retryBaseMs: 1000,
+      headers: {
+        Accept: "text/html,application/xhtml+xml",
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+      },
+    });
+    if (!res.ok) {
+      return { vacancies: [], provider: "rabota", ok: false, error: res.error ?? "network error" };
     }
-    return { vacancies: [], provider: "rabota", ok: false, error: lastError };
+
+    const rows = extractJsonLd(res.body);
+    const vacancies = rows.map(mapRabotaVacancy).filter((v): v is Vacancy => Boolean(v));
+
+    const limit = Math.min(Math.max(1, query.limit ?? 50), 100);
+    if (vacancies.length === 0) {
+      return { vacancies: [], provider: "rabota", ok: false, error: "Нет вакансий в ответе Работа.ру" };
+    }
+    return { vacancies: vacancies.slice(0, limit), provider: "rabota", ok: true };
   },
 };

@@ -59,6 +59,11 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at INTEGER NOT NULL
 );
 
+-- Уборка просроченных сессий идёт по expires_at, а поиск активной сессии — по
+-- token (PK). Без этих индексов purgeExpiredAuthRows сканировал всю таблицу.
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+
 CREATE TABLE IF NOT EXISTS oauth_states (
   token TEXT PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id),
@@ -136,7 +141,6 @@ CREATE INDEX IF NOT EXISTS idx_applications_user ON applications(user_id);
 CREATE INDEX IF NOT EXISTS idx_applications_job ON applications(job_slug);
 CREATE INDEX IF NOT EXISTS idx_resumes_user ON resumes(user_id);
 CREATE INDEX IF NOT EXISTS idx_searches_user ON searches(user_id);
-
 CREATE TABLE IF NOT EXISTS consultations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id INTEGER NOT NULL,
@@ -171,6 +175,17 @@ CREATE TABLE IF NOT EXISTS vacancies (
 );
 
 CREATE INDEX IF NOT EXISTS idx_vacancies_source ON vacancies(source);
+
+-- Дополнительные индексы для выборок, которые идут по составному ключу.
+-- Без них purgeExpiredAuthRows и todayCount сканировали таблицу целиком.
+CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+CREATE INDEX IF NOT EXISTS idx_oauth_states_expires ON oauth_states(expires_at);
+CREATE INDEX IF NOT EXISTS idx_telegram_codes_expires ON telegram_codes(expires_at);
+CREATE INDEX IF NOT EXISTS idx_telegram_codes_user ON telegram_codes(user_id);
+CREATE INDEX IF NOT EXISTS idx_applications_user_sent ON applications(user_id, sent_at);
+CREATE INDEX IF NOT EXISTS idx_applications_user_job ON applications(user_id, job_slug);
+CREATE INDEX IF NOT EXISTS idx_letters_user ON letters(user_id);
 `;
 
 export function createDatabase(filePath: string): Database.Database {

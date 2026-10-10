@@ -59,3 +59,57 @@ test("runAutoApply c hh-подключением пытается отправи
   // главное, что не падает и не фабрикует строки "sent" вручную.
   delete process.env.HH_ACCESS_TOKEN;
 });
+
+/**
+ * Регрессия: `skipped` считался как `candidates.length` внутри цикла по
+ * ПОИСКАМ. Один и тот же список вакансий попадал в счётчик повторно для каждого
+ * совпадения, а уже отправленные — тоже учитывались. Метрика «пропущено»
+ * показывала несуществующие проблемы и могла в разы превышать размер каталога.
+ *
+ * Теперь skipped не может превысить число вакансий, реально найденных для
+ * пользователя, и не включает уже отправленные.
+ */
+test("skipped не превышает число найденных кандидатов (regression)", async () => {
+  const hh = await import("../src/lib/vacancies/hh");
+  // Несколько hh-вакансий в каталоге, чтобы счётчик было что раздувать.
+  const now = Date.now();
+  const insert = db.prepare(
+    `INSERT INTO vacancies
+      (slug, source, source_id, title, company, salary, level, format, city, posted, category, about, responsibilities, requirements, bonus, fetched_at)
+     VALUES (?, 'hh', ?, ?, 'Компания', '', 'Middle', 'remote', 'Москва', '', 'Работа', 'React TypeScript', '[]', '[]', '[]', ?)`,
+  );
+  for (let i = 0; i < 5; i++) {
+    insert.run(`hh-reg-${i}`, `reg-${i}`, `Вакансия ${i}`, now);
+  }
+
+  const uid = Number(
+    db
+      .prepare(
+        "INSERT INTO users (email, password_hash, plan, plan_expires_at, created_at, hh_resume_id) VALUES (?,?,?,?,?,?)",
+      )
+      .run("skip@example.com", "h", "expert", Date.now() + 100000, Date.now(), "res").lastInsertRowid,
+  );
+  // Два поиска, оба подходят под все пять вакансий.
+  for (const title of ["A", "B"]) {
+    db.prepare(
+      `INSERT INTO searches (user_id, title, keywords, active, started_at, created_at)
+       VALUES (?, ?, 'react', 1, ?, ?)`,
+    ).run(uid, title, now, now);
+  }
+
+  const catalogSize = (
+    db.prepare("SELECT COUNT(*) c FROM vacancies WHERE source = 'hh'").get() as { c: number }
+  ).c;
+
+  const result = await runAutoApply();
+
+  assert.ok(
+    result.skipped <= catalogSize,
+    `skipped=${result.skipped} не может превышать каталог вакансий (${catalogSize})`,
+  );
+
+  // Убираем тестовые данные, чтобы они не влияли на следующие тесты.
+  db.prepare("DELETE FROM vacancies WHERE slug LIKE 'hh-reg-%'").run();
+  db.prepare("DELETE FROM searches WHERE user_id = ?").run(uid);
+  void hh;
+});

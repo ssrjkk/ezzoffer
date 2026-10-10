@@ -2,12 +2,39 @@ import { cookies } from "next/headers";
 import { randomBytes } from "node:crypto";
 import { db, getUserById, type User } from "./db";
 
-export { hashPassword, verifyPassword } from "./password";
+export { hashPassword, verifyPassword, needsRehash } from "./password";
 
 export const SESSION_COOKIE = "ez_session";
 const SESSION_DAYS = 30;
 
+/**
+ * Глобальная уборка просроченных записей.
+ *
+ * createSession чистит только сессии СВОЕГО пользователя, поэтому сессии
+ * удалённых аккаунтов (и всех, кто просто не заходил) оставались в таблице
+ * навсегда: таблица росла монотонно и никогда не сжималась. То же с
+ * oauth_states — истёкшие state-токены копились после каждой неудачной
+ * попытки подключения hh.ru.
+ *
+ * Периодический вызов (раз в час на процесс) убирает их пачками.
+ */
+let lastPurgeAt = 0;
+const PURGE_INTERVAL_MS = 60 * 60 * 1000;
+
+export function purgeExpiredAuthRows(now = Date.now()): void {
+  if (now - lastPurgeAt < PURGE_INTERVAL_MS) return;
+  lastPurgeAt = now;
+  db.prepare("DELETE FROM sessions WHERE expires_at <= ?").run(now);
+  db.prepare("DELETE FROM oauth_states WHERE expires_at <= ?").run(now);
+}
+
+/** Сброс для тестов: следующий вызов purgeExpiredAuthRows выполнит уборку. */
+export function resetAuthPurge(): void {
+  lastPurgeAt = 0;
+}
+
 export function createSession(userId: number): { token: string; expiresAt: number } {
+  purgeExpiredAuthRows();
   const token = randomBytes(32).toString("hex");
   const expiresAt = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000;
   db.prepare("DELETE FROM sessions WHERE user_id = ? AND expires_at <= ?").run(userId, Date.now());

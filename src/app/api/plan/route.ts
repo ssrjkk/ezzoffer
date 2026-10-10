@@ -27,7 +27,13 @@ export async function POST(request: Request) {
     `UPDATE users SET plan = ?, plan_period = ?, plan_activated_at = ?, plan_expires_at = ? WHERE id = ?`,
   ).run(plan, period, now, now + period * DAY_MS, user.id);
 
-  const updated = db.prepare("SELECT * FROM users WHERE id = ?").get(user.id) as User;
+  // Та же защита, что в /api/trial: отсутствие строки пользователя после
+  // прохождения авторизации не должно превращаться в 500 (TypeError на
+  // undefined.plan), но означает недействительную сессию.
+  const updated = db.prepare("SELECT * FROM users WHERE id = ?").get(user.id) as User | undefined;
+  if (!updated) {
+    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
+  }
   return Response.json({
     plan: {
       id: updated.plan,

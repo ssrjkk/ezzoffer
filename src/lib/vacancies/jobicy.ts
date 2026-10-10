@@ -1,6 +1,7 @@
 import type { Level } from "../data";
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
 import { cleanHtml, toSalaryNumber } from "./util";
+import { httpFetch, parseJson } from "../http-client";
 
 const BASE = "https://jobicy.com/api/v2/remote-jobs";
 const FETCH_TIMEOUT = 25_000;
@@ -113,35 +114,33 @@ export const jobicyProvider: VacancyProvider = {
     const params = new URLSearchParams({ count: String(limit) });
     if (query.text) params.set("search", query.text);
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-    try {
-      const res = await fetch(`${BASE}?${params.toString()}`, {
-        signal: controller.signal,
-        headers: { Accept: "application/json" },
-        cache: "no-store",
-      });
-      if (!res.ok && res.status === 400) {
-        // Именованный параметр search API не принимает (проверено) — перезапрашиваем без него.
-        const res2 = await fetch(`${BASE}?count=${limit}`, {
-          signal: controller.signal,
-          headers: { Accept: "application/json" },
-          cache: "no-store",
-        });
-        if (!res2.ok) return { vacancies: [], provider: "jobicy", ok: false, error: `HTTP ${res2.status}` };
-        const data2 = (await res2.json()) as JobicyPayload;
-        const vacancies = (data2.jobs ?? []).map(mapJobicyVacancy).filter((v): v is Vacancy => Boolean(v));
-        return { vacancies: vacancies.slice(0, limit), provider: "jobicy", ok: true };
+    const headers = { Accept: "application/json" };
+    const res = await httpFetch(`${BASE}?${params.toString()}`, { timeoutMs: FETCH_TIMEOUT, headers });
+
+    if (res.status === 400) {
+      // Именованный параметр search API не принимает (проверено) — перезапрашиваем без него.
+      const res2 = await httpFetch(`${BASE}?count=${limit}`, { timeoutMs: FETCH_TIMEOUT, headers });
+      if (!res2.ok) {
+        return { vacancies: [], provider: "jobicy", ok: false, error: res2.error ?? "network error" };
       }
-      if (!res.ok) return { vacancies: [], provider: "jobicy", ok: false, error: `HTTP ${res.status}` };
-      const data = (await res.json()) as JobicyPayload;
-      const vacancies = (data.jobs ?? []).map(mapJobicyVacancy).filter((v): v is Vacancy => Boolean(v));
+      const data2 = parseJson<JobicyPayload>(res2.body);
+      if (data2 === null) {
+        return { vacancies: [], provider: "jobicy", ok: false, error: "некорректный JSON" };
+      }
+      const vacancies = (data2.jobs ?? [])
+        .map(mapJobicyVacancy)
+        .filter((v): v is Vacancy => Boolean(v));
       return { vacancies: vacancies.slice(0, limit), provider: "jobicy", ok: true };
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "network error";
-      return { vacancies: [], provider: "jobicy", ok: false, error: msg };
-    } finally {
-      clearTimeout(timer);
     }
+
+    if (!res.ok) {
+      return { vacancies: [], provider: "jobicy", ok: false, error: res.error ?? "network error" };
+    }
+    const data = parseJson<JobicyPayload>(res.body);
+    if (data === null) {
+      return { vacancies: [], provider: "jobicy", ok: false, error: "некорректный JSON" };
+    }
+    const vacancies = (data.jobs ?? []).map(mapJobicyVacancy).filter((v): v is Vacancy => Boolean(v));
+    return { vacancies: vacancies.slice(0, limit), provider: "jobicy", ok: true };
   },
 };

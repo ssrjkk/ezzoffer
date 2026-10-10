@@ -40,7 +40,7 @@ let fontCache: FontSpec | null | undefined;
  * Это безопасно: в образ попадают исходники и тесты (~0.7 МБ), но не данные.
  * Путь к SQLite собирается по частям в db.ts и в tracing не попадает, поэтому
  * локальная ezoffer.db с хэшами паролей и OAuth-токенами в образ не утекает.
- * Шрифт добавляется копированием в Dockerfile и scripts/start-prod.js.
+ * Шрифт добавляется копированием в Dockerfile и scripts/start-prod.mjs.
  */
 function fileExists(p: string): boolean {
   try {

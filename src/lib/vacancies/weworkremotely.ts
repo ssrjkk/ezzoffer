@@ -1,6 +1,7 @@
 import type { Level } from "../data";
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
 import { cleanHtml, sanitizeExternalUrl } from "./util";
+import { httpFetch } from "../http-client";
 
 const RSS_URL = "https://weworkremotely.com/remote-jobs.rss";
 const FETCH_TIMEOUT = 25_000;
@@ -106,28 +107,24 @@ export const weworkremotelyProvider: VacancyProvider = {
   label: "We Work Remotely",
   isAvailable: () => true,
   async fetchVacancies(query: VacancyQuery): Promise<VacancyFetchResult> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-    try {
-      const res = await fetch(RSS_URL, {
-        signal: controller.signal,
-        headers: { Accept: "application/rss+xml, application/xml, text/xml" },
-        cache: "no-store",
-      });
-      if (!res.ok) return { vacancies: [], provider: "weworkremotely", ok: false, error: `HTTP ${res.status}` };
-      const xml = await res.text();
-      let vacancies = parseItems(xml).map(mapWwRItem).filter((v): v is Vacancy => Boolean(v));
-      if (query.text) {
-        const t = query.text.toLowerCase();
-        vacancies = vacancies.filter((v) => `${v.title} ${v.company} ${v.about}`.toLowerCase().includes(t));
-      }
-      const limit = Math.min(Math.max(1, query.limit ?? 20), 50);
-      return { vacancies: vacancies.slice(0, limit), provider: "weworkremotely", ok: true };
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "network error";
-      return { vacancies: [], provider: "weworkremotely", ok: false, error: msg };
-    } finally {
-      clearTimeout(timer);
+    const res = await httpFetch(RSS_URL, {
+      timeoutMs: FETCH_TIMEOUT,
+      headers: { Accept: "application/rss+xml, application/xml, text/xml" },
+    });
+    if (!res.ok) {
+      return {
+        vacancies: [],
+        provider: "weworkremotely",
+        ok: false,
+        error: res.error ?? "network error",
+      };
     }
+    let vacancies = parseItems(res.body).map(mapWwRItem).filter((v): v is Vacancy => Boolean(v));
+    if (query.text) {
+      const t = query.text.toLowerCase();
+      vacancies = vacancies.filter((v) => `${v.title} ${v.company} ${v.about}`.toLowerCase().includes(t));
+    }
+    const limit = Math.min(Math.max(1, query.limit ?? 20), 50);
+    return { vacancies: vacancies.slice(0, limit), provider: "weworkremotely", ok: true };
   },
 };

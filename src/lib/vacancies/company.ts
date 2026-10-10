@@ -1,6 +1,8 @@
 import type { Level, WorkFormat } from "../data";
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
 import { sanitizeExternalUrl, toSalaryNumber } from "./util";
+import { filterOutboundUrls } from "../ssrf";
+import { httpFetch } from "../http-client";
 
 const FETCH_TIMEOUT = 25_000;
 
@@ -10,7 +12,7 @@ const FETCH_TIMEOUT = 25_000;
  * Реальный парсинг RSS — без симуляции. Без фидов честно сообщает «не настроен».
  */
 
-function parseFeedUrls(): string[] {
+function rawFeedUrls(): string[] {
   return (process.env.COMPANY_JOB_FEEDS ?? "")
     .split(",")
     .map((s) => s.trim())
@@ -18,8 +20,20 @@ function parseFeedUrls(): string[] {
     .slice(0, 50);
 }
 
+/**
+ * URL пропускаются через SSRF-фильтр.
+ *
+ * Раньше строки из env уходили в fetch как есть: схема file:// читала бы локальные
+ * файлы, а 169.254.169.254 — метаданные облака. Env задаёт администратор, но
+ * опечатка или подстановка из недоверенного источника — уже достаточная причина,
+ * чтобы проверять адрес перед исходящим запросом.
+ */
+function parseFeedUrls(): string[] {
+  return filterOutboundUrls(rawFeedUrls()).allowed;
+}
+
 export function companyFeedsConfigured(): boolean {
-  return parseFeedUrls().length > 0;
+  return rawFeedUrls().length > 0;
 }
 
 function decodeXmlEntities(s: string): string {
@@ -172,25 +186,18 @@ export const companyFeedProvider: VacancyProvider = {
     const all: Vacancy[] = [];
     await Promise.all(
       feeds.map(async (feed, idx) => {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-        try {
-          const res = await fetch(feed, {
-            signal: controller.signal,
-            headers: { Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml" },
-            cache: "no-store",
-          });
-          if (!res.ok) return;
-          const xml = await res.text();
-          const items = parseRssItems(xml, feed);
-          for (const item of items) {
-            const v = mapCompanyFeedItem(item, `feed-${idx}`);
-            if (v) all.push(v);
-          }
-        } catch {
-          /* фид недоступен — пропускаем */
-        } finally {
-          clearTimeout(timer);
+        // Две попытки вместо трёх: фидов бывает до 50, и полная лестница
+        // повторов на каждом растянула бы обновление каталога на минуты.
+        const res = await httpFetch(feed, {
+          timeoutMs: FETCH_TIMEOUT,
+          attempts: 2,
+          headers: { Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml" },
+        });
+        if (!res.ok) return;
+        const items = parseRssItems(res.body, feed);
+        for (const item of items) {
+          const v = mapCompanyFeedItem(item, `feed-${idx}`);
+          if (v) all.push(v);
         }
       }),
     );

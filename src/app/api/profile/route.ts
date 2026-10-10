@@ -2,8 +2,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { requireUser, unauthorized, readJson } from "@/lib/api";
 import { db, getUserByEmail } from "@/lib/db";
-import { hashPassword, verifyPassword, SESSION_COOKIE } from "@/lib/auth";
-import { isUniqueViolation } from "@/lib/http";
+import { hashPassword, verifyPassword, SESSION_COOKIE } from "@/lib/auth";import { isUniqueViolation } from "@/lib/http";
 
 export async function PUT(request: Request) {
   const user = await requireUser();
@@ -32,7 +31,7 @@ export async function PUT(request: Request) {
     }
     // Смена email — чувствительная операция: требуем подтверждение текущим паролем.
     const currentPassword = data?.currentPassword ?? "";
-    if (!currentPassword || !verifyPassword(currentPassword, user.password_hash)) {
+    if (!currentPassword || !(await verifyPassword(currentPassword, user.password_hash))) {
       return NextResponse.json(
         { error: "Для смены email укажите текущий пароль" },
         { status: 403 },
@@ -57,7 +56,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Пароль должен быть от 6 до 100 символов" }, { status: 400 });
     }
     db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(
-      hashPassword(password),
+      await hashPassword(password),
       user.id,
     );
     // Смена пароля инвалидирует остальные сессии (кроме текущей), включая украденные.

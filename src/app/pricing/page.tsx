@@ -15,7 +15,7 @@ export default function PricingPage() {
           eyebrow="Тарифы"
           title={
             <>
-              Подходящий тариф <span className="text-gradient">найдётся для каждого</span>
+              Подходящий тариф <span className="text-accent">найдётся для каждого</span>
             </>
           }
           sub="Попробуйте весь функционал бесплатно и выберите наиболее подходящий период"

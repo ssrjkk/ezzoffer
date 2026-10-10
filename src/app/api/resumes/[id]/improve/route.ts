@@ -4,6 +4,14 @@ import { db } from "@/lib/db";
 import { enhanceResume, scoreResume, detectKeywords } from "@/lib/resume-enhance";
 import { enhanceResumeWithAi } from "@/lib/ai";
 import { parseParamId } from "@/lib/http";
+import { rateLimit } from "@/lib/rate-limit";
+
+/**
+ * Улучшение резюме вызывает внешний AI-провайдер (или дорогой локальный разбор)
+ * и перезаписывает содержимое. Без лимита один запрос в цикле выжигал бы
+ * API-ключ владельца сервиса и перезаписывал резюме мусором.
+ */
+const AI_LIMIT = { windowMs: 60 * 60 * 1000, max: 20 };
 
 export async function POST(_request: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -16,6 +24,14 @@ export async function POST(_request: Request, ctx: { params: Promise<{ id: strin
     .prepare("SELECT * FROM resumes WHERE id = ? AND user_id = ?")
     .get(id, user.id) as { id: number; content: string } | undefined;
   if (!resume) return NextResponse.json({ error: "Резюме не найдено" }, { status: 404 });
+
+  const limiter = rateLimit(`resume-improve:${user.id}`, AI_LIMIT);
+  if (!limiter.allowed) {
+    return NextResponse.json(
+      { error: "Слишком много улучшений подряд. Попробуйте через час." },
+      { status: 429, headers: { "Retry-After": String(limiter.retryAfterSeconds) } },
+    );
+  }
 
   const before = scoreResume(resume.content);
 

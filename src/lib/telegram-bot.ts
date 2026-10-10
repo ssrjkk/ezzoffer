@@ -23,6 +23,42 @@ export type TelegramUpdate = {
   };
 };
 
+/**
+ * Защита от повторной обработки апдейта.
+ *
+ * Telegram ретраит доставку при не-2xx ответе, поэтому один и тот же update_id
+ * может прийти несколько раз. Без проверки команда выполнялась повторно: для
+ * /связать это не страшно (код одноразовый), а вот уведомления и статистика
+ * рассылались бы дважды.
+ *
+ * Храним последние обработанные id в памяти процесса: update_id у Telegram
+ * монотонно возрастает, поэтому достаточно отсекать всё, что уже встречалось.
+ */
+const seenUpdates = new Set<number>();
+const SEEN_UPDATES_LIMIT = 1000;
+
+/** Возвращает false, если апдейт уже обрабатывался. */
+export function markUpdateSeen(updateId: number | undefined): boolean {
+  if (updateId === undefined) return true;
+  if (seenUpdates.has(updateId)) return false;
+  seenUpdates.add(updateId);
+  // Сдерживаем рост памяти: при переполнении вытесняем самые старые записи.
+  if (seenUpdates.size > SEEN_UPDATES_LIMIT) {
+    const excess = seenUpdates.size - SEEN_UPDATES_LIMIT;
+    let removed = 0;
+    for (const id of seenUpdates) {
+      seenUpdates.delete(id);
+      if (++removed >= excess) break;
+    }
+  }
+  return true;
+}
+
+/** Сброс для тестов. */
+export function resetSeenUpdates(): void {
+  seenUpdates.clear();
+}
+
 export type Reply = { text: string };
 
 const HELP = [
@@ -218,6 +254,10 @@ export function replyFor(
  * Возвращает результат отправки ответа (true — сообщение ушло).
  */
 export async function handleUpdate(update: TelegramUpdate): Promise<boolean | null> {
+  // Telegram повторно доставляет апдейт при не-2xx ответе; обрабатывать его
+  // второй раз нельзя, иначе пользователь получит дубликат ответа.
+  if (!markUpdateSeen(update.update_id)) return null;
+
   const chatId = update.message?.chat?.id;
   const text = update.message?.text;
   if (chatId === undefined || !text) return null;

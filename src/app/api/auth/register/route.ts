@@ -54,7 +54,7 @@ export async function POST(request: Request) {
   try {
     db.prepare(
       "INSERT INTO users (email, name, password_hash, email_verified, created_at) VALUES (?, ?, ?, 1, ?)",
-    ).run(email, name, hashPassword(password), Date.now());
+    ).run(email, name, await hashPassword(password), Date.now());
   } catch (err) {
     if (isUniqueViolation(err)) {
       return NextResponse.json({ error: "Пользователь с таким email уже существует" }, { status: 409 });
