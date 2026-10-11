@@ -39,7 +39,7 @@ export function ProfileForm({ name, email }: { name: string; email: string }) {
 
   return (
     <Panel>
-      <h2 className="font-semibold tracking-tight">Профиль</h2>
+      <h2 className="font-serif text-lg leading-snug text-ink">Профиль</h2>
       <form onSubmit={submit} className="mt-5 grid gap-4 md:grid-cols-2">
         <Field label="Имя">
           <input
@@ -92,9 +92,19 @@ export function ProfileForm({ name, email }: { name: string; email: string }) {
             </Field>
           </div>
         ) : null}
-        {message ? (
-          <p className={`text-sm md:col-span-2 ${message.ok ? "text-success" : "text-red-300"}`}>{message.text}</p>
-        ) : null}
+        {/* Ошибка и успех попадают в разные живые области: ошибка должна
+            прервать голос скринридера (alert), а подтверждение — озвучиться
+            вежливо, не перебивая. Без этого форма выглядит «нерабочей»:
+            кнопка нажата, а экран молчит. */}
+        <div
+          role={message?.ok ? "status" : "alert"}
+          aria-live={message?.ok ? "polite" : "assertive"}
+          className="text-sm md:col-span-2"
+        >
+          {message ? (
+            <p className={message.ok ? "text-success" : "text-danger"}>{message.text}</p>
+          ) : null}
+        </div>
         <div className="md:col-span-2">
           <button type="submit" disabled={saving} className={btnPrimary}>
             {saving ? "Сохраняем…" : "Сохранить изменения"}

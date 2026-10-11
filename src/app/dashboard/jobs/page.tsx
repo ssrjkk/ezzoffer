@@ -11,7 +11,7 @@ export default async function JobsPage() {
   if (!user) redirect("/login");
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Вакансии и автопоиск</h1>
+      <h1 className="font-serif text-2xl leading-snug text-ink">Вакансии и автопоиск</h1>
       <p className="mt-1 text-sm text-muted">
         Используйте каталог для ручных откликов или настройте автопоиск — отклики полетят сами.
       </p>

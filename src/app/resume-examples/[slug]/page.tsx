@@ -27,30 +27,51 @@ export default async function ResumeExamplePage({
   const ex = resumeExamples.find((e) => e.slug === slug);
   if (!ex) notFound();
 
+  /*
+   * Образец резюме.
+   *
+   * Сам шаблон показан как документ, а не как карточка: разделы идут
+   * через линейку, строки — обычным текстом. Прежние точки-маркеры были
+   * круглыми и стояли наравне с текстом, из-за чего достижения внутри
+   * шаблона читались как декоративный список, а не как пункты опыта.
+   */
   return (
     <div className="container-x py-12 md:py-16">
-      <Link href="/resume-examples" className="inline-flex items-center gap-2 text-sm font-medium text-muted transition-colors hover:text-ink">
+      <Link
+        href="/resume-examples"
+        className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-muted transition-colors hover:text-accent"
+      >
         <span aria-hidden>←</span> Все примеры резюме
       </Link>
 
-      <div className="mt-6 flex flex-wrap items-center gap-2">
-        <span className="rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">{ex.level}</span>
-        <span className="text-sm text-muted">{ex.role}</span>
-      </div>
-      <h1 className="mt-3 text-3xl font-semibold leading-tight tracking-tight md:text-4xl">{ex.title}</h1>
-      <p className="mt-3 max-w-2xl text-base leading-relaxed text-muted">{ex.preview}</p>
+      <header className="mt-8 border-t-2 border-ink pt-6">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-accent">
+            {ex.level}
+          </span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+            {ex.role}
+          </span>
+        </div>
+        <h1 className="display mt-4 max-w-4xl text-balance text-3xl md:text-5xl">{ex.title}</h1>
+        <p className="measure mt-4 text-base leading-relaxed text-muted">{ex.preview}</p>
+      </header>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-[1.6fr_1fr]">
-        <div className="rounded-3xl border border-line bg-surface/60 p-7">
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted">Шаблон резюме</p>
-          <div className="mt-5 space-y-6">
+      <div className="mt-12 grid gap-x-12 gap-y-12 lg:grid-cols-[1.7fr_1fr]">
+        <div>
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted">
+            Шаблон резюме
+          </p>
+          <div className="mt-5">
             {ex.sections.map((s) => (
-              <section key={s.h}>
-                <h2 className="border-b border-line pb-1 text-sm font-semibold uppercase tracking-wide">{s.h}</h2>
-                <ul className="mt-3 space-y-2">
+              <section key={s.h} className="border-t border-line py-6 first:border-t-2 first:border-ink">
+                <h2 className="font-serif text-lg leading-snug text-ink">{s.h}</h2>
+                <ul className="mt-3">
                   {s.lines.map((l, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm leading-relaxed">
-                      <span className="mt-2 size-1 shrink-0 rounded-full bg-accent-2" />
+                    <li
+                      key={i}
+                      className="border-t border-line py-2.5 text-sm leading-relaxed text-ink"
+                    >
                       {l}
                     </li>
                   ))}
@@ -60,27 +81,28 @@ export default async function ResumeExamplePage({
           </div>
         </div>
 
-        <aside className="space-y-6">
-          <div className="rounded-3xl border border-line bg-surface/60 p-6">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Ключевые слова</h2>
-            <div className="mt-3 flex flex-wrap gap-1.5">
+        <aside className="space-y-8">
+          <div className="border-t-2 border-ink pt-5">
+            <h2 className="font-serif text-lg leading-snug text-ink">Ключевые слова</h2>
+            <p className="mt-4 flex flex-wrap gap-x-3 gap-y-2 font-mono text-sm text-ink">
               {ex.tags.map((t) => (
-                <span key={t} className="rounded-full border border-line bg-white/5 px-2.5 py-1 text-[11px] text-muted">
-                  {t}
-                </span>
+                <span key={t}>{t}</span>
               ))}
-            </div>
+            </p>
           </div>
-          <div className="rounded-3xl border border-accent/30 bg-gradient-to-b from-accent/10 to-surface/60 p-6">
-            <h2 className="text-lg font-semibold tracking-tight">Хотите так же?</h2>
-            <p className="mt-2 text-sm leading-relaxed text-muted">
-              Вставьте этот шаблон в кабинет EZOffer, и AI-улучшение доработает формулировки под ваши вакансии.
+
+          <div className="bg-ink px-6 py-7">
+            <h2 className="font-serif text-lg leading-snug text-paper">Хотите так же?</h2>
+            <p className="mt-2 text-sm leading-relaxed text-paper">
+              Вставьте этот шаблон в кабинет EZOffer, и AI-улучшение доработает формулировки под ваши
+              вакансии.
             </p>
             <Link
               href="/signup"
-              className="mt-4 inline-flex w-full items-center justify-center rounded-full bg-accent px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110"
+              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-sm bg-paper px-5 py-3 text-sm font-semibold text-ink transition-colors hover:bg-accent hover:text-white"
             >
               Начать бесплатно
+              <span aria-hidden>→</span>
             </Link>
           </div>
         </aside>

@@ -21,18 +21,23 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-violet-500/10 via-slate-900/50 to-cyan-500/10 p-6 sm:p-8">
-        <div className="absolute -top-24 -right-24 size-64 rounded-full bg-violet-500/20 blur-3xl" />
-        <div className="absolute -bottom-24 -left-24 size-64 rounded-full bg-cyan-500/20 blur-3xl" />
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+      {/*
+        Панель приветствия. Раньше — градиент с двумя размытыми пятнами и
+        «стеклянная» рамка: на бумаге это давало серую подложку с
+        фиолетовым туманом, то есть оформление осталось от тёмной темы.
+        Теперь — плоская поверхность с линейкой сверху: приветствие
+        читается как заголовок раздела, а не как баннер.
+      */}
+      <div className="border border-line bg-surface p-6 sm:p-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="font-serif text-2xl leading-snug sm:text-3xl">
                 Добро пожаловать{user.name ? `, ${user.name}` : ""}
               </h1>
               <Badge tone={active ? "success" : "warn"}>{active ? "Активен" : "Не активен"}</Badge>
             </div>
-            <p className="mt-2 max-w-xl text-sm text-slate-400 sm:text-base">
+            <p className="mt-2 max-w-xl font-mono text-xs leading-relaxed text-muted sm:text-sm">
               {active
                 ? `Тариф «${planLabel(user)}» · ${limit} откликов/день · осталось ${days} дн.`
                 : "Активируйте пробный период, чтобы запустить автоматические отклики."}
@@ -40,14 +45,14 @@ export default async function DashboardPage() {
           </div>
           <div className="flex flex-wrap gap-3">
             <Link href="/dashboard/jobs" className={btnPrimary}>
-              <svg viewBox="0 0 24 24" fill="none" className="size-4">
+              <svg viewBox="0 0 24 24" fill="none" className="size-4" aria-hidden>
                 <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
                 <path d="m21 21-4.3-4.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
               Каталог вакансий
             </Link>
             <Link href="/dashboard/applications" className={btnGhost}>
-              <svg viewBox="0 0 24 24" fill="none" className="size-4">
+              <svg viewBox="0 0 24 24" fill="none" className="size-4" aria-hidden>
                 <path d="m22 2-7 20-4-9-9-4 20-7Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
               </svg>
               Мои отклики
@@ -57,10 +62,10 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Отправлено" value={stats.sent} icon="📤" trend={weeklyTrend(stats.series, "sent")} />
-        <StatCard label="Просмотрено" value={stats.viewed} icon="👁" trend={weeklyTrend(stats.series, "viewed")} />
-        <StatCard label="Ответов HR" value={stats.responded} icon="💬" trend={weeklyTrend(stats.series, "responded")} />
-        <StatCard label="Приглашения" value={stats.invited} icon="🎉" trend={weeklyTrend(stats.series, "invited")} />
+        <StatCard label="Отправлено" value={stats.sent} trend={weeklyTrend(stats.series, "sent")} />
+        <StatCard label="Просмотрено" value={stats.viewed} trend={weeklyTrend(stats.series, "viewed")} />
+        <StatCard label="Ответов HR" value={stats.responded} trend={weeklyTrend(stats.series, "responded")} />
+        <StatCard label="Приглашения" value={stats.invited} trend={weeklyTrend(stats.series, "invited")} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -69,19 +74,19 @@ export default async function DashboardPage() {
         </div>
         <div className="space-y-4">
           <Panel>
-            <h3 className="font-semibold text-white">Быстрые действия</h3>
-            <div className="mt-4 space-y-2">
-              <QuickLink href="/dashboard/resumes" icon="📄" label="Загрузить резюме" />
-              <QuickLink href="/dashboard/letters" icon="✉️" label="Настроить письмо" />
-              <QuickLink href="/dashboard/settings" icon="⚙️" label="Настройки аккаунта" />
-              <QuickLink href="/dashboard/consultations" icon="💬" label="Консультации" />
+            <h3 className="font-serif text-lg leading-snug text-ink">Быстрые действия</h3>
+            <div className="mt-3">
+              <QuickLink href="/dashboard/resumes" label="Загрузить резюме" />
+              <QuickLink href="/dashboard/letters" label="Настроить письмо" />
+              <QuickLink href="/dashboard/consultations" label="Консультации" />
+              <QuickLink href="/dashboard/settings" label="Настройки аккаунта" />
             </div>
           </Panel>
           <Panel>
-            <h3 className="font-semibold text-white">Статистика за неделю</h3>
+            <h3 className="font-serif text-lg leading-snug text-ink">Статистика за неделю</h3>
             <div className="mt-4 space-y-3">
               {stats.series.length === 0 ? (
-                <p className="text-sm text-slate-400">Пока нет данных за неделю.</p>
+                <p className="text-sm text-muted">Пока нет данных за неделю.</p>
               ) : (
                 weekRows(stats).map((row) => (
                   <WeekRow key={row.day} day={row.day} value={row.value} max={row.max} />
@@ -128,50 +133,54 @@ function weekRows(stats: Stats): { day: string; value: number; max: number }[] {
 function StatCard({
   label,
   value,
-  icon,
   trend,
 }: {
   label: string;
   value: number;
-  icon: string;
   trend: string | null;
 }) {
   return (
-    <div className="glass rounded-2xl p-5 transition-all hover:-translate-y-1 hover:border-white/20 hover:shadow-lg hover:shadow-violet-500/10">
-      <div className="flex items-center justify-between">
-        <span className="text-sm text-slate-400">{label}</span>
-        <span className="text-2xl">{icon}</span>
-      </div>
-      <p className="mt-3 text-3xl font-bold tabular-nums tracking-tight text-white">{value}</p>
-      <p className="mt-1 text-xs font-medium text-slate-400">{trend ?? "за неделю нет данных"}</p>
+    <div className="border border-line bg-surface p-5">
+      <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">{label}</p>
+      {/* Число моноширинным: четыре карточки в ряд выравниваются по
+          разрядам, и их можно сравнивать не читая подписи. Раньше здесь
+          стоял эмодзи-иконка, которая ничего не кодировала. */}
+      <p className="mt-3 font-mono text-3xl tabular-nums text-ink">{value}</p>
+      <p className="mt-1 text-xs text-muted">{trend ?? "за неделю нет данных"}</p>
     </div>
   );
 }
 
-function QuickLink({ href, icon, label }: { href: string; icon: string; label: string }) {
+function QuickLink({ href, label }: { href: string; label: string }) {
   return (
     <Link
       href={href}
-      className="flex items-center gap-3 rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3 text-sm text-slate-300 transition-all hover:border-violet-500/30 hover:bg-violet-500/10 hover:text-white"
+      className="group flex items-center justify-between border-b border-line py-2.5 text-sm text-ink transition-colors last:border-b-0 hover:text-accent"
     >
-      <span className="text-lg">{icon}</span>
       {label}
+      <span aria-hidden className="text-muted transition-transform group-hover:translate-x-0.5">
+        →
+      </span>
     </Link>
   );
 }
 
+/**
+ * Строка недельного графика.
+ *
+ * Полоса была градиентом фиолетовый→циан: два оттенка на элементе,
+ * который показывает одно число. Теперь одна заливка акцентом, а сам
+ * ряд — полосами строк, как в сводке.
+ */
 function WeekRow({ day, value, max }: { day: string; value: number; max: number }) {
-  const pct = Math.min(100, Math.round((value / max) * 100));
+  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return (
-    <div className="flex items-center gap-3">
-      <span className="w-6 text-xs text-slate-500">{day}</span>
-      <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/5">
-        <div
-          className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-400 transition-all"
-          style={{ width: `${pct}%` }}
-        />
+    <div className="flex items-center gap-3 border-b border-line pb-2 last:border-b-0">
+      <span className="w-6 font-mono text-[11px] uppercase tracking-[0.1em] text-muted">{day}</span>
+      <div className="h-1.5 flex-1 bg-line">
+        <div className="h-full bg-accent transition-all" style={{ width: `${pct}%` }} />
       </div>
-      <span className="w-6 text-right text-xs tabular-nums text-slate-400">{value}</span>
+      <span className="w-6 text-right font-mono text-xs tabular-nums text-ink">{value}</span>
     </div>
   );
 }

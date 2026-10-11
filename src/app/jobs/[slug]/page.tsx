@@ -16,16 +16,41 @@ function salaryRange(text: string) {
   return match ? parseInt(match[1].replace(/\s/g, ""), 10) : null;
 }
 
+/**
+ * Список требований.
+ *
+ * Было: круглый маркер-точка наравне с текстом, из-за чего блок читался
+ * как декоративное облако буллитов. Стало: разделение по волосяной
+ * линейке — как список условий в вакансии, где важно видеть каждый
+ * пункт целиком, а не то, что он «начат».
+ */
 function List({ items }: { items: string[] }) {
   return (
-    <ul className="mt-4 space-y-3">
+    <ul className="mt-4">
       {items.map((item) => (
-        <li key={item} className="flex items-start gap-3 text-sm leading-relaxed text-ink/90 md:text-base">
-          <span className="mt-2 size-1.5 shrink-0 rounded-full bg-accent-2" />
+        <li
+          key={item}
+          className="border-t border-line py-3 text-sm leading-relaxed text-ink md:text-base"
+        >
           {item}
         </li>
       ))}
     </ul>
+  );
+}
+
+function Block({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="border-t-2 border-ink pt-5">
+      <h2 className="font-serif text-xl leading-snug text-ink md:text-2xl">{title}</h2>
+      {children}
+    </section>
   );
 }
 
@@ -47,11 +72,7 @@ export async function generateMetadata({
   };
 }
 
-export default async function JobPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
+export default async function JobPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const job = jobs.find((j) => j.slug === slug);
   if (!job) notFound();
@@ -87,101 +108,114 @@ export default async function JobPage({
             : {}),
         }}
       />
+
       <Link
         href="/jobs"
-        className="inline-flex items-center gap-2 text-sm font-medium text-muted transition-colors hover:text-ink"
+        className="inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.14em] text-muted transition-colors hover:text-accent"
       >
         <span aria-hidden>←</span> Все вакансии
       </Link>
 
-      <header className="mt-6 rounded-3xl border border-line bg-surface/60 p-7 md:p-10">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="grid size-12 place-items-center rounded-2xl bg-gradient-to-br from-accent/25 to-accent-2/20 text-base font-bold ring-1 ring-white/10">
-            {job.company.slice(0, 2)}
-          </span>
+      {/*
+        Шапка вакансии.
+
+        Квадрат с градиентом и первыми двумя буквами компании был
+        «логотипом-заглушкой» — он не обозначал компанию, а только
+        занимал место. Данные о компании и так есть строкой ниже, поэтому
+        лишний знак убран: заголовок начинается сразу с названия позиции.
+      */}
+      <header className="mt-8 border-t-2 border-ink pt-6">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <LevelPill level={job.level} />
-          <span className="text-xs text-muted">{job.category}</span>
-        </div>
-        <h1 className="mt-5 max-w-3xl text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
-          {job.title}
-        </h1>
-        <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm md:text-base">
-          <span className="font-semibold text-success">{job.salary}</span>
-          <span className="text-muted">{job.format}</span>
-          <span className="text-muted">{job.city}</span>
-          <span className="inline-flex items-center gap-1.5 text-muted">
-            <span className="inline-flex size-1.5 rounded-full bg-success animate-pulse-dot" />
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+            {job.category}
+          </span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
             {job.posted}
           </span>
         </div>
-        <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+
+        <h1 className="display mt-4 max-w-4xl text-balance text-3xl md:text-5xl">{job.title}</h1>
+
+        <div className="mt-6 flex flex-wrap items-baseline gap-x-8 gap-y-3">
+          <p className="font-mono text-xl tabular-nums text-ink md:text-2xl">{job.salary}</p>
+          <p className="text-sm text-muted md:text-base">
+            {job.company} · {job.city} · {job.format}
+          </p>
+        </div>
+
+        <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
           <Link
             href="/signup"
-            className="inline-flex items-center justify-center rounded-full bg-accent px-7 py-3.5 text-sm font-semibold text-white shadow-[0_0_36px_-8px_rgba(124,92,255,0.8)] transition hover:brightness-110"
+            className="inline-flex items-center justify-center gap-2 rounded-sm bg-accent px-7 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
           >
             Откликнуться через EZOffer
+            <span aria-hidden>→</span>
           </Link>
-          <span className="inline-flex items-center justify-center rounded-full border border-line bg-white/5 px-5 py-3.5 text-sm text-muted">
+          <p className="text-sm leading-relaxed text-muted">
             Автоотклик займёт 0 секунд вашего времени
-          </span>
+          </p>
         </div>
       </header>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-[1.6fr_1fr]">
-        <div className="space-y-8">
-          <section className="rounded-3xl border border-line bg-surface/60 p-7">
-            <h2 className="text-xl font-semibold tracking-tight md:text-2xl">О компании и позиции</h2>
-            <p className="mt-4 text-sm leading-relaxed text-muted md:text-base">{job.about}</p>
-          </section>
+      <div className="mt-12 grid gap-x-12 gap-y-12 lg:grid-cols-[1.7fr_1fr]">
+        <div className="space-y-12">
+          <Block title="О компании и позиции">
+            <p className="measure mt-4 text-sm leading-relaxed text-muted md:text-base">
+              {job.about}
+            </p>
+          </Block>
 
-          <section className="rounded-3xl border border-line bg-surface/60 p-7">
-            <h2 className="text-xl font-semibold tracking-tight md:text-2xl">Чем предстоит заниматься</h2>
+          <Block title="Чем предстоит заниматься">
             <List items={job.responsibilities} />
-          </section>
+          </Block>
 
-          <section className="rounded-3xl border border-line bg-surface/60 p-7">
-            <h2 className="text-xl font-semibold tracking-tight md:text-2xl">Что мы ждём</h2>
+          <Block title="Что мы ждём">
             <List items={job.requirements} />
-          </section>
+          </Block>
 
-          <section className="rounded-3xl border border-line bg-surface/60 p-7">
-            <h2 className="text-xl font-semibold tracking-tight md:text-2xl">Будет плюсом</h2>
+          <Block title="Будет плюсом">
             <List items={job.bonus} />
-          </section>
+          </Block>
         </div>
 
-        <aside className="space-y-6">
-          <div className="rounded-3xl border border-accent/40 bg-gradient-to-b from-accent/15 to-surface/60 p-7">
-            <p className="text-sm font-semibold uppercase tracking-widest text-accent-2">
+        <aside className="space-y-8">
+          <div className="bg-ink px-6 py-7">
+            <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-paper">
               А вы знали?
             </p>
-            <h3 className="mt-3 text-xl font-semibold leading-snug tracking-tight">
+            <h2 className="mt-3 font-serif text-xl leading-snug text-paper">
               На эту вакансию уже откликнулись другие
-            </h3>
-            <p className="mt-3 text-sm leading-relaxed text-muted">
+            </h2>
+            <p className="mt-3 text-sm leading-relaxed text-paper">
               Отклики в первые часы после публикации получают в 3–5 раз больше просмотров. EZOffer
               отправляет отклик в первые минуты появления вакансии.
             </p>
             <Link
               href="/signup"
-              className="mt-6 inline-flex w-full items-center justify-center rounded-full bg-accent px-6 py-3 text-sm font-semibold text-white transition hover:brightness-110"
+              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-sm bg-paper px-6 py-3 text-sm font-semibold text-ink transition-colors hover:bg-accent hover:text-white"
             >
               Откликнуться первым
+              <span aria-hidden>→</span>
             </Link>
           </div>
 
           {related.length > 0 ? (
-            <div>
-              <h3 className="mb-4 text-lg font-semibold tracking-tight">Похожие вакансии</h3>
-              <div className="space-y-3">
+            <div className="border-t-2 border-ink pt-5">
+              <h2 className="font-serif text-lg leading-snug text-ink">Похожие вакансии</h2>
+              <div className="mt-3">
                 {related.map((r) => (
                   <Link
                     key={r.slug}
                     href={`/jobs/${r.slug}`}
-                    className="block rounded-2xl border border-line bg-surface/60 p-5 transition-colors hover:border-white/20"
+                    className="group block border-b border-line py-3 transition-colors"
                   >
-                    <p className="text-sm font-semibold">{r.title}</p>
-                    <p className="mt-1 text-xs text-muted">{r.salary} · {r.format}</p>
+                    <p className="text-sm font-medium text-ink transition-colors group-hover:text-accent">
+                      {r.title}
+                    </p>
+                    <p className="mt-1 font-mono text-xs text-muted">
+                      {r.salary} · {r.format}
+                    </p>
                   </Link>
                 ))}
               </div>

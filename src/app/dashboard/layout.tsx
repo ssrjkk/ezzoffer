@@ -17,17 +17,27 @@ export default async function DashboardLayout({ children }: { children: React.Re
     planLimit: active ? planDailyLimit(user.plan) : 0,
   };
 
+  /*
+   * Раскладка кабинета.
+   *
+   * Был градиент бумага→бирюза на всей странице: он не обозначал ничего,
+   * но «приподнимал» интерфейс над сайтом. Вместо него — колонка
+   * навигации на отдельной поверхности с правой линейкой. Так кабинет
+   * читается как двукнижная вёрстка: слева содержание, справа полоса,
+   * а не как окно поверх сайта.
+   */
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      <aside className="hidden lg:flex lg:flex-col lg:w-72 lg:fixed lg:inset-y-0">
-        <div className="sticky top-0">
+    <div className="min-h-screen bg-paper lg:flex">
+      <aside className="hidden shrink-0 border-r border-line bg-surface lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-72 lg:flex-col">
+        <div className="flex h-full flex-col overflow-y-auto px-7 py-8">
           <DashboardNav {...nav} />
         </div>
       </aside>
-      <div className="flex-1 lg:pl-72">
-        <main className="min-h-screen p-4 sm:p-6 lg:p-8">
-          <div className="mx-auto max-w-7xl">
-            <div className="mb-6 lg:hidden">
+
+      <div className="min-w-0 flex-1">
+        <main className="px-4 py-8 sm:px-6 lg:px-10 lg:py-10">
+          <div className="mx-auto max-w-6xl">
+            <div className="mb-8 lg:hidden">
               <DashboardNav {...nav} onMobile />
             </div>
             {children}

@@ -5,6 +5,22 @@ import type { Stats } from "@/lib/stats";
 import { StatCard, Panel } from "@/components/dashboard/ui";
 import { TodayLimitBar } from "@/components/dashboard/plan-banner";
 
+/**
+ * Ряд графика: подпись, значение, ключ в stats.series и заливка.
+ *
+ * Цвет и подпись хранятся вместе именно поэтому. До этого легенда и
+ * столбцы описывались двумя независимыми списками классов, и они
+ * разошлись: точки легенды красились сырыми hex через Tailwind
+ * (violet-500/cyan-400/emerald-400), столбцы — токенами темы. На
+ * бумаге фиолетовая точка оказывалась рядом с тёмно-синим столбцом, и
+ * подпись переставала означать то, что нарисовано.
+ */
+const SERIES = [
+  { key: "sent", label: "Отправлено", color: "bg-accent-2" },
+  { key: "viewed", label: "Просмотрено", color: "bg-cyan" },
+  { key: "invited", label: "Приглашения", color: "bg-success" },
+] as const satisfies readonly { key: "sent" | "viewed" | "invited"; label: string; color: string }[];
+
 export function StatsPanel({ initial }: { initial: Stats }) {
   const [stats, setStats] = useState<Stats>(initial);
 
@@ -43,55 +59,61 @@ export function StatsPanel({ initial }: { initial: Stats }) {
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <Panel className="flex items-center justify-between">
-          <span className="text-sm text-slate-400">Просмотры</span>
-          <span className="text-xl font-semibold tabular-nums text-white">{stats.viewRate}%</span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">Просмотры</span>
+          <span className="font-mono text-xl tabular-nums text-ink">{stats.viewRate}%</span>
         </Panel>
         <Panel className="flex items-center justify-between">
-          <span className="text-sm text-slate-400">Отответы HR</span>
-          <span className="text-xl font-semibold tabular-nums text-white">{stats.respondRate}%</span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">Отответы HR</span>
+          <span className="font-mono text-xl tabular-nums text-ink">{stats.respondRate}%</span>
         </Panel>
         <Panel className="flex items-center justify-between">
-          <span className="text-sm text-slate-400">Приглашения</span>
-          <span className="text-xl font-semibold tabular-nums text-white">{stats.inviteRate}%</span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">Приглашения</span>
+          <span className="font-mono text-xl tabular-nums text-ink">{stats.inviteRate}%</span>
         </Panel>
       </div>
 
       <Panel>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="font-semibold tracking-tight text-white">Динамика за 7 дней</h2>
-          <div className="flex items-center gap-4 text-xs text-slate-400">
-            <span className="flex items-center gap-1.5">
-              <span className="size-2.5 rounded-sm bg-violet-500" /> Отправлено
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="size-2.5 rounded-sm bg-cyan-400" /> Просмотрено
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="size-2.5 rounded-sm bg-emerald-400" /> Приглашения
-            </span>
-          </div>
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-serif text-lg">Динамика за 7 дней</h2>
+          {/*
+            Легенда и столбцы обязаны ссылаться на один и тот же набор
+            цветов. Раньше точки легенды были сырыми (bg-violet-500,
+            bg-cyan-400, bg-emerald-400), а столбцы — токенными
+            (accent-2, cyan, success): на бумаге фиолетовая точка стояла
+            рядом с тёмно-синим столбцом, и подписи переставали
+            соответствовать данным. Оба набора теперь одни.
+          */}
+          <ul className="flex flex-wrap items-center gap-x-4 gap-y-1">
+            {SERIES.map((s) => (
+              <li key={s.key} className="flex items-center gap-1.5">
+                <span aria-hidden className={`block h-2.5 w-2.5 ${s.color}`} />
+                {s.label}
+              </li>
+            ))}
+          </ul>
         </div>
+
         <div className="flex h-44 items-end gap-3">
           {stats.series.map((d) => (
             <div key={d.label} className="flex flex-1 flex-col items-center gap-2">
               <div className="flex h-36 w-full items-end justify-center gap-1">
-                <div
-                  className="w-2.5 rounded-t bg-violet-500/80 transition-all hover:bg-violet-400"
-                  style={{ height: `${(d.sent / max) * 100}%` }}
-                  title={`${d.label}: ${d.sent} отправлено`}
-                />
-                <div
-                  className="w-2.5 rounded-t bg-cyan-400/80 transition-all hover:bg-cyan-300"
-                  style={{ height: `${(d.viewed / max) * 100}%` }}
-                  title={`${d.label}: ${d.viewed} просмотрено`}
-                />
-                <div
-                  className="w-2.5 rounded-t bg-emerald-400/80 transition-all hover:bg-emerald-300"
-                  style={{ height: `${(d.invited / max) * 100}%` }}
-                  title={`${d.label}: ${d.invited} приглашений`}
-                />
+                {SERIES.map((s) => (
+                  <div
+                    key={s.key}
+                    /* Подпись видна с клавиатуры и читается скринридером.
+                       Раньше данные были только в title, который на
+                       клавиатуре недоступен и озвучивается лишь частью
+                       браузеров. */
+                    role="img"
+                    aria-label={`${d.label}: ${s.label} — ${d[s.key]}`}
+                    className={`w-2.5 transition-opacity hover:opacity-100 ${s.color} opacity-85`}
+                    style={{ height: `${(d[s.key] / max) * 100}%` }}
+                  />
+                ))}
               </div>
-              <span className="text-[10px] text-slate-500">{d.label}</span>
+              <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
+                {d.label}
+              </span>
             </div>
           ))}
         </div>

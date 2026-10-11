@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Section, Eyebrow } from "@/components/ui";
+import { Reveal } from "@/components/reveal";
 import { resumeExamples } from "@/lib/data";
 
 export const metadata: Metadata = {
@@ -8,56 +10,94 @@ export const metadata: Metadata = {
     "Готовые примеры резюме по IT-ролям: Frontend, Backend, QA. Структура, ключевые слова и формулировки, которые нравятся рекрутерам и ATS-системам.",
 };
 
+/*
+ * Индекс примеров резюме.
+ *
+ * Раньше это была сетка одинаковых карточек: каждая — серый блок с
+ * цветной плашкой уровня. Плашки повторяли то, что уже написано в
+ * заголовке («Frontend-разработчик, Middle» + «Middle»), а различались
+ * карточки только длиной превью — то есть сравнивать образцы было нечем.
+ *
+ * Теперь это предметный указатель: уровень и роль моноширинным в одну
+ * строку, название антиквой, превью — абзацем, теги — перечислением.
+ * Разница между образцами читается, ничего не дублируясь.
+ */
 export default function ResumeExamplesPage() {
   return (
-    <div className="container-x py-12 md:py-16">
-      <div className="max-w-3xl">
-        <p className="text-sm font-semibold uppercase tracking-widest text-accent-2">Инструменты</p>
-        <h1 className="mt-3 text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
-          Примеры резюме, которые проходят ATS
+    <>
+      <Section className="border-t-0 pt-16 md:pt-24">
+        <Eyebrow>Инструменты</Eyebrow>
+        <h1 className="display mt-4 max-w-4xl text-balance text-4xl md:text-6xl">
+          Резюме, которое <span className="text-accent">проходит ATS</span>
         </h1>
-        <p className="mt-4 text-base leading-relaxed text-muted">
-          Готовые структуры резюме для популярных IT-ролей. Используйте их как шаблон: замените данные своими,
-          сохранив формулировки с цифрами и правильные ключевые слова.
+        <p className="measure mt-6 text-base leading-relaxed text-muted md:text-lg">
+          Готовые структуры резюме для популярных IT-ролей. Используйте их как образец:
+          замените данные своими, сохранив формулировки с цифрами и правильные ключевые слова.
         </p>
-      </div>
+      </Section>
 
-      <div className="mt-10 grid gap-6 md:grid-cols-3">
-        {resumeExamples.map((ex) => (
+      <Section className="pt-0">
+        <div className="border-t-2 border-ink">
+          <div className="grid grid-cols-12 gap-x-6 border-b border-line pb-3">
+            <p className="col-span-12 font-mono text-[11px] uppercase tracking-[0.16em] text-muted md:col-span-6">
+              Образец
+            </p>
+            <p className="col-span-6 font-mono text-[11px] uppercase tracking-[0.16em] text-muted md:col-span-3">
+              Уровень
+            </p>
+            <p className="col-span-6 font-mono text-[11px] uppercase tracking-[0.16em] text-muted md:col-span-3 md:text-right">
+              Роль
+            </p>
+          </div>
+
+          {resumeExamples.map((ex, idx) => (
+            <Reveal key={ex.slug} delay={idx * 60}>
+              <Link
+                href={`/resume-examples/${ex.slug}`}
+                className="group grid grid-cols-12 gap-x-6 gap-y-3 border-b border-line py-7 transition-colors hover:bg-surface-2"
+              >
+                <div className="col-span-12 md:col-span-6">
+                  <h2 className="font-serif text-xl leading-snug text-ink transition-colors group-hover:text-accent md:text-2xl">
+                    {ex.title}
+                  </h2>
+                  <p className="measure mt-2 text-sm leading-relaxed text-muted md:text-base">
+                    {ex.preview}
+                  </p>
+                  <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[11px] uppercase tracking-[0.12em] text-muted">
+                    {ex.tags.map((t) => (
+                      <span key={t}>{t}</span>
+                    ))}
+                  </p>
+                </div>
+
+                <p className="col-span-6 font-mono text-sm uppercase tracking-[0.12em] text-ink md:col-span-3">
+                  {ex.level}
+                </p>
+                <p className="col-span-6 text-right font-mono text-sm text-muted md:col-span-3">
+                  {ex.role}
+                </p>
+              </Link>
+            </Reveal>
+          ))}
+        </div>
+
+        <div className="mt-16 border-t-2 border-ink pt-10">
+          <h2 className="font-serif text-2xl md:text-3xl">
+            Готовое резюме под вашу вакансию
+          </h2>
+          <p className="measure mt-3 leading-relaxed text-muted">
+            Загрузите своё резюме в кабинет — EZOffer адаптирует формулировки под целевые
+            вакансии и посчитает ATS-скор.
+          </p>
           <Link
-            key={ex.slug}
-            href={`/resume-examples/${ex.slug}`}
-            className="flex flex-col rounded-3xl border border-line bg-surface/60 p-6 transition-colors hover:border-white/20"
+            href="/signup"
+            className="mt-7 inline-flex items-center gap-2 rounded-sm bg-accent px-7 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
           >
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">{ex.level}</span>
-              <span className="text-xs text-muted">{ex.role}</span>
-            </div>
-            <h2 className="mt-4 text-lg font-semibold tracking-tight">{ex.title}</h2>
-            <p className="mt-2 flex-1 text-sm leading-relaxed text-muted">{ex.preview}</p>
-            <div className="mt-4 flex flex-wrap gap-1.5">
-              {ex.tags.map((t) => (
-                <span key={t} className="rounded-full border border-line bg-white/5 px-2.5 py-1 text-[11px] text-muted">
-                  {t}
-                </span>
-              ))}
-            </div>
+            Улучшить резюме
+            <span aria-hidden>→</span>
           </Link>
-        ))}
-      </div>
-
-      <div className="mt-12 rounded-3xl border border-accent/30 bg-gradient-to-b from-accent/10 to-surface/60 p-7">
-        <h2 className="text-xl font-semibold tracking-tight">Готовое резюме под вашу вакансию</h2>
-        <p className="mt-2 text-sm leading-relaxed text-muted">
-          Загрузите своё резюме в кабинет — EZOffer адаптирует формулировки под целевые вакансии и посчитает ATS-скор.
-        </p>
-        <Link
-          href="/signup"
-          className="mt-4 inline-flex items-center justify-center rounded-full bg-accent px-6 py-3 text-sm font-semibold text-white transition hover:brightness-110"
-        >
-          Улучшить резюме
-        </Link>
-      </div>
-    </div>
+        </div>
+      </Section>
+    </>
   );
 }

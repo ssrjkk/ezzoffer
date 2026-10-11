@@ -88,17 +88,21 @@ function TelegramFrame() {
 
   return (
     <div className="relative">
-      <div className="absolute -inset-8 -z-10 rounded-[3rem] bg-gradient-to-br from-accent/25 via-cyan/10 to-transparent blur-3xl" />
-      <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-surface/80 shadow-2xl shadow-accent/10 backdrop-blur-xl">
-        <div className="flex items-center gap-3 border-b border-white/10 bg-surface/90 px-5 py-4">
-          <span className="grid size-10 place-items-center rounded-full bg-gradient-to-br from-[#2AABEE] to-[#1C7ED6] text-white shadow-[0_0_20px_-4px_rgba(42,171,238,0.7)]">
-            <TelegramGlyph className="size-5" />
+      {/*
+        Макет переписки. Раньше вокруг него было размытое пятно на -inset-8 и
+        тень с backdrop-blur — окно выглядело парящим над страницей. Теперь
+        это плоский блок с волосяной рамкой, как врезка с иллюстрацией.
+      */}
+      <div className="overflow-hidden rounded-sm border border-line bg-surface">
+        <div className="flex items-center gap-3 border-b border-line px-5 py-3">
+          <span className="grid size-8 place-items-center rounded-sm bg-[#229ED9] text-white">
+            <TelegramGlyph className="size-4" />
           </span>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-ink">EZOffer Бот</p>
-            <p className="flex items-center gap-1.5 text-xs text-muted">
-              <span className="size-1.5 rounded-full bg-success" />
-              бот отвечает мгновенно
+            <p className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.1em] text-muted">
+              <span className="size-1.5 rounded-full bg-success" aria-hidden />
+              отвечает мгновенно
             </p>
           </div>
         </div>
@@ -113,7 +117,7 @@ function TelegramFrame() {
           {partial && <Bubble msg={partial} caret />}
 
           {finished && (
-            <p className="pt-6 text-center text-xs text-muted">Диалог проигран полностью</p>
+            <p className="pt-6 text-center font-mono text-xs text-muted">Диалог проигран полностью</p>
           )}
 
           {!thinking && !partial && done.length === 0 && !finished && (
@@ -121,12 +125,12 @@ function TelegramFrame() {
           )}
         </div>
 
-        <div className="flex items-center gap-2 border-t border-white/10 bg-surface/90 px-4 py-3">
-          <span className="flex-1 rounded-full border border-white/10 bg-bg/60 px-4 py-2.5 text-sm text-muted">
+        <div className="flex items-center gap-2 border-t border-line px-4 py-3">
+          <span className="flex-1 border-b border-line px-1 py-1.5 text-sm text-muted">
             Напишите сообщение…
           </span>
-          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-accent to-accent-2 text-white">
-            <svg viewBox="0 0 24 24" className="size-4" fill="currentColor" aria-hidden>
+          <span className="grid size-8 shrink-0 place-items-center rounded-sm bg-ink">
+            <svg viewBox="0 0 24 24" className="size-4 text-paper" fill="currentColor" aria-hidden>
               <path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z" />
             </svg>
           </span>
@@ -146,7 +150,7 @@ function TelegramGlyph({ className = "size-4" }: { className?: string }) {
 
 function Avatar() {
   return (
-    <span className="grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-[#2AABEE] to-[#1C7ED6] text-white">
+    <span className="grid size-7 shrink-0 place-items-center rounded-sm bg-[#229ED9] text-white">
       <TelegramGlyph />
     </span>
   );
@@ -156,7 +160,7 @@ function TypingBubble() {
   return (
     <div className="flex items-end gap-2">
       <Avatar />
-      <div className="flex items-center gap-1 rounded-2xl rounded-bl-md border border-white/10 bg-surface-2 px-4 py-3">
+      <div className="flex items-center gap-1 rounded-sm rounded-bl-md border border-line bg-surface-2 px-4 py-3">
         {[0, 1, 2].map((dot) => (
           <span
             key={dot}
@@ -179,7 +183,7 @@ function Bubble({ msg, caret = false }: { msg: BotMessage; caret?: boolean }) {
   if (msg.from === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[82%] rounded-2xl rounded-br-md bg-gradient-to-br from-accent to-accent-2 px-4 py-2.5 text-sm leading-relaxed text-white shadow-[0_6px_20px_-8px_rgba(124,92,255,0.8)]">
+        <div className="max-w-[82%] rounded-sm rounded-br-md bg-ink px-4 py-2.5 text-sm leading-relaxed text-paper">
           {msg.text}
           {caret ? <Caret /> : null}
         </div>
@@ -190,7 +194,7 @@ function Bubble({ msg, caret = false }: { msg: BotMessage; caret?: boolean }) {
   return (
     <div className="flex items-end gap-2">
       <Avatar />
-      <div className="max-w-[82%] rounded-2xl rounded-bl-md border border-white/10 bg-surface-2 px-4 py-2.5 text-sm leading-relaxed text-ink">
+      <div className="max-w-[82%] rounded-sm rounded-bl-md border border-line bg-surface-2 px-4 py-2.5 text-sm leading-relaxed text-ink">
         {lines.map((line, i) => (
           <span key={i} className="block">
             {line}
@@ -204,20 +208,15 @@ function Bubble({ msg, caret = false }: { msg: BotMessage; caret?: boolean }) {
 
 export function TelegramBot() {
   return (
-    <Section className="relative border-y border-line bg-surface/40">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute right-1/4 top-1/4 size-80 rounded-full bg-accent/10 blur-[120px]" />
-        <div className="absolute bottom-1/4 left-1/4 size-72 rounded-full bg-cyan/10 blur-[120px]" />
-      </div>
-
-      <div className="relative grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
+    <Section>
+      <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
         <div>
           <SectionHead
             center={false}
             eyebrow="Telegram-бот"
             title={
               <>
-                Управляйте откликами <span className="text-gradient">из мессенджера</span>
+                Управляйте откликами <span className="text-accent">из мессенджера</span>
               </>
             }
             sub="Бот повторяет логику кабинета: подбирает вакансии под ваши критерии, готовит письмо и показывает статистику. Сайт открывать не нужно."
@@ -227,9 +226,9 @@ export function TelegramBot() {
             {BOT_COMMANDS.map((cmd) => (
               <div
                 key={cmd.command}
-                className="group flex items-start gap-4 rounded-2xl border border-line bg-surface/60 p-4 transition-colors hover:border-accent-2/40 hover:bg-surface/80"
+                className="group flex items-start gap-4 rounded-sm border border-line bg-surface p-4 transition-colors hover:border-accent-2/40 hover:bg-surface"
               >
-                <code className="shrink-0 rounded-lg bg-accent/10 px-2.5 py-1 font-mono text-xs text-accent-2">
+                <code className="shrink-0 rounded-sm bg-accent/10 px-2.5 py-1 font-mono text-xs text-accent-2">
                   /{cmd.command}
                 </code>
                 <div className="min-w-0">

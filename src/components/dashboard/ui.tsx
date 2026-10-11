@@ -1,5 +1,10 @@
 import type { JSX } from "react";
 
+// Живая область для сообщений живёт в общем модуле: она нужна и кабинету,
+// и публичным страницам (тарифы, формы входа). Здесь — реэкспорт, чтобы
+// существующие импорты кабинетных компонентов не ломались.
+export { StatusMessage } from "@/components/ui";
+
 export function Badge({
   children,
   tone = "neutral",
@@ -9,7 +14,9 @@ export function Badge({
 }) {
   const cls = {
     neutral: "border-line bg-surface-2 text-muted",
-    accent: "border-accent/20 bg-accent/10 text-accent",
+    // text-accent-2, а не text-accent: accent настроен как ФОН под белый текст
+    // (5.22:1), но как цвет текста на своей подложке даёт 3.28:1.
+    accent: "border-accent/20 bg-accent/10 text-accent-2",
     "accent-2": "border-accent-2/20 bg-accent-2/10 text-accent-2",
     cyan: "border-cyan/20 bg-cyan/10 text-cyan",
     success: "border-success/20 bg-success/10 text-success",
@@ -17,30 +24,56 @@ export function Badge({
     danger: "border-danger/20 bg-danger/10 text-danger",
   }[tone];
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium ${cls}`}>
+    <span className={`inline-flex items-center gap-1 rounded-sm border px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-[0.12em] ${cls}`}>
       {children}
     </span>
   );
 }
 
+/*
+ * Заголовок раздела кабинета.
+ *
+ * Прежний вариант совпадал с публичным и отличался только тем, что был
+ * по умолчанию центрирован, — то есть кабинет выглядел как витрина, а не
+ * как рабочий инструмент. Теперь выключен по центру, метка моноширинным
+ * с линейкой, заголовок антиквой. Проп center остался: пара мест его
+ * действительно просит, и молча менять их раскладку нельзя.
+ */
 export function SectionHead({
   eyebrow,
   title,
   sub,
-  center = true,
+  center = false,
 }: {
   eyebrow: string;
   title: React.ReactNode;
   sub?: string;
   center?: boolean;
 }) {
+  if (center) {
+    return (
+      <div className="mx-auto mb-12 max-w-3xl text-center md:mb-16">
+        <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.16em] text-accent">{eyebrow}</p>
+        <h2 className="display text-balance text-3xl text-ink md:text-5xl">{title}</h2>
+        {sub ? (
+          <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted md:text-lg">
+            {sub}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
-    <div className={`mb-12 md:mb-16 ${center ? "mx-auto max-w-3xl text-center" : "max-w-3xl"}`}>
-      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.2em] text-accent">{eyebrow}</p>
-      <h2 className="text-3xl font-semibold leading-tight tracking-tight text-ink md:text-5xl">
-        {title}
-      </h2>
-      {sub ? <p className="mt-4 text-base leading-relaxed text-muted md:text-lg">{sub}</p> : null}
+    <div className="mb-12 max-w-3xl md:mb-16">
+      <p className="flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-accent">
+        <span aria-hidden className="block h-px w-7 bg-accent" />
+        {eyebrow}
+      </p>
+      <h2 className="display mt-4 text-balance text-3xl text-ink md:text-5xl">{title}</h2>
+      {sub ? (
+        <p className="mt-5 max-w-xl text-base leading-relaxed text-muted md:text-lg">{sub}</p>
+      ) : null}
     </div>
   );
 }
@@ -52,13 +85,17 @@ export function Panel({
   children: React.ReactNode;
   className?: string;
 }) {
-  return (
-    <div className={`rounded-xl border border-line bg-surface p-5 ${className}`}>
-      {children}
-    </div>
-  );
+  return <div className={`border border-line bg-surface p-5 ${className}`}>{children}</div>;
 }
 
+/**
+ * Показатель.
+ *
+ * Раньше — карточка с заливкой и рамкой, где подпись стояла над числом.
+ * Теперь — колонка под линейкой: те же шесть карточек статистики
+ * превращаются в строку цифр, как в отчётности, и выравниваются по
+ * разрядам благодаря моноширинному начертанию.
+ */
 export function StatCard({
   label,
   value,
@@ -73,22 +110,21 @@ export function StatCard({
   accent?: "accent" | "accent-2" | "cyan" | "success" | "warn";
 }) {
   const color = {
-    accent: "bg-accent/10 text-accent",
-    "accent-2": "bg-accent-2/10 text-accent-2",
-    cyan: "bg-cyan/10 text-cyan",
-    success: "bg-success/10 text-success",
-    warn: "bg-warn/10 text-warn",
+    accent: "text-accent",
+    "accent-2": "text-accent-2",
+    cyan: "text-cyan",
+    success: "text-success",
+    warn: "text-warn",
   }[accent];
+
   return (
-    <div className="group flex flex-col gap-3 rounded-xl border border-line bg-surface p-5 transition-colors hover:border-accent/20">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm text-muted">{label}</span>
-        {icon ? <span className={`grid size-8 place-items-center rounded-lg ${color}`}>{icon}</span> : null}
+    <div className="flex flex-col gap-1.5 border-t-2 border-ink pt-4">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-mono text-3xl tabular-nums text-ink md:text-4xl">{value}</span>
+        {icon ? <span className={`shrink-0 ${color}`}>{icon}</span> : null}
       </div>
-      <div className="flex items-baseline gap-2">
-        <span className="text-3xl font-semibold tabular-nums tracking-tight text-ink">{value}</span>
-        {sub ? <span className="text-xs text-muted">{sub}</span> : null}
-      </div>
+      <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">{label}</span>
+      {sub ? <span className="text-xs text-muted">{sub}</span> : null}
     </div>
   );
 }
@@ -102,12 +138,22 @@ export function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-sm font-medium text-muted">{label}</span>
+      <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+        {label}
+      </span>
       {children}
     </label>
   );
 }
 
+/**
+ * Пустое состояние.
+ *
+ * Прежний вид — пунктирная коробка с круглой иконкой посередине: самый
+ * узнаваемый силуэт пустого состояния из шаблонов. Тот же смысл здесь
+ * достигается иначе — линейка сверху, метка моноширинным, текст слева.
+ * Иконка убрана: она ничего не сообщала, а только украшала пустоту.
+ */
 export function EmptyState({
   title,
   text,
@@ -118,28 +164,23 @@ export function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-line px-6 py-14 text-center">
-      <div className="grid size-12 place-items-center rounded-xl bg-accent/10 text-accent">
-        <svg viewBox="0 0 24 24" className="size-6" fill="none">
-          <path d="M12 3v3m0 12v3M3 12h3m12 0h3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-          <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="2" />
-        </svg>
-      </div>
-      <h3 className="text-lg font-semibold tracking-tight text-ink">{title}</h3>
-      <p className="max-w-sm text-sm leading-relaxed text-muted">{text}</p>
-      {action ? <div className="mt-1">{action}</div> : null}
+    <div className="border-t-2 border-ink py-10">
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted">Пока пусто</p>
+      <h2 className="mt-3 font-serif text-xl leading-snug text-ink">{title}</h2>
+      <p className="measure mt-2 text-sm leading-relaxed text-muted">{text}</p>
+      {action ? <div className="mt-6">{action}</div> : null}
     </div>
   );
 }
 
 export const inputCls =
-  "w-full rounded-lg border border-line bg-bg px-3.5 py-2.5 text-sm text-ink outline-none transition placeholder:text-muted/50 focus:border-accent focus:ring-2 focus:ring-accent/20";
+  "w-full rounded-sm border border-line-strong bg-surface-2 px-3.5 py-2.5 text-sm text-ink outline-none transition placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/25";
 
 export const btnPrimary =
-  "inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex items-center justify-center gap-2 rounded-sm bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60";
 
 export const btnGhost =
-  "inline-flex items-center justify-center gap-2 rounded-lg border border-line bg-surface px-5 py-2.5 text-sm font-semibold text-ink transition hover:border-accent/30 hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex items-center justify-center gap-2 rounded-sm border border-line-strong bg-surface px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-60";
 
 export const btnDanger =
-  "inline-flex items-center justify-center gap-2 rounded-lg border border-danger/30 bg-danger/10 px-4 py-2 text-xs font-semibold text-danger transition hover:bg-danger/20 disabled:cursor-not-allowed disabled:opacity-50";
+  "inline-flex items-center justify-center gap-2 rounded-sm border border-danger/40 bg-danger/10 px-4 py-2 text-xs font-semibold text-danger transition-colors hover:bg-danger hover:text-white disabled:cursor-not-allowed disabled:opacity-60";

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Badge, EmptyState, Field, btnPrimary, btnGhost, btnDanger, inputCls } from "@/components/dashboard/ui";
+import { Badge, EmptyState, Field, btnPrimary, btnGhost, btnDanger, inputCls, StatusMessage } from "@/components/dashboard/ui";
+import { Dialog, ConfirmDialog } from "@/components/dialog";
 
 type Letter = { id: number; title: string; content: string; updated_at: number };
 type Draft = { id: number | null; title: string; content: string };
@@ -12,6 +13,9 @@ export function LettersManager({ initial }: { initial: Letter[] }) {
   const [letters, setLetters] = useState<Letter[]>(initial);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
+  const [removingId, setRemovingId] = useState<number | null>(null);
+  /** id письма, удаление которого сейчас подтверждается; null — окно закрыто. */
+  const [confirmId, setConfirmId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const save = async (e: FormEvent) => {
@@ -41,6 +45,10 @@ export function LettersManager({ initial }: { initial: Letter[] }) {
   };
 
   const remove = async (id: number) => {
+    // Без этой защиты двойной клик отправлял второй DELETE уже удалённой
+    // записи, и пользователь ловил ложную ошибку.
+    if (removingId !== null) return;
+    setRemovingId(id);
     setError(null);
     try {
       const res = await fetch(`/api/letters/${id}`, { method: "DELETE" });
@@ -50,8 +58,11 @@ export function LettersManager({ initial }: { initial: Letter[] }) {
         return;
       }
       setLetters((prev) => prev.filter((l) => l.id !== id));
+      setConfirmId(null);
     } catch {
       setError("Сеть недоступна — письмо не удалено");
+    } finally {
+      setRemovingId(null);
     }
   };
 
@@ -78,7 +89,11 @@ export function LettersManager({ initial }: { initial: Letter[] }) {
         </button>
       </div>
 
-      {error ? <p className="rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-300">{error}</p> : null}
+      {/* Ошибка удаления. Ошибки сохранения живут внутри диалога (ниже) —
+          один error-стейд на обе формы иначе показывал бы то же сообщение дважды.
+          Когда открыт диалог, здесь текст пустой: элемент остаётся в DOM,
+          чтобы живая область существовала заранее, но не занимает место. */}
+      <StatusMessage tone="error">{draft === null ? error : null}</StatusMessage>
 
       {letters.length === 0 ? (
         <EmptyState
@@ -88,10 +103,10 @@ export function LettersManager({ initial }: { initial: Letter[] }) {
       ) : (
         <div className="space-y-3">
           {letters.map((l) => (
-            <div key={l.id} className="glass flex flex-col gap-4 rounded-2xl p-5 sm:flex-row sm:items-start">
+            <div key={l.id} className=" flex flex-col gap-4 rounded-sm p-5 sm:flex-row sm:items-start">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="font-semibold">{l.title}</h3>
+                  <h2 className="font-serif leading-snug text-ink">{l.title}</h2>
                   <Badge>{l.content.length} симв.</Badge>
                 </div>
                 <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-sm text-muted">{l.content}</p>
@@ -104,8 +119,8 @@ export function LettersManager({ initial }: { initial: Letter[] }) {
                 >
                   Редактировать
                 </button>
-                <button type="button" className={btnDanger} onClick={() => remove(l.id)}>
-                  Удалить
+                <button type="button" className={btnDanger} disabled={removingId !== null} onClick={() => setConfirmId(l.id)}>
+                  {removingId === l.id ? "Удаляем…" : "Удалить"}
                 </button>
               </div>
             </div>
@@ -113,18 +128,13 @@ export function LettersManager({ initial }: { initial: Letter[] }) {
         </div>
       )}
 
-      {draft ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setDraft(null)} />
-          <form onSubmit={save} className="relative w-full max-w-2xl space-y-4 rounded-3xl border border-line bg-surface p-6 sm:p-8">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold tracking-tight">{draft.id ? "Редактировать письмо" : "Новое письмо"}</h2>
-              <button type="button" onClick={() => setDraft(null)} className="grid size-8 place-items-center rounded-lg border border-line text-muted hover:text-ink" aria-label="Закрыть">
-                <svg viewBox="0 0 24 24" className="size-4" fill="none">
-                  <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
+      <Dialog
+        open={draft !== null}
+        onClose={() => setDraft(null)}
+        title={draft?.id ? "Редактировать письмо" : "Новое письмо"}
+      >
+        {draft ? (
+          <form onSubmit={save} className="space-y-4">
             {!draft.id ? (
               <button type="button" onClick={fillTemplate} className={btnGhost}>
                 Заполнить шаблон
@@ -144,13 +154,27 @@ export function LettersManager({ initial }: { initial: Letter[] }) {
                 placeholder="Здравствуйте!..."
               />
             </Field>
-            <div className="flex flex-wrap justify-end gap-2">
-              <button type="button" className={btnGhost} onClick={() => setDraft(null)}>Отмена</button>
-              <button type="submit" disabled={saving} className={btnPrimary}>{saving ? "Сохраняем…" : "Сохранить"}</button>
+            <div className="space-y-4">
+              <StatusMessage tone="error">{error}</StatusMessage>
+              <div className="flex flex-wrap justify-end gap-2">
+                <button type="button" className={btnGhost} onClick={() => setDraft(null)}>Отмена</button>
+                <button type="submit" disabled={saving} className={btnPrimary}>{saving ? "Сохраняем…" : "Сохранить"}</button>
+              </div>
             </div>
           </form>
-        </div>
-      ) : null}
+        ) : null}
+      </Dialog>
+
+      <ConfirmDialog
+        open={confirmId !== null}
+        onCancel={() => setConfirmId(null)}
+        onConfirm={() => {
+          if (confirmId !== null) void remove(confirmId);
+        }}
+        title="Удалить письмо?"
+        description="Шаблон сопроводительного письма будет удалён безвозвратно. Его можно будет написать заново, но сохранённый текст вернуть не получится."
+        busy={removingId !== null}
+      />
     </div>
   );
 }

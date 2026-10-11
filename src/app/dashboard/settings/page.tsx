@@ -20,7 +20,7 @@ export default async function SettingsPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Настройки</h1>
+        <h1 className="font-serif text-2xl leading-snug text-ink">Настройки</h1>
         <p className="mt-1 text-sm text-muted">Профиль, тариф и данные аккаунта.</p>
       </div>
 

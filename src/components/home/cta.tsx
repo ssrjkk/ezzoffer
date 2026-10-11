@@ -1,30 +1,47 @@
-import { PrimaryButton } from "@/components/ui";
+import Link from "next/link";
+import { Eyebrow } from "@/components/ui";
 import { Reveal } from "@/components/reveal";
+
+/*
+ * Финальный призыв.
+ *
+ * Прежняя версия — скруглённый на 2rem прямоугольник с двумя размытыми
+ * пятнами, сеткой на фоне и центрированным текстом: самый узнаваемый вид
+ * финального экрана у ИИ-лендингов.
+ *
+ * Теперь это полоса на всю ширину, как объявление в конце газетной полосы:
+ * чёрная подложка, линейка сверху, текст слева, действие справа. Никакой
+ * симметрии — она и несла весь шаблонный вид.
+ */
 
 export function CtaBanner() {
   return (
-    <section className="container-x pb-20 pt-4 md:pb-28">
+    <section className="border-t border-line">
       <Reveal>
-        <div className="relative overflow-hidden rounded-[2rem] border border-line bg-gradient-to-br from-accent/25 via-surface to-accent-2/15 px-7 py-16 text-center md:px-14 md:py-20">
-          <div className="pointer-events-none absolute inset-0 bg-grid mask-fade-y opacity-60" />
-          <div className="pointer-events-none absolute -top-24 left-1/4 h-64 w-64 rounded-full bg-accent/40 blur-[110px]" />
-          <div className="pointer-events-none absolute -bottom-24 right-1/4 h-64 w-64 rounded-full bg-accent-2/30 blur-[110px]" />
-
-          <div className="relative">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.22em] text-accent-2">
+        <div className="grid gap-10 bg-ink px-7 py-14 md:grid-cols-12 md:items-end md:px-14 md:py-16">
+          <div className="md:col-span-8">
+            <Eyebrow className="text-paper">
               Начните путь к лучшему офферу
-            </p>
-            <h2 className="mx-auto max-w-2xl text-3xl font-semibold leading-tight tracking-tight text-balance md:text-5xl">
-              Завтра уже кто-то откликнется <span className="text-gradient">вместо вас</span>
+            </Eyebrow>
+            <h2 className="mt-6 font-serif text-3xl leading-snug text-paper text-balance md:text-5xl">
+              Завтра за вас откликнется{" "}
+              <span className="text-accent-2">агент</span>
             </h2>
-            <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-muted">
-              24 часа бесплатного доступа без привязки карты. Пока другие соискатели кликают
-              вручную, вы уже на собеседовании.
+            <p className="measure mt-6 text-base leading-relaxed text-paper">
+              24 часа бесплатного доступа без привязки карты. Пока другие соискатели
+              кликают вручную, вы уже на собеседовании.
             </p>
-            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <PrimaryButton href="/signup">Попробовать бесплатно</PrimaryButton>
-            </div>
-            <p className="mt-4 text-xs text-muted">
+          </div>
+
+          <div className="md:col-span-4 md:text-right">
+            <Link
+              href="/signup"
+              className="inline-flex items-center justify-center gap-2 rounded-sm bg-paper px-7 py-3.5 text-sm font-semibold text-ink transition-colors hover:bg-accent hover:text-white"
+            >
+              Попробовать бесплатно
+              <span aria-hidden>→</span>
+            </Link>
+            <p className="mt-4 font-mono text-xs text-paper">
               Отмена в один клик · деньги не спишутся без подписки
             </p>
           </div>

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Section, SectionHead, Eyebrow } from "@/components/ui";
+import { Reveal } from "@/components/reveal";
 import { internships } from "@/lib/data";
 
 export const metadata: Metadata = {
@@ -8,63 +10,115 @@ export const metadata: Metadata = {
     "Платные стажировки по разработке, аналитике и маркетингу. Наставник, реальные задачи и путь в штат.",
 };
 
+/*
+ * Страница стажировок.
+ *
+ * Прежний вид — сетка из трёх одинаковых карточек с заливкой, где
+ * заголовок карточки стоит над описанием, а кнопка прибита к низу.
+ * Читать такое можно только по одной карточке за раз, хотя стажировок
+ * всего несколько и сравнивать их между собой — главный смысл страницы.
+ *
+ * Теперь это таблица: слева название и компания, справа формат и
+ * оплата, между строками — волосяная линейка. Сравнение по строкам
+ * получается само собой, без приёмов.
+ */
 export default function InternshipsPage() {
   return (
-    <div className="container-x py-12 md:py-16">
-      <div className="max-w-3xl">
-        <p className="text-sm font-semibold uppercase tracking-widest text-accent-2">Инструменты</p>
-        <h1 className="mt-3 text-3xl font-semibold leading-tight tracking-tight md:text-4xl">Стажировки</h1>
-        <p className="mt-4 text-base leading-relaxed text-muted">
-          Платные стажировочные треки для студентов и junior-специалистов: реальные задачи продукта, наставник
-          и путь в штат.
+    <>
+      <Section className="border-t-0 pt-16 md:pt-24">
+        <Eyebrow>Инструменты</Eyebrow>
+        <h1 className="display mt-4 max-w-4xl text-balance text-4xl md:text-6xl">
+          Стажировки с <span className="text-accent">наставником</span> и задачами продукта
+        </h1>
+        <p className="measure mt-6 text-base leading-relaxed text-muted md:text-lg">
+          Платные стажировочные треки для студентов и junior-специалистов: реальные задачи
+          продукта, наставник и путь в штат.
         </p>
-      </div>
+      </Section>
 
-      <div className="mt-10 grid gap-6 md:grid-cols-3">
-        {internships.map((int) => (
-          <article key={int.slug} className="flex flex-col rounded-3xl border border-line bg-surface/60 p-6">
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-accent/15 px-3 py-1 text-xs font-semibold text-accent">Стажировка</span>
-              <span className="text-xs text-muted">{int.format}</span>
-            </div>
-            <h2 className="mt-4 text-lg font-semibold tracking-tight">{int.title}</h2>
-            <p className="mt-1 text-sm text-muted">
-              {int.company} · {int.city}
+      <Section className="pt-0">
+        <div className="border-t-2 border-ink">
+          <div className="grid grid-cols-12 gap-x-6 border-b border-line pb-3">
+            <p className="col-span-12 font-mono text-[11px] uppercase tracking-[0.16em] text-muted md:col-span-6">
+              Трек
             </p>
-            <p className="mt-2 flex-1 text-sm leading-relaxed text-muted">{int.description}</p>
-            <p className="mt-3 text-base font-semibold text-success">{int.salary}</p>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {int.tags.map((t) => (
-                <span key={t} className="rounded-full border border-line bg-white/5 px-2.5 py-1 text-[11px] text-muted">
-                  {t}
-                </span>
-              ))}
-            </div>
-            <Link
-              href="/signup"
-              className="mt-4 inline-flex items-center justify-center rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white transition hover:brightness-110"
-            >
-              Откликнуться
-            </Link>
-          </article>
-        ))}
-      </div>
+            <p className="col-span-6 font-mono text-[11px] uppercase tracking-[0.16em] text-muted md:col-span-3 md:text-right">
+              Формат
+            </p>
+            <p className="col-span-6 font-mono text-[11px] uppercase tracking-[0.16em] text-muted md:col-span-3 md:text-right">
+              Оплата
+            </p>
+          </div>
 
-      <div className="mt-12 rounded-3xl border border-line bg-surface/60 p-7">
-        <h2 className="text-xl font-semibold tracking-tight">Как проходят стажировки EZOffer</h2>
-        <div className="mt-5 grid gap-4 sm:grid-cols-3">
-          {[
-            ["1. Отбор", "Отклик и короткое собеседование с ментором по вашей специальности."],
-            ["2. Работа", "Реальные задачи продукта с код-ревью и еженедельной обратной связью."],
-            ["3. Рост", "Лучшие стажёры получают оффер в штат и рекомендацию."],
-          ].map(([h, p]) => (
-            <div key={h} className="rounded-2xl border border-line bg-white/[0.03] p-5">
-              <h3 className="font-semibold">{h}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-muted">{p}</p>
-            </div>
+          {internships.map((int, idx) => (
+            <Reveal key={int.slug} delay={idx * 60} className="group border-b border-line py-7">
+              <div className="grid grid-cols-12 gap-x-6 gap-y-4">
+                <div className="col-span-12 md:col-span-6">
+                  <h2 className="font-serif text-xl leading-snug text-ink transition-colors group-hover:text-accent md:text-2xl">
+                    {int.title}
+                  </h2>
+                  <p className="mt-2 font-mono text-xs tracking-wide text-muted">
+                    {int.company} · {int.city}
+                  </p>
+                  <p className="measure mt-3 text-sm leading-relaxed text-muted md:text-base">
+                    {int.description}
+                  </p>
+                  {int.tags.length > 0 && (
+                    <p className="mt-3 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[11px] uppercase tracking-[0.12em] text-muted">
+                      {int.tags.map((t) => (
+                        <span key={t}>{t}</span>
+                      ))}
+                    </p>
+                  )}
+                </div>
+
+                <div className="col-span-6 md:col-span-3 md:text-right">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted">
+                    {int.format}
+                  </p>
+                </div>
+
+                <div className="col-span-6 flex flex-col items-start gap-4 md:col-span-3 md:items-end md:text-right">
+                  <p className="font-mono text-lg tabular-nums text-ink">{int.salary}</p>
+                  <Link
+                    href="/signup"
+                    className="inline-flex items-center gap-2 border-b border-ink pb-0.5 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
+                  >
+                    Откликнуться
+                    <span aria-hidden>→</span>
+                  </Link>
+                </div>
+              </div>
+            </Reveal>
           ))}
         </div>
-      </div>
-    </div>
+
+        <div className="mt-16">
+          <SectionHead
+            eyebrow="Как это устроено"
+            title={
+              <>
+                Три шага — и <span className="text-accent">работа в портфолио</span>
+              </>
+            }
+          />
+          <ol className="grid gap-x-8 gap-y-10 md:grid-cols-3">
+            {[
+              ["Отбор", "Отклик и короткое собеседование с ментором по вашей специальности."],
+              ["Работа", "Реальные задачи продукта с код-ревью и еженедельной обратной связью."],
+              ["Рост", "Лучшие стажёры получают оффер в штат и рекомендацию."],
+            ].map(([h, p], idx) => (
+              <Reveal as="li" key={h} delay={idx * 80} className="border-t-2 border-ink pt-5">
+                <p className="font-mono text-xs tabular-nums text-accent">
+                  {String(idx + 1).padStart(2, "0")}
+                </p>
+                <h3 className="mt-2 font-serif text-lg text-ink">{h}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted">{p}</p>
+              </Reveal>
+            ))}
+          </ol>
+        </div>
+      </Section>
+    </>
   );
 }

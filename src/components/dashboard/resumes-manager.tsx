@@ -2,7 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import { ScoreBadge } from "./score-badge";
-import { Badge, EmptyState, Field, btnPrimary, btnGhost, btnDanger, inputCls } from "@/components/dashboard/ui";
+import { Badge, EmptyState, Field, btnPrimary, btnGhost, btnDanger, inputCls, StatusMessage } from "@/components/dashboard/ui";
+import { Dialog, ConfirmDialog } from "@/components/dialog";
 import { RESUME_TEMPLATES } from "@/lib/data";
 import { FileDown, Sparkles } from "lucide-react";
 
@@ -25,6 +26,9 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [improvingId, setImprovingId] = useState<number | null>(null);
+  const [removingId, setRemovingId] = useState<number | null>(null);
+  /** id резюме, удаление которого сейчас подтверждается; null — окно закрыто. */
+  const [confirmId, setConfirmId] = useState<number | null>(null);
   const [improveResult, setImproveResult] = useState<{
     resume: Resume;
     notes: string[];
@@ -64,6 +68,10 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
   };
 
   const remove = async (id: number) => {
+    // Без этой защиты двойной клик отправлял второй DELETE уже удалённой
+    // записи, и пользователь ловил ложную ошибку.
+    if (removingId !== null) return;
+    setRemovingId(id);
     setError(null);
     try {
       const res = await fetch(`/api/resumes/${id}`, { method: "DELETE" });
@@ -73,8 +81,11 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
         return;
       }
       setResumes((prev) => prev.filter((r) => r.id !== id));
+      setConfirmId(null);
     } catch {
       setError("Сеть недоступна — резюме не удалено");
+    } finally {
+      setRemovingId(null);
     }
   };
 
@@ -111,12 +122,12 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
             <Sparkles className="size-4" />
             Шаблоны
           </button>
-          <div className="absolute right-0 top-full z-10 mt-2 w-64 rounded-xl border border-line bg-surface p-2 opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
+          <div className="absolute right-0 top-full z-10 mt-2 w-64 rounded-sm border border-line bg-surface p-2 opacity-0 shadow-[0_18px_40px_-20px_rgba(21,19,15,0.4)] transition-opacity group-hover:opacity-100">
             {RESUME_TEMPLATES.map((t) => (
               <button
                 key={t.id}
                 type="button"
-                className="w-full rounded-lg px-3 py-2 text-left text-sm text-ink transition-colors hover:bg-surface-2"
+                className="w-full rounded-sm px-3 py-2 text-left text-sm text-ink transition-colors hover:bg-surface-2"
                 onClick={() => { setDraft({ id: null, title: t.title, years_label: "", content: t.content }); setImproveResult(null); }}
               >
                 {t.title}
@@ -126,14 +137,16 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
         </div>
       </div>
 
-      {error ? (
-        <p className="rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-300">{error}</p>
-      ) : null}
+      {/* Ошибки удаления/улучшения. Ошибки сохранения показываются внутри
+          диалога — один error-стейд на обе формы иначе дублировал бы текст.
+          Когда открыт диалог, здесь текст пустой: элемент остаётся в DOM,
+          чтобы живая область существовала заранее, но не занимает место. */}
+      <StatusMessage tone="error">{draft === null ? error : null}</StatusMessage>
 
       {improveResult ? (
-        <div className="glass space-y-4 rounded-2xl border border-accent/30 p-5">
+        <div className=" space-y-4 rounded-sm border border-accent/30 p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="font-semibold">Резюме улучшено с AI</h3>
+            <h2 className="font-serif leading-snug text-ink">Резюме улучшено с AI</h2>
             <div className="flex items-center gap-2 text-sm">
               <span className="text-muted">ATS-скоринг</span>
               <span className="font-semibold text-muted line-through">{improveResult.score.before}</span>
@@ -183,10 +196,10 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
       ) : (
         <div className="space-y-3">
           {resumes.map((r) => (
-            <div key={r.id} className="glass flex flex-col gap-4 rounded-2xl p-5 sm:flex-row sm:items-center">
+            <div key={r.id} className=" flex flex-col gap-4 rounded-sm p-5 sm:flex-row sm:items-center">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="font-semibold">{r.title}</h3>
+                  <h2 className="font-serif leading-snug text-ink">{r.title}</h2>
                   {r.ai_improved ? <Badge tone="success">Улучшено AI</Badge> : <Badge>Черновик</Badge>}
                   <ScoreBadge content={r.content} />
                 </div>
@@ -220,7 +233,7 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
                 >
                   Редактировать
                 </button>
-                <button type="button" className={btnDanger} onClick={() => remove(r.id)}>
+                <button type="button" className={btnDanger} onClick={() => setConfirmId(r.id)}>
                   Удалить
                 </button>
               </div>
@@ -229,20 +242,13 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
         </div>
       )}
 
-      {draft ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setDraft(null)} />
-          <form onSubmit={save} className="relative w-full max-w-2xl space-y-4 rounded-3xl border border-line bg-surface p-6 sm:p-8">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold tracking-tight">
-                {draft.id ? "Редактировать резюме" : "Новое резюме"}
-              </h2>
-              <button type="button" onClick={() => setDraft(null)} className="grid size-8 place-items-center rounded-lg border border-line text-muted hover:text-ink" aria-label="Закрыть">
-                <svg viewBox="0 0 24 24" className="size-4" fill="none">
-                  <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
+      <Dialog
+        open={draft !== null}
+        onClose={() => setDraft(null)}
+        title={draft?.id ? "Редактировать резюме" : "Новое резюме"}
+      >
+        {draft ? (
+          <form onSubmit={save} className="space-y-4">
             <Field label="Название">
               <input
                 required
@@ -273,18 +279,31 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
                 placeholder={"Опыт работы:\n- ...\n\nОбразование:\n- ..."}
               />
             </Field>
-            {error ? <p className="text-sm text-red-300">{error}</p> : null}
-            <div className="flex flex-wrap justify-end gap-2">
-              <button type="button" className={btnGhost} onClick={() => setDraft(null)}>
-                Отмена
-              </button>
-              <button type="submit" disabled={saving} className={btnPrimary}>
-                {saving ? "Сохраняем…" : "Сохранить"}
-              </button>
+            <div className="space-y-4">
+              <StatusMessage tone="error">{error}</StatusMessage>
+              <div className="flex flex-wrap justify-end gap-2">
+                <button type="button" className={btnGhost} onClick={() => setDraft(null)}>
+                  Отмена
+                </button>
+                <button type="submit" disabled={saving} className={btnPrimary}>
+                  {saving ? "Сохраняем…" : "Сохранить"}
+                </button>
+              </div>
             </div>
           </form>
-        </div>
-      ) : null}
+        ) : null}
+      </Dialog>
+
+      <ConfirmDialog
+        open={confirmId !== null}
+        onCancel={() => setConfirmId(null)}
+        onConfirm={() => {
+          if (confirmId !== null) void remove(confirmId);
+        }}
+        title="Удалить резюме?"
+        description="Резюме и его история откликов будут удалены безвозвратно — восстановить их нельзя. Если хотите просто отключить, оставьте его в списке."
+        busy={removingId !== null}
+      />
     </div>
   );
 }

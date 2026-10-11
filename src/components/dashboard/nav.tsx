@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import {
   LayoutDashboard,
   FileText,
@@ -26,6 +26,19 @@ const items = [
   { href: "/dashboard/settings", label: "Настройки", icon: Settings },
 ];
 
+/*
+ * Навигация кабинета.
+ *
+ * Прежний вид — кружок с инициалом, пункты в скруглённых плашках и
+ * карточка тарифа с заливкой. То есть кабинет повторял приёмы витрины,
+ * из которой он вырос, хотя это рабочий инструмент: здесь нужен список
+ * разделов и факты, а не витрина.
+ *
+ * Теперь колонка газетного содержания: имя антиквой, почта моноширинным,
+ * пункты списком через волосяную линейку, активный помечен красной
+ * полосой слева. Тариф — те же цифры, что и везде на сайте: под линейкой,
+ * моноширинным, без отдельной коробки.
+ */
 export function DashboardNav({
   name,
   email,
@@ -48,6 +61,11 @@ export function DashboardNav({
   const pathname = usePathname();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
+  // framer-motion анимирует через requestAnimationFrame, а не через CSS, поэтому
+  // prefers-reduced-motion в globals.css на него не действует. Пользователь,
+  // попросивший систему уменьшить движение, всё равно получал анимированный
+  // «ползунок» активного пункта — это WCAG 2.3.3.
+  const reduceMotion = useReducedMotion();
 
   const logout = async () => {
     setBusy(true);
@@ -59,55 +77,69 @@ export function DashboardNav({
     }
   };
 
+  const initial = name.trim().charAt(0).toUpperCase() || "U";
+
   return (
     <nav
-      className={`flex flex-col gap-1 ${onMobile ? "flex lg:hidden" : "hidden lg:flex"}`}
+      className={`flex flex-col ${onMobile ? "flex lg:hidden" : "hidden lg:flex"}`}
       aria-label="Навигация кабинета"
     >
-      <div className="mb-6 flex items-center gap-3 px-2">
-        <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-accent text-sm font-bold text-white">
-          {name.trim().charAt(0).toUpperCase() || "U"}
+      <div className="mb-6 flex items-baseline gap-3 border-b border-line pb-5">
+        <span aria-hidden className="font-serif text-3xl leading-none text-accent">
+          {initial}
         </span>
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-ink">{name}</p>
-          <p className="truncate text-xs text-muted">{email}</p>
+          <p className="truncate font-serif text-base leading-snug text-ink">{name}</p>
+          <p className="truncate font-mono text-[11px] text-muted">{email}</p>
         </div>
       </div>
 
-      <div className="space-y-0.5">
+      <div>
         {items.map((item) => {
-          const active = item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
+          const active =
+            item.href === "/dashboard"
+              ? pathname === "/dashboard"
+              : pathname.startsWith(item.href);
           const Icon = item.icon;
           return (
             <Link
               key={item.href}
               href={item.href}
               onClick={onClose}
-              className={`relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                active ? "text-accent" : "text-muted hover:text-ink hover:bg-surface-2"
+              aria-current={active ? "page" : undefined}
+              className={`relative -ml-3.5 flex items-center gap-3 border-b border-line py-2.5 pl-3.5 text-sm transition-colors ${
+                active ? "font-semibold text-ink" : "text-muted hover:text-ink"
               }`}
             >
               {active && (
                 <motion.span
                   layoutId="nav-active"
-                  className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-accent"
+                  // При включённом reduced-motion переход мгновенный, но сам
+                  // элемент остаётся: положение активного пункта по-прежнему
+                  // видно, просто без движения.
+                  transition={reduceMotion ? { duration: 0 } : undefined}
+                  className="absolute left-0 top-0 h-full w-0.5 bg-accent"
                 />
               )}
-              <Icon className="size-4" />
+              <Icon className="size-4 shrink-0" aria-hidden />
               {item.label}
             </Link>
           );
         })}
       </div>
 
-      <div className="mt-auto space-y-4 pt-8">
-        <div className="rounded-xl border border-line bg-surface p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted">Тариф</span>
-            <Badge tone={planActive ? "success" : "warn"}>{planActive ? "Активен" : "Не активен"}</Badge>
+      <div className="mt-auto pt-8">
+        <div className="border-t-2 border-ink pt-4">
+          <div className="flex items-center justify-between gap-2">
+            <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+              Тариф
+            </span>
+            <Badge tone={planActive ? "success" : "warn"}>
+              {planActive ? "Активен" : "Не активен"}
+            </Badge>
           </div>
-          <p className="mt-2 text-sm font-semibold text-ink">{planLabel}</p>
-          <p className="mt-1 text-xs text-muted">
+          <p className="mt-2 font-serif text-base text-ink">{planLabel}</p>
+          <p className="mt-1 text-xs leading-relaxed text-muted">
             {planActive
               ? `${planLimit} откликов/день · осталось ${planDays} дн.`
               : "Активируйте пробный период в настройках"}
@@ -115,9 +147,10 @@ export function DashboardNav({
           <Link
             href="/dashboard/settings"
             onClick={onClose}
-            className="mt-3 block rounded-lg border border-line bg-bg px-3 py-1.5 text-center text-xs font-semibold text-ink transition hover:border-accent/30"
+            className="mt-3 inline-flex items-center gap-2 border-b border-ink pb-0.5 text-xs font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
           >
             Управлять тарифом
+            <span aria-hidden>→</span>
           </Link>
         </div>
 
@@ -125,9 +158,9 @@ export function DashboardNav({
           type="button"
           onClick={logout}
           disabled={busy}
-          className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface-2 hover:text-danger"
+          className="mt-6 flex items-center gap-3 border-b border-line pb-2.5 text-sm text-muted transition-colors hover:text-danger"
         >
-          <LogOut className="size-4" />
+          <LogOut className="size-4 shrink-0" aria-hidden />
           {busy ? "Выход…" : "Выйти"}
         </button>
       </div>

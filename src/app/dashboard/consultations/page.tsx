@@ -16,7 +16,7 @@ export default async function ConsultationsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Консультации</h1>
+      <h1 className="font-serif text-2xl leading-snug text-ink">Консультации</h1>
       <p className="mt-1 text-sm text-muted">
         Запишитесь на встречу с карьерным стратегом — разберём резюме, воронку откликов и офферы.
       </p>

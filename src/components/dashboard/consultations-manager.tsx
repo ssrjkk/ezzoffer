@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Badge, EmptyState, Field, Panel, btnPrimary, inputCls } from "@/components/dashboard/ui";
+import { Badge, EmptyState, Field, Panel, btnPrimary, inputCls, StatusMessage } from "@/components/dashboard/ui";
 
 type Consultation = { id: number; theme: string; note: string; booked_at: number; done: number };
 
@@ -59,7 +59,7 @@ export function ConsultationsManager({ initial }: { initial: Consultation[] }) {
   return (
     <div className="grid gap-6 lg:grid-cols-5">
       <Panel className="lg:col-span-2">
-        <h2 className="font-semibold tracking-tight">Записаться</h2>
+        <h2 className="font-serif text-lg leading-snug text-ink">Записаться</h2>
         <form onSubmit={book} className="mt-5 space-y-4">
           <Field label="Тема">
             <select className={inputCls} value={theme} onChange={(e) => setTheme(e.target.value)}>
@@ -78,11 +78,11 @@ export function ConsultationsManager({ initial }: { initial: Consultation[] }) {
               placeholder="О себе, ссылка на резюме, цель…"
             />
           </Field>
-          {error ? <p className="text-sm text-red-300">{error}</p> : null}
+          <StatusMessage tone="error">{error}</StatusMessage>
           <button type="submit" disabled={busy} className={`${btnPrimary} w-full`}>
             {busy ? "Отправляем…" : "Записаться на консультацию"}
           </button>
-          {notice ? <p className="text-sm text-success">{notice}</p> : null}
+          <StatusMessage tone="success">{notice}</StatusMessage>
         </form>
       </Panel>
 
@@ -95,9 +95,9 @@ export function ConsultationsManager({ initial }: { initial: Consultation[] }) {
           />
         ) : (
           items.map((c) => (
-            <div key={c.id} className="glass flex flex-col gap-2 rounded-2xl p-5">
+            <div key={c.id} className=" flex flex-col gap-2 rounded-sm p-5">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="font-semibold">{c.theme}</h3>
+                <h3 className="font-serif leading-snug text-ink">{c.theme}</h3>
                 <Badge tone={c.done ? "success" : "accent"}>{c.done ? "Проведена" : "Ожидание"}</Badge>
               </div>
               {c.note ? <p className="text-sm text-muted">{c.note}</p> : null}

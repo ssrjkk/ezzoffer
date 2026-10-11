@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { Vacancy } from "@/lib/vacancies";
-import { Badge, EmptyState, Field, Panel, btnPrimary, btnGhost, btnDanger, inputCls } from "@/components/dashboard/ui";
+import { Badge, EmptyState, Field, Panel, btnPrimary, btnGhost, btnDanger, inputCls, StatusMessage } from "@/components/dashboard/ui";
+import { ConfirmDialog } from "@/components/dialog";
 import { Sparkles } from "lucide-react";
 
 type Resume = { id: number; title: string; content: string; years_label: string; ai_improved: number };
@@ -62,6 +63,10 @@ export function JobExplorer() {
   const [notice, setNotice] = useState<string | null>(null);
   const [draft, setDraft] = useState(emptySearch);
   const [creating, setCreating] = useState(false);
+  /** id удаляемого поиска — защита от двойного клика и обратная связь. */
+  const [removingId, setRemovingId] = useState<number | null>(null);
+  /** id поиска, удаление которого подтверждается; null — окно закрыто. */
+  const [confirmId, setConfirmId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const perPage = 20;
   const [vacancies, setVacancies] = useState<Vacancy[]>([]);
@@ -238,9 +243,30 @@ export function JobExplorer() {
   };
 
   const removeSearch = async (id: number) => {
-    const res = await fetch(`/api/searches/${id}`, { method: "DELETE" });
-    if (!res.ok) return;
-    setSearches((prev) => prev.filter((s) => s.id !== id));
+    // Без этой защиты двойной клик отправлял второй DELETE уже удалённой
+    // записи, и пользователь ловил ложную ошибку.
+    if (removingId !== null) return;
+    // Раньше здесь не было ни try/catch, ни обратной связи: при сетевом сбое
+    // promise отклонялся, пользователь видел «ничего не произошло», а при
+    // ошибке сервера `if (!res.ok) return` глотал её молча. Удаление поиска
+    // останавливает автоотклики по нему, поэтому молчание здесь вводит в
+    // заблуждение: человек считает, что отклики продолжатся.
+    setError(null);
+    setRemovingId(id);
+    try {
+      const res = await fetch(`/api/searches/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error ?? "Не удалось удалить поиск");
+        return;
+      }
+      setSearches((prev) => prev.filter((s) => s.id !== id));
+      setConfirmId(null);
+    } catch {
+      setError("Сеть недоступна — поиск не удалён");
+    } finally {
+      setRemovingId(null);
+    }
   };
 
   const createSearch = async (e: FormEvent, autoRun: boolean) => {
@@ -291,14 +317,12 @@ export function JobExplorer() {
 
   return (
     <div className="space-y-8">
-      {error ? <p className="rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-300">{error}</p> : null}
-      {notice ? (
-        <p className="rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">{notice}</p>
-      ) : null}
+      <StatusMessage tone="error">{error}</StatusMessage>
+      <StatusMessage tone="success">{notice}</StatusMessage>
 
       <Panel>
         <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="font-semibold tracking-tight">Автопоиск</h2>
+          <h2 className="font-serif text-lg leading-snug text-ink">Автопоиск</h2>
           {searches.length ? (
             <Badge tone="accent">{searches.filter((s) => s.active).length} активных</Badge>
           ) : null}
@@ -307,7 +331,7 @@ export function JobExplorer() {
         {searches.length ? (
           <div className="mb-5 space-y-2.5">
             {searches.map((s) => (
-              <div key={s.id} className="flex flex-col gap-3 rounded-xl border border-line bg-white/[0.03] p-4 sm:flex-row sm:items-center">
+              <div key={s.id} className="flex flex-col gap-3 rounded-sm border border-line bg-surface-2 p-4 sm:flex-row sm:items-center">
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold">{s.title}</span>
@@ -327,7 +351,7 @@ export function JobExplorer() {
                   <button type="button" className={s.active ? btnGhost : btnPrimary} onClick={() => toggleSearch(s.id, !s.active)}>
                     {s.active ? "Пауза" : `Запустить · ${s.match_count}`}
                   </button>
-                  <button type="button" className={btnDanger} onClick={() => removeSearch(s.id)}>
+                  <button type="button" className={btnDanger} onClick={() => setConfirmId(s.id)}>
                     Удалить
                   </button>
                 </div>
@@ -387,7 +411,7 @@ export function JobExplorer() {
       <Panel>
         <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="font-semibold tracking-tight">Каталог вакансий</h2>
+            <h2 className="font-serif text-lg leading-snug text-ink">Каталог вакансий</h2>
             <p className="mt-0.5 text-xs text-muted">
               {sources
                 .map((src) => `${src.label} · ${src.count}`)
@@ -409,13 +433,26 @@ export function JobExplorer() {
               {refreshing ? "Обновляем…" : "Обновить вакансии"}
             </button>
             <input className={`${inputCls} w-44`} placeholder="Поиск…" value={q} onChange={(e) => setQ(e.target.value)} />
-            <select className={`${inputCls} w-36`} value={level} onChange={(e) => setLevel(e.target.value)}>
+            {/* aria-label, а не только первый <option>: «Уровень» — это
+                значение по умолчанию, а не имя элемента. Без имени скринридер
+                озвучивал «выпадающий список, пункт 1 из 4» и молчал, что это. */}
+            <select
+              aria-label="Фильтр по уровню"
+              className={`${inputCls} w-36`}
+              value={level}
+              onChange={(e) => setLevel(e.target.value)}
+            >
               <option value="">Уровень</option>
               {levelOptions.map((l) => (
                 <option key={l} value={l}>{l}</option>
               ))}
             </select>
-            <select className={`${inputCls} w-36`} value={format} onChange={(e) => setFormat(e.target.value)}>
+            <select
+              aria-label="Фильтр по формату работы"
+              className={`${inputCls} w-36`}
+              value={format}
+              onChange={(e) => setFormat(e.target.value)}
+            >
               <option value="">Формат</option>
               <option>Удалённо</option>
               <option>Гибрид</option>
@@ -427,13 +464,23 @@ export function JobExplorer() {
 
         <div className="mb-4 flex flex-wrap items-center gap-3 border-b border-line pb-4">
           <span className="text-xs font-semibold uppercase tracking-wider text-muted">Откликаться от имени:</span>
-          <select className={`${inputCls} w-56`} value={appliedId} onChange={(e) => setAppliedId(Number(e.target.value))}>
+          <select
+            aria-label="Резюме для отклика"
+            className={`${inputCls} w-56`}
+            value={appliedId}
+            onChange={(e) => setAppliedId(Number(e.target.value))}
+          >
             <option value={0}>Без резюме</option>
             {resumes.map((r) => (
               <option key={r.id} value={r.id}>{r.title}</option>
             ))}
           </select>
-          <select className={`${inputCls} w-56`} value={letterId} onChange={(e) => setLetterId(Number(e.target.value))}>
+          <select
+            aria-label="Сопроводительное письмо для отклика"
+            className={`${inputCls} w-56`}
+            value={letterId}
+            onChange={(e) => setLetterId(Number(e.target.value))}
+          >
             <option value={0}>Без письма</option>
             {letters.map((l) => (
               <option key={l.id} value={l.id}>{l.title}</option>
@@ -442,7 +489,7 @@ export function JobExplorer() {
         </div>
 
         {aiRecommendations.length > 0 ? (
-          <div className="mb-4 rounded-xl border border-accent/20 bg-accent/5 p-4">
+          <div className="mb-4 rounded-sm border border-accent/20 bg-accent/5 p-4">
             <div className="mb-2 flex items-center gap-2">
               <Sparkles className="size-4 text-accent" />
               <span className="text-sm font-semibold text-ink">AI-рекомендации</span>
@@ -461,7 +508,7 @@ export function JobExplorer() {
         {loading ? (
           <div className="grid gap-3 md:grid-cols-2">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="animate-pulse rounded-xl border border-line bg-surface p-5">
+              <div key={i} className="animate-pulse rounded-sm border border-line bg-surface p-5">
                 <div className="h-4 w-3/4 rounded bg-surface-2" />
                 <div className="mt-2 h-3 w-1/2 rounded bg-surface-2" />
                 <div className="mt-4 h-6 w-1/3 rounded bg-surface-2" />
@@ -474,10 +521,10 @@ export function JobExplorer() {
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {paginated.map((v) => (
-              <div key={v.slug} className="flex flex-col gap-3 rounded-xl border border-line bg-white/[0.03] p-5">
+              <div key={v.slug} className="flex flex-col gap-3 rounded-sm border border-line bg-surface-2 p-5">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <h3 className="font-semibold leading-snug">{v.title}</h3>
+                    <h3 className="font-serif leading-snug text-ink">{v.title}</h3>
                     <p className="mt-0.5 text-sm text-muted">{v.company} · {v.city}</p>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
@@ -563,6 +610,17 @@ export function JobExplorer() {
           </div>
         ) : null}
       </Panel>
+
+      <ConfirmDialog
+        open={confirmId !== null}
+        onCancel={() => setConfirmId(null)}
+        onConfirm={() => {
+          if (confirmId !== null) void removeSearch(confirmId);
+        }}
+        title="Удалить поиск?"
+        description="Автоотклики по этому поиску остановятся, а накопленная статистика будет удалена вместе с ним. Восстановить поиск нельзя."
+        busy={removingId !== null}
+      />
     </div>
   );
 }

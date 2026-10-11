@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Section, SectionHead, PrimaryButton } from "@/components/ui";
+import Link from "next/link";
+import { Section, SectionHead } from "@/components/ui";
 import { FaqAccordion } from "@/components/home/faq";
 
 export const metadata: Metadata = {
@@ -15,7 +16,7 @@ export default function FaqPage() {
           eyebrow="FAQ"
           title={
             <>
-              Вопросы и <span className="text-gradient">ответы</span>
+              Вопросы и <span className="text-accent">ответы</span>
             </>
           }
           sub="Не нашли ответ — напишите в поддержку, отвечаем в течение часа в рабочее время"
@@ -23,17 +24,30 @@ export default function FaqPage() {
       </Section>
       <FaqAccordion />
 
-      <Section className="border-t border-line bg-surface/40">
-        <div className="mx-auto max-w-2xl rounded-3xl border border-line bg-gradient-to-br from-accent/15 to-accent-2/10 p-10 text-center md:p-14">
-          <h2 className="text-2xl font-semibold tracking-tight md:text-3xl">
-            Остались вопросы?
-          </h2>
-          <p className="mt-3 text-sm leading-relaxed text-muted">
-            Начните с бесплатного периода — половина вопросов исчезает после первого дня работы
-            сервиса. Остальное расскажет поддержка.
-          </p>
-          <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <PrimaryButton href="/signup">Попробовать бесплатно</PrimaryButton>
+      <Section className="border-t border-line">
+        {/* Врезка-вопрос: инверсная полоса вместо градиентного блока с
+            центрированием. Тот же приём, что на статьях блога и странице
+            вакансии — одна форма на весь сайт. */}
+        <div className="bg-ink px-7 py-10 md:px-12 md:py-14">
+          <div className="grid gap-8 md:grid-cols-12 md:items-end md:gap-12">
+            <div className="md:col-span-7">
+              <h2 className="font-serif text-2xl leading-snug text-paper md:text-3xl">
+                Остались вопросы?
+              </h2>
+              <p className="measure mt-4 leading-relaxed text-paper">
+                Начните с бесплатного периода — половина вопросов исчезает после первого дня работы
+                сервиса. Остальное расскажет поддержка.
+              </p>
+            </div>
+            <div className="md:col-span-5 md:text-right">
+              <Link
+                href="/signup"
+                className="inline-flex items-center justify-center gap-2 rounded-sm bg-paper px-7 py-3.5 text-sm font-semibold text-ink transition-colors hover:bg-accent hover:text-white"
+              >
+                Попробовать бесплатно
+                <span aria-hidden>→</span>
+              </Link>
+            </div>
           </div>
         </div>
       </Section>

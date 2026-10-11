@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { plans } from "@/lib/data";
-import { Badge, Panel, btnPrimary, btnGhost } from "@/components/dashboard/ui";
+import { Badge, Panel, btnPrimary, btnGhost, StatusMessage } from "@/components/dashboard/ui";
 
 const PLAN_IDS: Record<string, string> = { "Старт": "start", "Про": "pro", "Эксперт": "expert" };
 const PERIODS = [7, 14, 30] as const;
@@ -83,7 +83,7 @@ export function PlanSettings({
     <Panel>
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-semibold tracking-tight">Тариф</h2>
+          <h2 className="font-serif text-lg leading-snug text-ink">Тариф</h2>
           <p className="mt-1 text-sm text-muted">
             Демо-режим: оплата отключена, активация мгновенная.
           </p>
@@ -95,15 +95,15 @@ export function PlanSettings({
       </div>
 
       <div className="mb-5 grid gap-3 text-sm sm:grid-cols-3">
-        <div className="rounded-xl border border-line bg-white/[0.03] p-4">
+        <div className="rounded-sm border border-line bg-surface-2 p-4">
           <p className="text-xs text-muted">Лимит откликов/день</p>
           <p className="mt-1 text-lg font-semibold tabular-nums">{active ? planLimit : 0}</p>
         </div>
-        <div className="rounded-xl border border-line bg-white/[0.03] p-4">
+        <div className="rounded-sm border border-line bg-surface-2 p-4">
           <p className="text-xs text-muted">Дней до окончания</p>
           <p className="mt-1 text-lg font-semibold tabular-nums">{active ? planDays : "—"}</p>
         </div>
-        <div className="rounded-xl border border-line bg-white/[0.03] p-4">
+        <div className="rounded-sm border border-line bg-surface-2 p-4">
           <p className="text-xs text-muted">Пробный период</p>
           <p className="mt-1 text-lg font-semibold">
             {trialStarted ? <span className="text-muted">был {fmtDate(trialExpiresAt)}</span> : "не использован"}
@@ -111,8 +111,8 @@ export function PlanSettings({
         </div>
       </div>
 
-      {error ? <p className="mb-4 rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-300">{error}</p> : null}
-      {notice ? <p className="mb-4 rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">{notice}</p> : null}
+      <StatusMessage tone="error" className="mb-4">{error}</StatusMessage>
+      <StatusMessage tone="success" className="mb-4">{notice}</StatusMessage>
 
       {!trialStarted && plan === "none" ? (
         <div className="mb-6">
@@ -130,8 +130,8 @@ export function PlanSettings({
             key={p}
             type="button"
             onClick={() => setPeriod(p)}
-            className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
-              period === p ? "border-accent/40 bg-accent/15 text-accent" : "border-line bg-white/5 text-muted hover:text-ink"
+            className={`rounded-sm border px-3.5 py-1.5 text-sm font-medium transition-colors ${
+              period === p ? "border-accent/40 bg-accent/15 text-accent-2" : "border-line bg-surface-2 text-muted hover:text-ink"
             }`}
           >
             {p} дней
@@ -144,13 +144,13 @@ export function PlanSettings({
           const planId = PLAN_IDS[p.name];
           const alreadyCurrent = active && plan === planId;
           return (
-            <div key={p.name} className={`relative rounded-2xl border p-5 ${p.popular ? "border-accent/50 bg-accent/[0.06]" : "border-line bg-white/[0.02]"}`}>
+            <div key={p.name} className={`relative rounded-sm border p-5 ${p.popular ? "border-accent/50 bg-accent/[0.06]" : "border-line bg-surface-2"}`}>
               {p.popular ? (
-                <span className="absolute -top-2.5 left-4 rounded-full bg-accent px-3 py-0.5 text-[11px] font-semibold text-white">
+                <span className="absolute -top-2.5 left-4 rounded-sm bg-accent px-3 py-0.5 text-[11px] font-semibold text-white">
                   Популярный
                 </span>
               ) : null}
-              <h3 className="font-semibold">{p.name}</h3>
+              <h3 className="font-serif leading-snug text-ink">{p.name}</h3>
               <p className="mt-1 text-sm text-muted">{p.tagline}</p>
               <p className="mt-3 text-2xl font-semibold tabular-nums">
                 {p.prices[period].toLocaleString("ru-RU")} ₽

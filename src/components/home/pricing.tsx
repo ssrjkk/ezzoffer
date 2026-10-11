@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Section, SectionHead } from "@/components/ui";
+import { Section, SectionHead, StatusMessage } from "@/components/ui";
 import { Reveal } from "@/components/reveal";
 import { plans, type PlanPeriod } from "@/lib/data";
 
@@ -54,27 +54,27 @@ export function PricingSection({ compact = false }: { compact?: boolean }) {
   };
 
   return (
-    <Section id={compact ? undefined : "tariff"} className={compact ? "border-t border-line bg-surface/40" : "relative border-y border-line bg-surface/40"}>
+    <Section id={compact ? undefined : "tariff"} className={compact ? "border-t border-line bg-surface-2" : "relative border-y border-line bg-surface-2"}>
       <SectionHead
         eyebrow="Подписочная модель"
         title={
           <>
-            Тариф, который <span className="text-gradient">окупается на первом оффере</span>
+            Тариф, который <span className="text-accent">окупается на первом оффере</span>
           </>
         }
         sub="Попробуйте весь функционал бесплатно и выберите подходящий период"
       />
 
       <div className="mb-10 flex justify-center">
-        <div className="glass inline-flex rounded-full p-1">
+        <div className=" inline-flex rounded-sm p-1">
           {periods.map((p) => (
             <button
               key={p.days}
               type="button"
               onClick={() => setPeriod(p.days)}
-              className={`rounded-full px-5 py-2 text-sm font-medium transition-all ${
+              className={`rounded-sm px-5 py-2 text-sm font-medium transition-all ${
                 period === p.days
-                  ? "bg-accent text-white shadow-[0_0_24px_-6px_rgba(124,92,255,0.8)]"
+                  ? "bg-accent text-white"
                   : "text-muted hover:text-ink"
               }`}
             >
@@ -85,50 +85,52 @@ export function PricingSection({ compact = false }: { compact?: boolean }) {
       </div>
 
       {notice ? (
-        <p className="mx-auto mb-6 max-w-md rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-center text-sm text-red-300">
-          {notice}
-        </p>
+        <div className="mx-auto mb-6 max-w-md">
+          <StatusMessage tone="error">{notice}</StatusMessage>
+        </div>
       ) : null}
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid gap-px border border-line bg-line lg:grid-cols-3">
         {plans.map((plan, idx) => (
-          <Reveal key={plan.name} delay={idx * 90}>
+          <Reveal key={plan.name} delay={idx * 80}>
+            {/*
+              Тарифы разделены линейками, а не заливкой. Раньше «популярный»
+              отличался тремя средствами сразу — градиентом, свечением и парящим
+              бейджем. Теперь его выделяет верхняя черта вдвое толще и
+              моноширинная метка.
+            */}
             <article
-              className={`relative flex h-full flex-col rounded-3xl border p-7 transition-all duration-300 md:p-8 ${
-                plan.popular
-                  ? "border-accent/60 bg-gradient-to-b from-accent/15 to-surface/60 shadow-[0_0_70px_-18px_rgba(124,92,255,0.6)]"
-                  : "border-line bg-surface/60 hover:border-white/20"
+              className={`flex h-full flex-col bg-surface p-7 md:p-8 ${
+                plan.popular ? "border-t-2 border-accent" : "border-t-2 border-transparent"
               }`}
             >
-              {plan.popular ? (
-                <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 rounded-full bg-accent px-4 py-1.5 text-xs font-bold text-white shadow-lg">
-                  Популярный выбор
-                </span>
-              ) : null}
-
-              <p className="text-sm font-semibold uppercase tracking-widest text-accent-2">
-                {plan.name}
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="font-serif text-2xl leading-snug">{plan.name}</p>
+                {plan.popular ? (
+                  <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-accent">
+                    Выбор
+                  </span>
+                ) : null}
+              </div>
+              <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted">
+                {plan.tagline}
               </p>
-              <p className="mt-1.5 text-sm text-muted">{plan.tagline}</p>
 
-              <div className="mt-6 flex items-end gap-2">
-                <span className="text-4xl font-semibold tracking-tight md:text-5xl">
-                  {plan.prices[period].toLocaleString("ru-RU")} ₽
+              <div className="mt-6 flex items-baseline gap-2">
+                <span className="font-mono text-4xl tabular-nums md:text-5xl">
+                  {plan.prices[period].toLocaleString("ru-RU")}
                 </span>
-                <span className="pb-1.5 text-sm text-muted">
-                  за {period} дней
-                </span>
+                <span className="text-sm text-muted">₽ / {period} дн.</span>
               </div>
 
-              <ul className="mt-7 flex-1 space-y-3">
+              <ul className="mt-7 flex-1 space-y-2.5">
                 {plan.features.map((feature) => (
-                  <li key={feature} className="flex items-start gap-2.5 text-sm">
-                    <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-success/15 text-success">
-                      <svg viewBox="0 0 24 24" className="size-3.5" fill="none">
-                        <path d="m5 13 4 4L19 7" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
+                  <li key={feature} className="flex items-start gap-3 text-sm">
+                    {/* Галочка — типографский знак, а не круглая плашка */}
+                    <span aria-hidden className="mt-0.5 font-mono text-success">
+                      ✓
                     </span>
-                    <span className="leading-relaxed text-ink/90">{feature}</span>
+                    <span className="leading-relaxed text-ink">{feature}</span>
                   </li>
                 ))}
               </ul>
@@ -137,10 +139,10 @@ export function PricingSection({ compact = false }: { compact?: boolean }) {
                 type="button"
                 disabled={busy === PLAN_IDS[idx]}
                 onClick={() => choose(PLAN_IDS[idx])}
-                className={`mt-8 inline-flex items-center justify-center gap-2 rounded-full px-6 py-3.5 text-sm font-semibold transition-all ${
+                className={`mt-8 inline-flex items-center justify-center gap-2 rounded-sm px-6 py-3 text-sm font-semibold transition-colors disabled:opacity-50 ${
                   plan.popular
-                    ? "bg-accent text-white shadow-[0_0_40px_-8px_rgba(124,92,255,0.8)] hover:brightness-110"
-                    : "border border-line bg-white/5 text-ink hover:bg-white/10"
+                    ? "bg-accent text-white hover:bg-accent-hover"
+                    : "border border-line-strong text-ink hover:bg-surface-2"
                 }`}
               >
                 {busy === PLAN_IDS[idx] ? "Активируем…" : hasAccount ? "Выбрать тариф" : plan.cta}

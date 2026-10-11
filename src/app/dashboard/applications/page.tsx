@@ -13,7 +13,7 @@ export default async function ApplicationsPage() {
   const initial = listApplications(user.id);
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Отклики</h1>
+      <h1 className="font-serif text-2xl leading-snug text-ink">Отклики</h1>
       <p className="mt-1 text-sm text-muted">
         Статусы обновляются автоматически: отправлен → просмотрен → ответ HR.
       </p>

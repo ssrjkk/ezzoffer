@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Badge } from "@/components/dashboard/ui";
+import { Badge, StatusMessage } from "@/components/dashboard/ui";
 
 export function PlanBanner({
   active,
@@ -35,63 +35,97 @@ export function PlanBanner({
     }
   };
 
+  /*
+   * Баннер.
+   *
+   * Был фиолетово-циановый градиент с фиолетовой же кнопкой — та же
+   * пара, что была на главной в тёмной теме, только светлее. Из-за
+   * градиента пришлось ставить на подпись text-ink вместо text-muted:
+   * у градиента background-color прозрачный, поэтому статический расчёт
+   * контраста считает всё в порядке, а Lighthouse растеризует градиент
+   * и меряет реальные пиксели — и находит провал. То есть градиент не
+   * просто некрасив, он ломает проверку доступности.
+   *
+   * Теперь плоская поверхность с линейкой сверху: контраст считается,
+   * баннер читается как объявление, а не как рекламная плашка.
+   */
   return (
-    <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-violet-500/30 bg-gradient-to-r from-violet-500/15 via-slate-900/50 to-cyan-500/10 p-5 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-violet-500/20 text-violet-300">
-          <svg viewBox="0 0 24 24" className="size-5" fill="none">
-            <path d="M13 2 4.5 13.5h6L11 22l8.5-11.5h-6L13 2Z" fill="currentColor" />
-          </svg>
-        </span>
-        <div>
-          <p className="font-semibold text-white">
-            {trialStarted ? "Пробный период завершён" : "Запустите поиск прямо сейчас"}
-          </p>
-          <p className="mt-0.5 text-sm text-slate-400">
-            {trialStarted
-              ? "Продлите тариф или попробуйте снова — отклики, вакансии и статистика доступны после активации."
-              : "24 часа бесплатно, 50 откликов в день, без привязки карты."}
-          </p>
-          {error ? <p className="mt-1 text-xs text-red-300">{error}</p> : null}
-        </div>
+    <div className="mb-6 flex flex-col gap-4 border-t-2 border-accent bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-accent">
+          {trialStarted ? "Пробный период завершён" : "Бесплатный период"}
+        </p>
+        <p className="mt-2 font-serif text-lg leading-snug text-ink">
+          {trialStarted
+            ? "Продлите тариф, чтобы вернуться к откликам"
+            : "Запустите поиск прямо сейчас"}
+        </p>
+        <p className="measure mt-1.5 text-sm leading-relaxed text-muted">
+          {trialStarted
+            ? "Отклики, вакансии и статистика доступны после активации."
+            : "24 часа бесплатно, 50 откликов в день, без привязки карты."}
+        </p>
+        <StatusMessage tone="error" className="mt-3 py-2 text-xs">
+          {error}
+        </StatusMessage>
       </div>
+
       {!trialStarted ? (
         <button
           type="button"
           onClick={startTrial}
           disabled={busy}
-          className="inline-flex flex-none items-center justify-center gap-2 rounded-full bg-violet-600 px-5 py-2.5 text-sm font-semibold text-white shadow-[0_0_28px_-8px_rgba(124,92,255,0.8)] transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          className="inline-flex flex-none items-center justify-center gap-2 rounded-sm bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
         >
           {busy ? "Активация…" : "Активировать бесплатно"}
         </button>
       ) : (
-        <div>
-          <Badge tone="warn">Ожидание тарифа</Badge>
-        </div>
+        <Badge tone="warn">Ожидание тарифа</Badge>
       )}
     </div>
   );
 }
 
+/**
+ * Счётчик дневного лимита.
+ *
+ * Полоса заполнения была градиентом фиолетовый→циан — два не связанных
+ * между собой цвета на элементе, который должен сообщать об одном числе.
+ * Теперь одна заливка: акцент в норме, красная на исчерпанном лимите,
+ * и никакого перехода между оттенками.
+ */
 export function TodayLimitBar({ today, todayLimit }: { today: number; todayLimit: number }) {
   const pct = todayLimit > 0 ? Math.min(100, Math.round((today / todayLimit) * 100)) : 0;
+  const spent = pct >= 100;
+
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+    <div className="border-t-2 border-ink pt-4">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-sm text-slate-400">Откликов за сегодня</span>
-        <span className="text-2xl font-semibold tabular-nums text-white">
+        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+          Откликов за сегодня
+        </span>
+        <span className="font-mono text-2xl tabular-nums text-ink">
           {today}
-          <span className="text-sm font-normal text-slate-500"> / {todayLimit}</span>
+          <span className="text-sm text-muted"> / {todayLimit}</span>
         </span>
       </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/5">
+
+      <div
+        className="mt-3 h-1.5 bg-line"
+        role="progressbar"
+        aria-valuenow={today}
+        aria-valuemin={0}
+        aria-valuemax={todayLimit}
+        aria-label="Использование дневного лимита откликов"
+      >
         <div
-          className={`h-full rounded-full transition-all duration-700 ${pct >= 100 ? "bg-amber-400" : "bg-gradient-to-r from-violet-500 to-cyan-400"}`}
+          className={`h-full transition-all duration-700 ${spent ? "bg-danger" : "bg-accent"}`}
           style={{ width: `${pct}%` }}
         />
       </div>
-      <p className="mt-2 text-xs text-slate-500">
-        {pct >= 100 ? "Лимит исчерпан — сброс в полночь" : `Осталось ${todayLimit - today} откликов`}
+
+      <p className="mt-2 text-xs text-muted">
+        {spent ? "Лимит исчерпан — сброс в полночь" : `Осталось ${todayLimit - today} откликов`}
       </p>
     </div>
   );

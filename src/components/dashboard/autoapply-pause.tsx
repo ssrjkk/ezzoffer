@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Badge, Panel, btnPrimary, btnGhost } from "@/components/dashboard/ui";
+import { Badge, Panel, btnPrimary, btnGhost, StatusMessage } from "@/components/dashboard/ui";
 
 export function AutoApplyPause({ initialPaused }: { initialPaused: boolean }) {
   const [paused, setPaused] = useState(initialPaused);
@@ -49,7 +49,7 @@ export function AutoApplyPause({ initialPaused }: { initialPaused: boolean }) {
     <Panel>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-semibold tracking-tight">Автоотклики</h2>
+          <h2 className="font-serif text-lg leading-snug text-ink">Автоотклики</h2>
           <p className="mt-1 text-sm text-muted">
             Пауза мгновенно останавливает все автоотклики и активные поиски. Настройки сохраняются.
           </p>
@@ -57,9 +57,9 @@ export function AutoApplyPause({ initialPaused }: { initialPaused: boolean }) {
         <Badge tone={paused ? "warn" : "success"}>{paused ? "На паузе" : "Активны"}</Badge>
       </div>
 
-      {error ? (
-        <p className="mt-3 rounded-xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-300">{error}</p>
-      ) : null}
+      <StatusMessage tone="error" className="mt-3">
+        {error}
+      </StatusMessage>
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <button type="button" disabled={busy} onClick={toggle} className={paused ? btnPrimary : btnGhost}>

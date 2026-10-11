@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Section, Eyebrow } from "@/components/ui";
+import { Reveal } from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "Правила платформ и безопасность аккаунта",
@@ -10,15 +12,19 @@ export const metadata: Metadata = {
 const rules = [
   {
     h: "Отклики отправляются от вашего имени",
-    p: "EZOffer использует официальные механизмы платформы (API/учётную запись пользователя). Работодатель видит обычный отклик — без пометки «автоматический».",
+    p: "EZOffer использует официальный API платформы и вашу учётную запись. Работодатель видит обычный отклик — без пометки «автоматический».",
   },
   {
-    h: "Мы не обходим защиту платформ",
-    p: "Сервис не взламывает, не имитирует поддельные действия и не использует недокументированные интерфейсы. Все отклики — реальные, через вашу учётную запись.",
+    h: "Мы храним токен доступа к вашему аккаунту",
+    p: "Без этого отклики отправить нельзя: сервис обращается к платформе от вашего имени. Токен хранится в нашей базе, пока вы не отвяжете аккаунт или не отзвёте доступ на стороне платформы. Отзыв доступа блокирует и синхронизацию.",
   },
   {
-    h: "Риск блокировки существует",
-    p: "Массовые автоматические отклики могут противоречить правилам платформы. Мы встраиваем умеренные лимиты и паузы, но не можем гарантировать отсутствие блокировки. Используйте сервис ответственно.",
+    h: "Мы выдерживаем темп, чтобы не выглядеть ботом",
+    p: "Сервис отправляет отклики не подряд, а с паузами: случайный интервал от 45 секунд до 3 минут, рабочие часы по вашему часовому поясу, лимит в 50 откликов в сутки и 12 в час. Это сделано, чтобы платформа не распознала автоматизацию.",
+  },
+  {
+    h: "Риск блокировки всё равно есть",
+    p: "Даже с такими паузами массовые автоматические отклики могут нарушать правила платформы. Лимиты уменьшают риск, но не исключают его, и ответственность за аккаунт остаётся на вас.",
   },
   {
     h: "Мгновенная пауза",
@@ -26,47 +32,107 @@ const rules = [
   },
 ];
 
+const cautions = [
+  "Не гонитесь за потолком лимитов — умеренный темп безопаснее.",
+  "Откликайтесь на релевантные вакансии, а не «во всё подряд».",
+  "Поддерживайте живую активность профиля: отвечайте в чатах, обновляйте резюме.",
+  "При любом предупреждении платформы немедленно ставьте автоотклики на паузу.",
+];
+
+/*
+ * Правила платформ.
+ *
+ * Страница юридическая: её читают целиком, по порядку, и чаще всего
+ * ищут конкретный пункт. Прежний вид — четыре одинаковые карточки с
+ * заливкой плюс жёлтая коробка «Важно понимать»: карточки не имеют
+ * нумерации, поэтому пункт, на который ссылаются, невозможно назвать.
+ *
+ * Теперь это документ: нумерованные разделы через линейку, заголовок
+ * антиквой, предупреждение — отдельной инверсной полосой, чтобы его
+ * невозможно было пропустить.
+ *
+ * Отдельно про тон: прежний пункт «Мы не обходим защиту платформ»
+ * противоречил коду. anti-ban.ts реализует именно обходное поведение —
+ * джиттер 45–180 секунд, рабочие часы 9:00–20:00, суточный лимит, —
+ * чтобы отклики не попадали под антибот. Формулировка ниже описывает,
+ * что сервис делает на самом деле.
+ */
 export default function PlatformRulesPage() {
   return (
-    <div className="container-x py-12 md:py-16">
-      <div className="max-w-3xl">
-        <p className="text-sm font-semibold uppercase tracking-widest text-accent-2">Безопасность</p>
-        <h1 className="mt-3 text-3xl font-semibold leading-tight tracking-tight md:text-4xl">
-          Правила платформ и безопасность аккаунта
+    <>
+      <Section className="border-t-0 pt-16 md:pt-24">
+        <Eyebrow>Безопасность</Eyebrow>
+        <h1 className="display mt-4 max-w-4xl text-balance text-4xl md:text-6xl">
+          Правила платформ и <span className="text-accent">безопасность аккаунта</span>
         </h1>
-        <p className="mt-4 text-base leading-relaxed text-muted">
-          Честная позиция EZOffer: мы автоматизируем рутину в рамках официальных механизмов, но вы обязаны понимать
-          правила платформы, на которой ищете работу.
+        <p className="measure mt-6 text-base leading-relaxed text-muted md:text-lg">
+          Честная позиция EZOffer: мы автоматизируем рутину в рамках официальных механизмов,
+          но вы обязаны понимать правила платформы, на которой ищете работу.
         </p>
-      </div>
+      </Section>
 
-      <div className="mt-10 space-y-4">
-        {rules.map((r) => (
-          <section key={r.h} className="rounded-3xl border border-line bg-surface/60 p-7">
-            <h2 className="text-xl font-semibold tracking-tight">{r.h}</h2>
-            <p className="mt-3 text-sm leading-relaxed text-muted md:text-base">{r.p}</p>
-          </section>
-        ))}
-      </div>
+      <Section className="pt-0">
+        <div className="border-t-2 border-ink">
+          <ol>
+            {rules.map((r, idx) => (
+              <Reveal as="li" key={r.h} delay={idx * 60} className="border-b border-line py-8">
+                <div className="grid gap-x-10 gap-y-2 md:grid-cols-12">
+                  <p className="font-mono text-sm tabular-nums text-accent md:col-span-1">
+                    {String(idx + 1).padStart(2, "0")}
+                  </p>
+                  <div className="md:col-span-11">
+                    <h2 className="font-serif text-xl leading-snug text-ink md:text-2xl">{r.h}</h2>
+                    <p className="measure mt-3 text-sm leading-relaxed text-muted md:text-base">
+                      {r.p}
+                    </p>
+                  </div>
+                </div>
+              </Reveal>
+            ))}
+          </ol>
+        </div>
 
-      <div className="mt-12 rounded-3xl border border-warn/30 bg-warn/10 p-7">
-        <h2 className="text-xl font-semibold tracking-tight">Важно понимать</h2>
-        <ul className="mt-4 space-y-2 text-sm leading-relaxed text-muted">
-          <li>• Не гонитесь за потолком лимитов — умеренный темп безопаснее.</li>
-          <li>• Откликайтесь на релевантные вакансии, а не «во всё подряд».</li>
-          <li>• Поддерживайте живую активность профиля: отвечайте в чатах, обновляйте резюме.</li>
-          <li>• При любом предупреждении платформы немедленно ставьте автоотклики на паузу.</li>
-        </ul>
-      </div>
+        <div className="mt-14 bg-ink px-7 py-9 md:px-10 md:py-11">
+          <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-paper">
+            Важно понимать
+          </p>
+          <h2 className="mt-3 font-serif text-xl leading-snug text-paper md:text-2xl">
+            Четыре правила, которые снижают риск блокировки
+          </h2>
+          <ul className="mt-6 grid gap-x-10 gap-y-3 md:grid-cols-2">
+            {cautions.map((c) => (
+              <li key={c} className="flex gap-3 text-sm leading-relaxed text-paper">
+                <span aria-hidden className="mt-2 size-1 shrink-0 bg-accent" />
+                {c}
+              </li>
+            ))}
+          </ul>
+        </div>
 
-      <div className="mt-8">
-        <Link
-          href="/dashboard/settings"
-          className="inline-flex items-center justify-center rounded-full bg-accent px-6 py-3 text-sm font-semibold text-white transition hover:brightness-110"
-        >
-          Перейти в кабинет
-        </Link>
-      </div>
-    </div>
+        <div className="mt-12 border-t-2 border-ink pt-8">
+          <h2 className="font-serif text-2xl md:text-3xl">Поставить автоотклики на паузу</h2>
+          <p className="measure mt-3 leading-relaxed text-muted">
+            Это делается в кабинете одним переключателем — настройки поисков при этом сохраняются,
+            и вернуться к откликам можно в любой момент.
+          </p>
+          <div className="mt-7 flex flex-wrap items-center gap-6">
+            <Link
+              href="/dashboard/settings"
+              className="inline-flex items-center gap-2 rounded-sm bg-accent px-7 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+            >
+              Перейти в кабинет
+              <span aria-hidden>→</span>
+            </Link>
+            <Link
+              href="/faq"
+              className="inline-flex items-center gap-2 border-b border-ink pb-0.5 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
+            >
+              Частые вопросы
+              <span aria-hidden>→</span>
+            </Link>
+          </div>
+        </div>
+      </Section>
+    </>
   );
 }

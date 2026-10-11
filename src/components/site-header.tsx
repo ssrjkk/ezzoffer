@@ -4,6 +4,19 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
+/*
+ * Шапка.
+ *
+ * Прежний вариант: пилюли в навигации, полупрозрачные белые подложки,
+ * фиолетовое свечение под кнопками, градиентная подложка логотипа и
+ * градиентное слово в логотипе. На бумаге белые полупрозрачные слои
+ * исчезают, а свечения остаются сиять — то есть шапка выглядела бы
+ * «частично переведённой».
+ *
+ * Теперь это газетная шапка: линейка снизу, навигация моноширинным
+ * (как колонтитул), активный пункт отмечен красной черточкой, а не заливкой.
+ */
+
 const nav = [
   { href: "/#how-it-work", label: "Как это работает" },
   { href: "/pricing", label: "Тарифы" },
@@ -16,18 +29,13 @@ const nav = [
 
 export function Logo({ className = "" }: { className?: string }) {
   return (
-    <Link href="/" className={`group flex items-center gap-2.5 ${className}`} aria-label="EZOffer — на главную">
-      <span className="relative grid size-9 place-items-center rounded-xl bg-gradient-to-br from-accent to-accent-2 shadow-[0_0_24px_-6px_rgba(124,92,255,0.9)] transition-transform group-hover:rotate-[-8deg]">
-        <svg viewBox="0 0 24 24" fill="none" className="size-5 text-white">
-          <path
-            d="M13 2 4.5 13.5h6L11 22l8.5-11.5h-6L13 2Z"
-            fill="currentColor"
-          />
+    <Link href="/" className={`flex items-center gap-2.5 ${className}`} aria-label="EZOffer — на главную">
+      <span className="grid size-8 shrink-0 place-items-center rounded-sm bg-ink">
+        <svg viewBox="0 0 24 24" fill="none" className="size-4 text-paper" aria-hidden>
+          <path d="M13 2 4.5 13.5h6L11 22l8.5-11.5h-6L13 2Z" fill="currentColor" />
         </svg>
       </span>
-      <span className="text-lg font-bold tracking-tight">
-        EZ<span className="text-gradient">Offer</span>
-      </span>
+      <span className="font-serif text-lg font-semibold tracking-tight text-ink">EZOffer</span>
     </Link>
   );
 }
@@ -45,48 +53,47 @@ export function SiteHeader() {
   }, [pathname]);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-line bg-bg/70 backdrop-blur-xl">
-      <div className="container-x flex h-16 items-center justify-between gap-4 md:h-[72px]">
+    <header className="sticky top-0 z-50 border-b border-line bg-bg">
+      <div className="container-x flex h-14 items-center justify-between gap-4 md:h-16">
         <Logo />
 
-        <nav className="hidden items-center gap-1 lg:flex" aria-label="Основная навигация">
+        <nav className="hidden items-center gap-6 lg:flex" aria-label="Основная навигация">
           {nav.map((item) => {
             const active = item.href !== "/#how-it-work" && pathname === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`rounded-full px-3.5 py-2 text-sm transition-colors ${
-                  active
-                    ? "bg-white/10 text-ink"
-                    : "text-muted hover:bg-white/5 hover:text-ink"
+                aria-current={active ? "page" : undefined}
+                className={`relative py-2 font-mono text-xs uppercase tracking-[0.1em] transition-colors ${
+                  active ? "text-accent" : "text-muted hover:text-ink"
                 }`}
               >
                 {item.label}
+                {active ? (
+                  <span aria-hidden className="absolute inset-x-0 -bottom-px h-0.5 bg-accent" />
+                ) : null}
               </Link>
             );
           })}
         </nav>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {user ? (
             <Link
               href="/dashboard"
-              className="hidden rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-[0_0_30px_-8px_rgba(124,92,255,0.8)] transition hover:brightness-110 sm:block"
+              className="hidden rounded-sm bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover sm:block"
             >
               Кабинет
             </Link>
           ) : (
             <>
-              <Link
-                href="/login"
-                className="hidden rounded-full px-4 py-2 text-sm font-medium text-muted transition-colors hover:text-ink sm:block"
-              >
+              <Link href="/login" className="hidden text-sm font-medium text-muted transition-colors hover:text-ink sm:block">
                 Войти
               </Link>
               <Link
                 href="/signup"
-                className="hidden rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-white shadow-[0_0_30px_-8px_rgba(124,92,255,0.8)] transition hover:brightness-110 sm:block"
+                className="hidden rounded-sm bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover sm:block"
               >
                 24 часа бесплатно
               </Link>
@@ -95,43 +102,39 @@ export function SiteHeader() {
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            className="grid size-10 place-items-center rounded-xl border border-line bg-white/5 lg:hidden"
+            className="grid size-9 place-items-center rounded-sm border border-line-strong lg:hidden"
             aria-expanded={open}
             aria-label={open ? "Закрыть меню" : "Открыть меню"}
           >
             <span className="sr-only">Меню</span>
-            <div className="flex w-5 flex-col gap-1.5">
-              <span
-                className={`h-0.5 rounded bg-ink transition-transform ${open ? "translate-y-2 rotate-45" : ""}`}
-              />
-              <span className={`h-0.5 rounded bg-ink transition-opacity ${open ? "opacity-0" : ""}`} />
-              <span
-                className={`h-0.5 rounded bg-ink transition-transform ${open ? "-translate-y-2 -rotate-45" : ""}`}
-              />
+            <div className="flex w-4 flex-col gap-1">
+              <span className={`h-px w-full bg-ink transition-transform ${open ? "translate-y-[3px] rotate-45" : ""}`} />
+              <span className={`h-px w-full bg-ink transition-opacity ${open ? "opacity-0" : ""}`} />
+              <span className={`h-px w-full bg-ink transition-transform ${open ? "-translate-y-[3px] -rotate-45" : ""}`} />
             </div>
           </button>
         </div>
       </div>
 
       {open ? (
-        <div className="border-t border-line bg-bg/95 backdrop-blur-xl lg:hidden">
-          <nav className="container-x flex flex-col gap-1 py-4" aria-label="Мобильная навигация">
+        <div className="border-t border-line bg-bg lg:hidden">
+          <nav className="container-x flex flex-col py-3" aria-label="Мобильная навигация">
             {nav.map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={() => setOpen(false)}
-                className="rounded-xl px-3 py-3 text-sm font-medium text-muted transition-colors hover:bg-white/5 hover:text-ink"
+                className="border-b border-line py-3 font-mono text-xs uppercase tracking-[0.1em] text-muted transition-colors last:border-b-0 hover:text-ink"
               >
                 {item.label}
               </Link>
             ))}
-            <div className="mt-3 flex flex-col gap-2 border-t border-line pt-4">
+            <div className="mt-4 flex flex-col gap-2">
               {user ? (
                 <Link
                   href="/dashboard"
                   onClick={() => setOpen(false)}
-                  className="rounded-full bg-accent px-5 py-3 text-center text-sm font-semibold text-white"
+                  className="rounded-sm bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white"
                 >
                   Кабинет
                 </Link>
@@ -140,14 +143,14 @@ export function SiteHeader() {
                   <Link
                     href="/login"
                     onClick={() => setOpen(false)}
-                    className="rounded-full border border-line px-5 py-3 text-center text-sm font-semibold text-ink"
+                    className="rounded-sm border border-line-strong px-4 py-2.5 text-center text-sm font-semibold text-ink"
                   >
                     Войти
                   </Link>
                   <Link
                     href="/signup"
                     onClick={() => setOpen(false)}
-                    className="rounded-full bg-accent px-5 py-3 text-center text-sm font-semibold text-white"
+                    className="rounded-sm bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white"
                   >
                     24 часа бесплатно
                   </Link>

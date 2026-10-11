@@ -121,13 +121,35 @@ export async function getValidHhToken(
   user: Pick<User, "id" | "hh_token" | "hh_token_expires_at" | "hh_refresh_token">,
 ): Promise<{ token: string } | null> {
   if (!user.hh_token) return null;
-  if (user.hh_token_expires_at && user.hh_token_expires_at > Date.now() + 60_000) {
+
+  /*
+   * Срок не задан — токен всё равно пробуем.
+   *
+   * Раньше здесь стояло условие `hh_token_expires_at && ... > Date.now()`, и при
+   * незаполненном сроке функция молча возвращала null. Автоотклик на этом
+   * просто ничего не отправлял: человек привязал аккаунт, видел «всё
+   * настроено», а откликов не было и объяснения тоже. Это худший вид отказа
+   * — тихий.
+   *
+   * Проверить срок нечем, но и отказываться на этом основании незачем: если
+   * токен протух, hh ответит 401, провайдер вернёт ошибку, сработает backoff
+   * анти-бана и статус будет виден. Лучше один отказ с причиной, чем тишина.
+   */
+  const expiresAt = user.hh_token_expires_at ?? 0;
+  if (expiresAt === 0 || expiresAt > Date.now() + 60_000) {
     return { token: user.hh_token };
   }
-  if (!user.hh_refresh_token || !hhConfigured()) return null;
+
+  // Срок ушёл в прошлое, но обновить нечем (нет refresh_token или OAuth не
+  // настроен) — пробуем старый: он мог оказаться живым, а мог и нет.
+  if (!user.hh_refresh_token || !hhConfigured()) {
+    return { token: user.hh_token };
+  }
 
   const refreshed = await refreshAccessToken(user.hh_refresh_token);
-  if (!refreshed.access_token) return null;
+  if (!refreshed.access_token) {
+    return { token: user.hh_token };
+  }
   db.prepare(
     `UPDATE users SET hh_token = ?, hh_token_expires_at = ?, hh_refresh_token = ? WHERE id = ?`,
   ).run(

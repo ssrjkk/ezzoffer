@@ -58,7 +58,17 @@ export type VacancyApplyResult = {
 export interface VacancyProvider {
   source: VacancySource;
   label: string;
+  /** Можно ли обновить каталог этого источника. Для hh нужен токен приложения. */
   isAvailable(): boolean;
+  /**
+   * Можно ли отправить отклик от имени пользователя.
+   *
+   * Отдельный метод не избыточен: у hh поиск требует токена приложения, а
+   * отправка — только пользовательского. Проверка одним `isAvailable()`
+   * выключала автоотклик у всех, у кого сервис не настроен на поиск, хотя их
+   * собственный токен hh работал.
+   */
+  canApply?(userToken: string | null, resumeId: string | null): boolean;
   fetchVacancies(query: VacancyQuery): Promise<VacancyFetchResult>;
   apply?(
     vacancy: Vacancy,

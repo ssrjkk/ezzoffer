@@ -20,7 +20,7 @@ export default async function LettersPage() {
   }[];
   return (
     <div>
-      <h1 className="text-2xl font-semibold tracking-tight">Сопроводительные письма</h1>
+      <h1 className="font-serif text-2xl leading-snug text-ink">Сопроводительные письма</h1>
       <p className="mt-1 text-sm text-muted">
         Шаблоны писем подставляются в отклики и делают их персональными для каждого работодателя.
       </p>

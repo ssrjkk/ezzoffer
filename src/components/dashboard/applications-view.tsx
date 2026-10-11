@@ -129,10 +129,10 @@ export function ApplicationsView({ initial }: { initial: ApplicationItem[] }) {
               key={f.id}
               type="button"
               onClick={() => setFilter(f.id)}
-              className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
+              className={`rounded-sm border px-4 py-2 text-sm font-medium transition-colors ${
                 filter === f.id
-                  ? "border-accent/40 bg-accent/15 text-accent"
-                  : "border-line bg-white/5 text-muted hover:text-ink"
+                  ? "border-accent/40 bg-accent/15 text-accent-2"
+                  : "border-line bg-surface-2 text-muted hover:text-ink"
               }`}
             >
               {f.label}
@@ -156,11 +156,11 @@ export function ApplicationsView({ initial }: { initial: ApplicationItem[] }) {
           {shown.map((a) => (
             <div
               key={a.id}
-              className={`glass flex flex-col gap-3 rounded-2xl p-5 sm:flex-row sm:items-center ${a.withdrawn ? "opacity-50" : ""}`}
+              className={` flex flex-col gap-3 rounded-sm p-5 sm:flex-row sm:items-center ${a.withdrawn ? "opacity-50" : ""}`}
             >
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="font-semibold">{a.job?.title ?? a.job_slug}</h3>
+                  <h2 className="font-serif leading-snug text-ink">{a.job?.title ?? a.job_slug}</h2>
                   <Badge tone={toneFor(a)}>
                     {a.withdrawn ? "Отозван" : a.status_label}
                   </Badge>
@@ -209,7 +209,7 @@ export function ApplicationsView({ initial }: { initial: ApplicationItem[] }) {
                     ) : a.response === "question" ? (
                       <span className="text-warn">Вопрос от HR в чате — ответьте как можно скорее</span>
                     ) : (
-                      <span className="text-red-300">Отказ — двигаемся дальше</span>
+                      <span className="text-danger">Отказ — двигаемся дальше</span>
                     )}
                   </p>
                 ) : null}
@@ -228,7 +228,7 @@ export function ApplicationsView({ initial }: { initial: ApplicationItem[] }) {
                     {markingExternal === a.id ? "Отмечаем…" : "Отметить отклик"}
                   </button>
                   <input
-                    className="w-48 rounded-lg border border-line bg-bg/60 px-2.5 py-1.5 text-xs text-ink outline-none transition placeholder:text-muted/50 focus:border-accent"
+                    className="w-48 rounded-sm border border-line-strong bg-surface-2 px-2.5 py-1.5 text-xs text-ink outline-none transition placeholder:text-muted focus:border-accent"
                     placeholder="Ссылка на отклик"
                     value={externalUrl[a.id] ?? ""}
                     onChange={(e) => setExternalUrl((prev) => ({ ...prev, [a.id]: e.target.value }))}

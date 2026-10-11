@@ -1,0 +1,338 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { execSync } from "node:child_process";
+
+/**
+ * Контраст палитры (WCAG 2.1).
+ *
+ * Lighthouse стабильно репортил color-contrast на лендинге, и причины были
+ * неочевидны:
+ *  - --color-muted #6b6b80 давал 3.80:1 к основному фону (нужно 4.5:1);
+ *  - --color-accent #6366f1 давал 4.47:1 с белым текстом на кнопках —
+ *    всего на 0.03 ниже порога;
+ *  - --color-accent-2 #7c5cff давал 4.45:1 на секции с полупрозрачной
+ *    поверхностью (эффективный фон #0d0d13, а не чистый #0a0a0f).
+ *
+ * Тест считает контраст по формуле WCAG и сверяет его с реальными значениями
+ * из globals.css, чтобы случайный «возврат» более тёмного оттенка снова не
+ * проскочил незамеченным.
+ */
+
+const CSS = readFileSync("src/app/globals.css", "utf8");
+
+/** Относительная яркость по WCAG. */
+function luminance(hex: string): number {
+  const h = hex.replace("#", "").trim();
+  const rgb = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+  const lin = rgb.map((c) =>
+    c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4),
+  );
+  return 0.2126 * lin[0]! + 0.7152 * lin[1]! + 0.0722 * lin[2]!;
+}
+
+function contrast(a: string, b: string): number {
+  const l1 = luminance(a);
+  const l2 = luminance(b);
+  const [hi, lo] = l1 > l2 ? [l1, l2] : [l2, l1];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+/** Читает переменную из @theme. */
+function cssVar(name: string): string {
+  // Разрешаем дубликаты: в CSS действует последнее объявление.
+  const re = new RegExp(`--color-${name}:\\s*(#[0-9a-fA-F]{6})\\s*;`, "g");
+  let last: string | null = null;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(CSS)) !== null) last = m[1]!;
+  assert.ok(last, `переменная --color-${name} не найдена в globals.css`);
+  return last;
+}
+
+/** Фон секции: полупрозрачная поверхность в 40% поверх основного фона. */
+function blend(front: string, back: string, alpha: number): string {
+  const f = front.replace("#", "");
+  const b = back.replace("#", "");
+  const mix = (i: number): number => {
+    const cf = parseInt(f.slice(i, i + 2), 16);
+    const cb = parseInt(b.slice(i, i + 2), 16);
+    return Math.round(cf * alpha + cb * (1 - alpha));
+  };
+  return `#${[0, 2, 4].map((i) => mix(i).toString(16).padStart(2, "0")).join("")}`;
+}
+
+const AA_TEXT = 4.5;
+
+test("приглушённый текст проходит AA на основном фоне", () => {
+  const ratio = contrast(cssVar("muted"), cssVar("bg"));
+  assert.ok(
+    ratio >= AA_TEXT,
+    `--color-muted ${cssVar("muted")} даёт ${ratio.toFixed(2)}:1 — нужно ${AA_TEXT}:1`,
+  );
+});
+
+test("приглушённый текст проходит AA на секции с полупрозрачной поверхностью", () => {
+  const sectionBg = blend(cssVar("surface"), cssVar("bg"), 0.4);
+  const ratio = contrast(cssVar("muted"), sectionBg);
+  assert.ok(
+    ratio >= AA_TEXT,
+    `--color-muted даёт ${ratio.toFixed(2)}:1 на ${sectionBg} — нужно ${AA_TEXT}:1`,
+  );
+});
+
+test("белый текст на акцентной кнопке проходит AA", () => {
+  const ratio = contrast("#ffffff", cssVar("accent"));
+  assert.ok(
+    ratio >= AA_TEXT,
+    `белый на --color-accent ${cssVar("accent")} даёт ${ratio.toFixed(2)}:1 — нужно ${AA_TEXT}:1`,
+  );
+});
+
+test("состояние hover кнопки тоже проходит AA", () => {
+  const ratio = contrast("#ffffff", cssVar("accent-hover"));
+  assert.ok(
+    ratio >= AA_TEXT,
+    `белый на hover ${cssVar("accent-hover")} даёт ${ratio.toFixed(2)}:1 — нужно ${AA_TEXT}:1`,
+  );
+});
+
+/**
+ * Кнопка удаления и её наведение.
+ *
+ * Отдельная проверка, потому что токен danger-hover добавлялся позже всех
+ * и без неё остался бы непроверенным: тесты палитры перечисляют лишь те
+ * значения, про которые их автор знал. Убеждаемся, что оба состояния
+ * существуют и держат порог с белым текстом.
+ */
+test("кнопка удаления и её наведение проходят AA", () => {
+  for (const [name, token] of [
+    ["обычное", "danger"],
+    ["наведение", "danger-hover"],
+  ] as const) {
+    const ratio = contrast("#ffffff", cssVar(token));
+    assert.ok(
+      ratio >= AA_TEXT,
+      `белый на --color-${token} ${cssVar(token)} даёт ${ratio.toFixed(2)}:1 (${name}) — нужно ${AA_TEXT}:1`,
+    );
+  }
+});
+
+test("надзаголовки акцентом-2 проходят AA на подложке секции", () => {
+  const sectionBg = blend(cssVar("surface"), cssVar("bg"), 0.4);
+  const ratio = contrast(cssVar("accent-2"), sectionBg);
+  assert.ok(
+    ratio >= AA_TEXT,
+    `--color-accent-2 ${cssVar("accent-2")} даёт ${ratio.toFixed(2)}:1 на ${sectionBg}`,
+  );
+});
+
+test("основной текст проходит AAA на фоне", () => {
+  const ratio = contrast(cssVar("ink"), cssVar("bg"));
+  assert.ok(ratio >= 7, `--color-ink даёт ${ratio.toFixed(2)}:1 — нужно 7:1 (AAA)`);
+});
+
+test("в палитре нет дублирующихся переменных", () => {
+  // Дубликат --color-accent-2 перекрывал бы исправленное значение старым,
+  // и правка контраста молча ничего не меняла бы.
+  const seen = new Map<string, number>();
+  const re = /--color-([a-z0-9-]+):/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(CSS)) !== null) {
+    seen.set(m[1]!, (seen.get(m[1]!) ?? 0) + 1);
+  }
+  const dupes = [...seen.entries()].filter(([, n]) => n > 1).map(([k]) => k);
+  assert.deepEqual(dupes, [], `объявлено несколько раз: ${dupes.join(", ")}`);
+});
+
+test("в globals.css есть поддержка prefers-reduced-motion", () => {
+  assert.match(CSS, /@media \(prefers-reduced-motion: reduce\)/);
+});
+
+/**
+ * Регрессия: паттерн «bg-accent/N + text-accent» — цветной текст на подложке
+ * своего же цвета. Такой акцент рассчитан на РОЛЬ ФОНА (белый текст на нём
+ * даёт 5.22:1), но как цвет текста он проваливается: на bg-accent/15 получалось
+ * 3.78:1, и Lighthouse репортил color-contrast на /internships и
+ * /resume-examples.
+ *
+ * Для текста на такой подложке нужен accent-2 (осветлённый): 4.74:1 на
+ * bg-accent/15 и 4.48:1 на bg-accent/10. Проверяем, что паттерн не вернулся.
+ */
+test("цветной текст на подложке своего цвета использует accent-2", () => {
+  const files = execSync("git ls-files src", { encoding: "utf8" })
+    .trim()
+    .split("\n")
+    .filter((f) => f.endsWith(".tsx"));
+
+  const offenders: string[] = [];
+  for (const file of files) {
+    const content = readFileSync(file, "utf8");
+    // Раньше проверка брала только литерал className="..." сразу после
+    // открывающей кавычки, и потому пропускала className={cond ? "a b" : "c"} —
+    // именно там прятались два нарушения в кабинете (applications-view,
+    // plan-settings). Теперь берём участок между ближайшими кавычками.
+    for (const m of content.matchAll(/bg-accent\/[\d.]+/g)) {
+      const before = content.lastIndexOf('"', m.index);
+      const after = content.indexOf('"', m.index + m[0].length);
+      if (before === -1 || after === -1) continue;
+      const cls = content.slice(before + 1, after);
+      if (/\btext-accent\b/.test(cls) && !/\btext-accent-2\b/.test(cls)) {
+        offenders.push(`${file}: ${cls.slice(0, 70)}`);
+      }
+    }
+  }
+  assert.deepEqual(offenders, [], `text-accent на подложке bg-accent/* не проходит AA:\n${offenders.join("\n")}`);
+});
+
+/**
+ * Регрессия: в кабинете текст красили сырыми цветами Tailwind
+ * (text-slate-400/500), минуя палитру, которую мы откалибровали под WCAG
+ * и закрыли тестами.
+ *
+ * text-slate-500 (#64748b) давал 3.78–4.15:1 при пороге 4.5 — Lighthouse
+ * репортил color-contrast на /dashboard и /dashboard/settings.
+ *
+ * Сырые цвета опасны именно обходом: контрастные тесты читают globals.css,
+ * а эти значения живут в разметке, и проверка их не видит. Тест закрывает щель.
+ */
+test("нейтральный текст не красится сырыми цветами Tailwind", () => {
+  const files = execSync("git ls-files src", { encoding: "utf8" })
+    .trim()
+    .split("\n")
+    .filter((f) => /\.tsx$/.test(f));
+
+  // Проверяем только НЕЙТРАЛЬНУЮ шкалу: она заменяет приглушённый текст,
+  // и именно на ней контраст падал ниже порога. Семантические цвета
+  // (red/amber/pink в hero и плашках) сознательно оставлены как есть —
+  // их перевод в токены меняет дизайн и заслуживает отдельного решения.
+  const offenders: string[] = [];
+  for (const file of files) {
+    const content = readFileSync(file, "utf8");
+    for (const m of content.matchAll(
+      /(?:text|bg|border|ring|fill|stroke|from|via|to|divide|shadow|accent|caret)-(?:slate|gray|zinc|neutral|stone)-[0-9]{2,3}\b/g,
+    )) {
+      offenders.push(`${file}: ${m[0]}`);
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `нейтральные цвета вне палитры — их контраст ничем не проверяется:\n${offenders.join("\n")}`,
+  );
+});
+
+/**
+ * Цветные шкалы Tailwind.
+ *
+ * Регрессия из графика статистики: легенда и столбцы красились двумя
+ * разными наборами — легенда сырыми violet-500/cyan-400/emerald-400,
+ * столбцы токенами темы. Цвет в легенде переставал означать тот цвет,
+ * который нарисован, и проверить это было нечем: тесты палитры читают
+ * globals.css, а эти значения жили в разметке.
+ *
+ * Комментарии и строковые литералы исключены из разбора: иначе проверка
+ * ловит собственный текст теста — при описании старых значений в
+ * комментарии он находил их в том же файле.
+ */
+test("цветные шкалы Tailwind не используются напрямую", () => {
+  const files = execSync("git ls-files src", { encoding: "utf8" })
+    .trim()
+    .split("\n")
+    .filter((f) => /\.tsx$/.test(f));
+
+  const COLOR =
+    /(?:text|bg|border|ring|fill|stroke|from|via|to|divide|accent|caret)-(?:violet|indigo|purple|fuchsia|sky|blue|rose|pink|red|orange|amber|emerald|lime|teal)-[0-9]{2,3}\b/g;
+
+  /** Вырезает комментарии и содержимое строк, оставляя только разметку. */
+  function markupOnly(source: string): string {
+    return source
+      .replace(/\/\*[\s\S]*?\*\//g, " ") // /* … */
+      .replace(/\{\/\*[\s\S]*?\*\/\}/g, " ") // {/* … */} в JSX
+      .replace(/\/\/[^\n]*/g, " ") // // …
+      .replace(/"(?:[^"\\]|\\.)*"/g, '""') // "…"
+      .replace(/'(?:[^'\\]|\\.)*'/g, "''"); // '…'
+  }
+
+  const offenders: string[] = [];
+  for (const file of files) {
+    const source = readFileSync(file, "utf8");
+    for (const m of markupOnly(source).matchAll(COLOR)) {
+      const line = source.slice(0, m.index).split("\n").length;
+      offenders.push(`${file}:${line}  ${m[0]}`);
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `цвет вне палитры — он не участвует в проверках контраста и разошёлся с токеном:\n${offenders.join("\n")}`,
+  );
+});
+
+/**
+ * Приглушённый текст на всех поверхностях темы.
+ *
+ * Поверхности читаются из globals.css, а не заданы константами: проверка
+ * контраста, считающая не по той теме, что в проде, хуже её отсутствия —
+ * именно такой тест остался зелёным при переходе на бумагу.
+ */
+test("приглушённый текст проходит AA на всех поверхностях кабинета", () => {
+  const surfaces = [
+    ["страница", cssVar("bg")],
+    ["карточка", cssVar("surface")],
+    ["приподнятая карточка", cssVar("surface-2")],
+  ] as const;
+  for (const [name, hex] of surfaces) {
+    const r = contrast(cssVar("muted"), hex);
+    assert.ok(
+      r >= AA_TEXT,
+      `--color-muted даёт ${r.toFixed(2)}:1 на поверхности «${name}» — нужно ${AA_TEXT}:1`,
+    );
+  }
+});
+
+/**
+ * Граница поля ввода.
+ *
+ * WCAG 1.4.11 требует 3:1 для границ элементов формы. Волосяная линия
+ * --color-line на бумаге даёт 1.2:1 и годится только для разделителей,
+ * поэтому у формы отдельный токен. Объединив их в один, мы сделали бы поля
+ * ввода практически невидимыми.
+ */
+test("граница поля ввода проходит 3:1", () => {
+  for (const [name, hex] of [
+    ["карточка", cssVar("surface")],
+    ["страница", cssVar("bg")],
+  ] as const) {
+    const r = contrast(cssVar("line-strong"), hex);
+    assert.ok(
+      r >= 3,
+      `--color-line-strong даёт ${r.toFixed(2)}:1 на «${name}» — нужно 3:1 (WCAG 1.4.11)`,
+    );
+  }
+});
+
+/**
+ * Кнопки выбора периода: текст на подложке своего тона.
+ *
+ * Кнопки 14px, поэтому им нужен полный порог 4.5:1, а не 3:1 для крупного
+ * текста. Подложка образуется НЕ токеном, а наложением полупрозрачного слоя
+ * на поверхность, поэтому её считают отдельно: расчёт по токену фона давал
+ * бы 4.98:1, и мы решили бы, что всё в порядке, хотя подложка светлее.
+ *
+ * Значения выведены из темы, а не зашиты: на тёмной теме здесь стояли
+ * #1e1e25 и #1d1d37, на бумаге они другие.
+ */
+test("текст на полупрозрачных подложках кабинета проходит AA", () => {
+  const surface = cssVar("surface");
+  const checks: [string, string, string][] = [
+    ["невыбранный период", cssVar("muted"), blend("#ffffff", surface, 0.05)],
+    ["выбранный период", cssVar("accent-2"), blend(cssVar("accent"), surface, 0.15)],
+  ];
+  for (const [name, fg, bg] of checks) {
+    const r = contrast(fg, bg);
+    assert.ok(
+      r >= AA_TEXT,
+      `${name}: ${fg} на ${bg} даёт ${r.toFixed(2)}:1 — нужно ${AA_TEXT}:1`,
+    );
+  }
+});

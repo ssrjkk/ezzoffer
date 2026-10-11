@@ -4,36 +4,39 @@ import { team } from "@/lib/data";
 
 export function Team() {
   return (
-    <Section className="border-y border-line bg-surface/40">
+    <Section>
       <SectionHead
         eyebrow="О нас"
         title={
           <>
-            Маленькая команда, <span className="text-gradient">большой результат</span>
+            Маленькая команда, <span className="text-accent">большой результат</span>
           </>
         }
         sub="Мы сами прошли через десятки ручных откликов — и собрали инструмент, который вернул нам часы жизни"
       />
 
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      {/*
+        Круглые аватары из градиентов с подъёмом при наведении ничего не
+        сообщали о людях. Теперь это список: инициалы моноширинным, имя
+        антиквой, должность акцентом.
+      */}
+      <div className="grid gap-x-8 gap-y-10 border-t border-line pt-8 sm:grid-cols-2 lg:grid-cols-4">
         {team.map((member, idx) => (
-          <Reveal key={member.name} delay={idx * 80}>
-            <article className="group h-full rounded-3xl border border-line bg-surface/60 p-6 text-center transition-all hover:-translate-y-1 hover:border-white/20">
-              <span
-                className={`mx-auto grid size-20 place-items-center rounded-full bg-gradient-to-br ${member.gradient} text-2xl font-bold text-white shadow-xl transition-transform duration-300 group-hover:scale-105`}
-              >
-                {member.initials}
-              </span>
-              <h3 className="mt-5 text-lg font-semibold tracking-tight">{member.name}</h3>
-              <p className="mt-1 text-sm text-accent-2">{member.role}</p>
-              <p className="mt-4 text-sm leading-relaxed text-muted">{member.bio}</p>
+          <Reveal key={member.name} delay={idx * 70}>
+            <article className="h-full">
+              <p className="font-mono text-xs tracking-[0.14em] text-muted">{member.initials}</p>
+              <h3 className="mt-3 font-serif text-xl leading-snug">{member.name}</h3>
+              <p className="mt-1 font-mono text-xs uppercase tracking-[0.1em] text-accent">
+                {member.role}
+              </p>
+              <p className="mt-4 max-w-prose text-sm leading-relaxed text-muted">{member.bio}</p>
             </article>
           </Reveal>
         ))}
       </div>
 
       <Reveal delay={100}>
-        <div className="mt-12 text-center">
+        <div className="mt-12">
           <PrimaryButton href="/about">Узнать больше о нас</PrimaryButton>
         </div>
       </Reveal>
