@@ -31,8 +31,12 @@ test("модальные окна не собираются вручную", () 
     .split("\n")
     .filter((f) => /\.tsx$/.test(f))) {
     const content = readFileSync(file, "utf8");
+    // Регулярки смотрим по коду без блочных комментариев: в шапке
+    // dialog.tsx объясняется, какой класс подложки был раньше, и этот
+    // текст срабатывал как нарушение собственного правила.
+    const code = content.replace(/\/\*[\s\S]*?\*\//g, "");
     // Признак самодельного оверлея: fixed inset-0 + затемнение подложки.
-    if (/fixed inset-0/.test(content) && /bg-black\/\d+/.test(content)) {
+    if (/fixed inset-0/.test(code) && /bg-black\/\d+/.test(code)) {
       offenders.push(file);
     }
   }

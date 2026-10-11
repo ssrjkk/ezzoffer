@@ -8,6 +8,10 @@ let runAutoApply: () => Promise<import("../src/lib/autoapply").AutoApplyRun>;
 before(async () => {
   process.env.EZOFFER_DB_PATH = ":memory:";
   process.env.EZOFFER_SILENT = "1";
+  // См. autoapply-letter.test.ts: ночной прогон в другом поясе ронял
+  // тесты расписанием паузера, а не поведением автоотклика.
+  process.env.AUTOAPPLY_WORK_START = "1";
+  process.env.AUTOAPPLY_WORK_END = "24";
   delete process.env.HH_ACCESS_TOKEN;
   delete process.env.HH_CLIENT_ID;
   const dbMod = await import("../src/lib/db");

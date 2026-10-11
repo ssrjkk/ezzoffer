@@ -36,6 +36,12 @@ function seedVacancy(slug: string, title: string, skills: string[]) {
 before(async () => {
   process.env.EZOFFER_DB_PATH = ":memory:";
   process.env.EZOFFER_SILENT = "1";
+  // Паузер анти-бана разрешает отправку только в «рабочие часы» часового
+  // пояса раннера (09:00–20:00). Ночной прогон в другом поясе обнулял
+  // applied — suite падал от расписания, а не от кода. Окно раздвигаем
+  // здесь: само расписание отдельно и явно проверяет anti-ban.test.ts.
+  process.env.AUTOAPPLY_WORK_START = "1";
+  process.env.AUTOAPPLY_WORK_END = "24";
   const dbMod = await import("../src/lib/db");
   db = dbMod.db;
   const aa = await import("../src/lib/autoapply");

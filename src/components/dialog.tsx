@@ -211,7 +211,7 @@ export function Dialog({
       onBackdropClick={dismissOnBackdrop ? onClose : undefined}
     >
       <div className="flex items-center justify-between gap-4">
-        <h2 id={titleId} className="text-xl font-semibold tracking-tight">
+        <h2 id={titleId} className="font-serif text-xl font-semibold tracking-tight">
           {title}
         </h2>
         <button
