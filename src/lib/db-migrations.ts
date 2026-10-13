@@ -1,6 +1,26 @@
 import type Database from "better-sqlite3";
 
 /**
+ * Колонка «уведомление о состоянии отклика отправлено».
+ *
+ * Синхронизация с hh идёт по расписанию и видит одно и то же состояние, пока
+ * человек не откроет отклик. Без отметки приглашение на собеседование
+ * приходило бы в Telegram снова и снова — и перестать открывать бота было бы
+ * правильным решением.
+ *
+ * Отдельная миграция, а не добавление в общий список: ALTER TABLE ADD COLUMN
+ * достаточно, но объявлено явно, чтобы поле не потерялось при пересборке
+ * таблицы из migrateApplicationsResumeId — там список колонок задан явно.
+ */
+export function addNotifiedAtColumn(instance: Pick<Database.Database, "exec" | "prepare">): void {
+  const row = instance.prepare("PRAGMA table_info(applications)").all() as {
+    name: string;
+  }[];
+  if (row.some((c) => c.name === "notified_at")) return;
+  instance.exec("ALTER TABLE applications ADD COLUMN notified_at INTEGER");
+}
+
+/**
  * Пересборка applications со сменой типа resume_id: INTEGER → TEXT.
  *
  * В колонке лежит идентификатор резюме на hh, то есть строка, — именно она
@@ -52,7 +72,8 @@ export function migrateApplicationsResumeId(
         sent_at INTEGER NOT NULL,
         viewed_at INTEGER,
         responded_at INTEGER,
-        withdrawn INTEGER NOT NULL DEFAULT 0
+        withdrawn INTEGER NOT NULL DEFAULT 0,
+        notified_at INTEGER
       );
     `);
     /*
@@ -67,10 +88,10 @@ export function migrateApplicationsResumeId(
     instance.exec(`
       INSERT INTO applications_migrated
         (id, user_id, job_slug, search_id, resume_id, letter_id, status, response,
-         response_note, message, external_url, sent_at, viewed_at, responded_at, withdrawn)
+         response_note, message, external_url, sent_at, viewed_at, responded_at, withdrawn, notified_at)
       SELECT
         id, user_id, job_slug, search_id, CAST(resume_id AS TEXT), letter_id, status, response,
-        response_note, message, external_url, sent_at, viewed_at, responded_at, withdrawn
+        response_note, message, external_url, sent_at, viewed_at, responded_at, withdrawn, notified_at
       FROM applications;
     `);
     instance.exec("DROP TABLE applications");

@@ -1,0 +1,219 @@
+import { db } from "./db";
+import { notifyUser } from "./telegram";
+import type { ApplicationRow } from "./applications";
+
+/**
+ * Уведомления в Telegram.
+ *
+ * Модуль создан потому, что `notifyUser` и `notifyAll` были написаны и не
+ * вызывались ниоткуда: бот обещал «прогресс придёт сообщением», а сообщения
+ * не приходили никогда. Показывать прогресс можно было только тем, кто открывал
+ * кабинет, — то есть ровно тем, кто ради экономии времени и подключал бота.
+ *
+ * Два правила, без которых уведомления вреднее их отсутствия:
+ *
+ * 1. Тишина лучше шума. Приглашение на собеседование человек ждёт часами, а
+ *    «вы отказались на 12 вакансиях» — нет. Поэтому отклики приходят одним
+ *    дайджестом, а приглашения и ответы — сразу и по одному.
+ *
+ * 2. Повтор недопустим. Синхронизация с hh идёт по расписанию и видит одно и
+ *    то же состояние, пока человек не откроет отклик. Без отметки о
+ *    прочитанном приглашение приходило бы снова и снова.
+ */
+
+/** Ключ последней отправки дайджеста, чтобы не слать его каждый тик. */
+const DIGEST_KEY = "telegram:last_digest";
+
+/** Минимальный интервал между дайджестами об откликах. */
+const DIGEST_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+export type DigestWindow = {
+  applied: number;
+  withLetter: number;
+  viewed: number;
+  responded: number;
+  invites: number;
+  declines: number;
+};
+
+/**
+ * Что произошло с откликами пользователя за окно.
+ *
+ * Считается по самой таблице откликов, а не по метаданным прогона: так в окно
+ * попадает всё, что человек сделал в кабинете вручную, и это не зависит от того,
+ * был ли плановый прогон в этом тике.
+ */
+export function digestWindow(userId: number, sinceMs: number): DigestWindow {
+  const row = db
+    .prepare(
+      `SELECT
+         COUNT(*) AS applied,
+         SUM(CASE WHEN message != '' THEN 1 ELSE 0 END) AS withLetter,
+         SUM(CASE WHEN viewed_at IS NOT NULL THEN 1 ELSE 0 END) AS viewed,
+         SUM(CASE WHEN responded_at IS NOT NULL THEN 1 ELSE 0 END) AS responded,
+         SUM(CASE WHEN status = 'invited' THEN 1 ELSE 0 END) AS invites,
+         SUM(CASE WHEN status = 'declined' THEN 1 ELSE 0 END) AS declines
+       FROM applications
+       WHERE user_id = ? AND sent_at >= ? AND withdrawn = 0`,
+    )
+    .get(userId, sinceMs) as Record<string, number | null> | undefined;
+
+  return {
+    applied: Number(row?.applied ?? 0),
+    withLetter: Number(row?.withLetter ?? 0),
+    viewed: Number(row?.viewed ?? 0),
+    responded: Number(row?.responded ?? 0),
+    invites: Number(row?.invites ?? 0),
+    declines: Number(row?.declines ?? 0),
+  };
+}
+
+/**
+ * Текст дайджеста.
+ *
+ * Отдельная функция без БД и сети: проверять надо именно формулировки, потому
+ * что это единственное, что человек видит, и ошибка здесь стоит доверия.
+ */
+export function formatDigest(user: { id: number }, w: DigestWindow): string | null {
+  // Молчать, когда нечего сказать. Пустое «за последние 6 часов ничего не
+  // произошло» хуже отсутствия сообщения: человек перестаёт открывать бота.
+  if (w.applied === 0 && w.viewed === 0 && w.responded === 0 && w.invites === 0 && w.declines === 0) {
+    return null;
+  }
+
+  const lines: string[] = [];
+
+  if (w.invites > 0) {
+    lines.push(
+      w.invites === 1
+        ? "🎉 Приглашение на собеседование!"
+        : `🎉 Приглашений на собеседование: ${w.invites}`,
+    );
+  }
+
+  if (w.applied > 0) {
+    const withLetter = w.withLetter === w.applied;
+    lines.push(
+      `Отправлено откликов: ${w.applied}` +
+        (withLetter ? " (с письмами)" : `, из них с письмами: ${w.withLetter}`),
+    );
+  }
+  if (w.viewed > 0) lines.push(`Просмотрено: ${w.viewed}`);
+  if (w.responded > 0) lines.push(`Ответов HR: ${w.responded}`);
+  if (w.declines > 0 && w.invites === 0) {
+    lines.push(`Отказов: ${w.declines}`);
+    lines.push("", "Разбор отказов — в кабинете: /dashboard");
+  }
+
+  if (w.invites > 0) {
+    lines.push(
+      "",
+      "Подготовьтесь: в кабинете есть разбор вакансии и вопросы по вашему резюме — /dashboard",
+    );
+  }
+
+  if (lines.length === 0) return null;
+  lines.push("", "Подробнее: /статистика");
+  return lines.join("\n");
+}
+
+/**
+ * Рассылает дайджесты об откликах всем привязанным чатам.
+ *
+ * Возвращает, сколько сообщений ушло. Ошибка отправки одного чата не должна
+ * срывать рассылку остальным.
+ */
+export async function sendDigests(): Promise<number> {
+  const last = Number(
+    (db.prepare("SELECT value FROM meta WHERE key = ?").get(DIGEST_KEY) as { value: string } | undefined)
+      ?.value ?? 0,
+  );
+  const now = Date.now();
+  if (last > 0 && now - last < DIGEST_INTERVAL_MS) return 0;
+
+  const since = last > 0 ? last : now - DIGEST_INTERVAL_MS;
+  const users = db
+    .prepare("SELECT id FROM users WHERE telegram_chat_id IS NOT NULL")
+    .all() as { id: number }[];
+
+  let sent = 0;
+  for (const u of users) {
+    const text = formatDigest(u, digestWindow(u.id, since));
+    if (!text) continue;
+    if (await notifyUser(u.id, text)) sent++;
+  }
+
+  // Метка ставится, даже если никто не ответил: иначе пустой дайджест
+  // перечитывал бы то же окно снова и снова.
+  db.prepare(
+    "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+  ).run(DIGEST_KEY, String(now));
+
+  return sent;
+}
+
+/**
+ * Отклики, о которых ещё не сообщали.
+ *
+ * Отметка живёт в самой строке отклика: приглашение по конкретной вакансии
+ * должно уйти ровно один раз, и таблица откликов — единственное место, где
+ * это состояние переживает перезапуск процесса.
+ */
+export function pendingAlerts(limit = 20): ApplicationRow[] {
+  return db
+    .prepare(
+      `SELECT * FROM applications
+       WHERE notified_at IS NULL
+         AND status IN ('invited', 'responded', 'declined')
+         AND sent_at <= ?
+       ORDER BY sent_at DESC
+       LIMIT ?`,
+    )
+    .all(Date.now() - 60_000, limit) as ApplicationRow[];
+}
+
+const STATUS_TEXT: Record<string, string> = {
+  invited: "🎉 Приглашение на собеседование",
+  responded: "💬 HR ответил на отклик",
+  declined: "Отказ",
+};
+
+/**
+ * Отправляет уведомления по накопившимся ответам и отмечает их отправленными.
+ *
+ * Отметка ставится до отправки, а не после: иначе сбой на середине рассылки
+ * привёл бы к тому, что человек получит одно и то же приглашение дважды.
+ */
+export async function sendAlerts(getVacancyTitle: (slug: string) => string | null): Promise<number> {
+  const rows = pendingAlerts();
+  if (rows.length === 0) return 0;
+
+  const mark = db.prepare("UPDATE applications SET notified_at = ? WHERE id = ?");
+  let sent = 0;
+
+  for (const row of rows) {
+    mark.run(Date.now(), row.id);
+    const heading = STATUS_TEXT[row.status];
+    if (!heading) continue;
+
+    const vacancy = getVacancyTitle(row.job_slug);
+    const lines = [heading, ""];
+    if (vacancy) lines.push(`Вакансия: ${vacancy}`);
+    if (row.response) lines.push(`Компания: ${row.response}`);
+    if (row.response_note) lines.push(`Причина: ${row.response_note}`);
+    if (row.external_url) lines.push("", row.external_url);
+
+    if (row.status === "invited") {
+      lines.push("", "Подготовьтесь: разбор вакансии и вопросы по вашему резюме — /dashboard");
+    }
+
+    if (await notifyUser(row.user_id, lines.join("\n"))) sent++;
+  }
+
+  return sent;
+}
+
+/** Сброс для тестов. */
+export function resetNotificationState(): void {
+  db.prepare("DELETE FROM meta WHERE key = ?").run(DIGEST_KEY);
+}

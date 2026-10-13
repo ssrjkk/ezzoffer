@@ -25,6 +25,8 @@ export type ApplicationRow = {
   viewed_at: number | null;
   responded_at: number | null;
   withdrawn: number;
+  /** Когда состояние отклика отправлено в Telegram; null — ещё нет. */
+  notified_at: number | null;
 };
 
 export const STATUS_RU: Record<string, string> = {

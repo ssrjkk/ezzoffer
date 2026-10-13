@@ -2,7 +2,10 @@ import { db, type User } from "./db";
 import { getStats } from "./stats";
 import { isPlanActive, planLabel } from "./plans";
 import { getCatalog } from "./vacancies";
-import { matchesSearch } from "./matcher";
+import { matchesSearch, skillsByVacancy } from "./matcher";
+import { applyToVacancy, getUserResumes } from "./autoapply";
+import { rankVacancies } from "./resume-targeting";
+import type { Vacancy } from "./vacancies/types";
 import { sendTelegramMessage, unlinkChat, userByChatId, linkChatByCode } from "./telegram";
 import { BOT_COMMANDS, BOT_MESSAGES } from "./bot-data";
 
@@ -59,7 +62,29 @@ export function resetSeenUpdates(): void {
   seenUpdates.clear();
 }
 
-export type Reply = { text: string };
+export type Reply = { text: string; action?: BotAction };
+
+/**
+ * Что команда должна сделать помимо текста.
+ *
+ * Раньше здесь были только `link` и `unlink`, а `/пауза` и `/отклик`
+ * отвечали текстом, не выполняя обещанного. Сайт при этом рекламировал
+ * «Мгновенная остановка» и «Отклик с персонализацией».
+ */
+export type BotAction =
+  | "link"
+  | "unlink"
+  | "pause"
+  | "resume"
+  | { kind: "apply"; vacancy: Vacancy };
+
+/** Ставит и снимает паузу. Возвращает, изменилось ли что-то. */
+function setPaused(user: User, paused: boolean): boolean {
+  const result = db
+    .prepare("UPDATE users SET autoapply_paused = ? WHERE id = ?")
+    .run(paused ? 1 : 0, user.id);
+  return result.changes > 0;
+}
 
 const HELP = [
   "Привет! Я бот EZOffer — управляю откликами из Telegram.",
@@ -148,43 +173,81 @@ function searchReply(user: User, query: string): string {
   return lines.join("\n");
 }
 
-function applyReply(user: User): string {
-  if (!isPlanActive(user)) return "Сначала активируйте тариф или пробный период.";
+/**
+ * Ответ на `/отклик`.
+ *
+ * Раньше здесь обещали «Запускаю отклики… Прогресс придёт сообщением», но
+ * команда не делала ровно ничего: ни одного запроса, ни одного уведомления.
+ * Человек нажимал и ждал откликов, которых не было. `notifyUser` и
+ * `notifyAll` вообще не вызывались ниоткуда.
+ *
+ * Теперь команда работает: без номера показывает пронумерованный подбор,
+ * с номером — отправляет один отклик через applyToVacancy, то есть тем же
+ * кодом, что и плановый прогон.
+ */
+function applyReply(user: User, args: string): { text: string; action?: BotAction } {
+  if (!isPlanActive(user)) return { text: "Сначала активируйте тариф или пробный период." };
   if (user.autoapply_paused) {
-    return "Автоотклики уже на паузе ⏸ Включить обратно можно в кабинете: /dashboard/settings";
+    return { text: "Автоотклики на паузе ⏸ Снимите паузу: /старт" };
   }
 
   const searches = db
-    .prepare("SELECT COUNT(*) AS c FROM searches WHERE user_id = ? AND active = 1")
-    .get(user.id) as { c: number };
-  if (searches.c === 0) {
-    return "Нет активных автопоисков — откликаться пока не на что. Создайте поиск: /dashboard/jobs";
+    .prepare("SELECT * FROM searches WHERE user_id = ? AND active = 1 ORDER BY created_at DESC LIMIT 5")
+    .all(user.id) as Parameters<typeof matchesSearch>[1][];
+
+  if (searches.length === 0) {
+    return { text: "Нет активных автопоисков — откликаться пока не на что. Создайте поиск: /dashboard/jobs" };
   }
 
   const catalog = getCatalog();
-  const rows = db.prepare("SELECT * FROM searches WHERE user_id = ? AND active = 1").all(user.id) as
-    Parameters<typeof matchesSearch>[1][];
-  const candidates = new Set(
-    catalog.filter((v) => v.source === "hh" && rows.some((s) => matchesSearch(v, s))).map((v) => v.slug),
+  const skills = skillsByVacancy(catalog);
+  const resumes = getUserResumes(user.id);
+  const seen = new Set<string>();
+  const matched = catalog.filter(
+    (v) =>
+      v.source === "hh" &&
+      searches.some((s) => matchesSearch(v, s, skills.get(v.slug))) &&
+      !seen.has(v.slug) &&
+      seen.add(v.slug),
   );
 
-  if (candidates.size === 0) {
-    return [
-      "Подходящих вакансий на hh.ru пока нет.",
-      "",
-      "Бот откликается только на вакансии hh.ru — на остальных площадках отклик делается вручную из кабинета.",
-    ].join("\n");
+  if (matched.length === 0) {
+    return {
+      text: [
+        "Подходящих вакансий на hh.ru пока нет.",
+        "",
+        "Бот откликается только на вакансии hh.ru — на остальных площадках отклик делается вручную из кабинета.",
+      ].join("\n"),
+    };
   }
 
-  const limit = Math.max(1, Math.min(3, candidates.size));
-  return [
-    `Запускаю отклики: найдено ${fmt(candidates.size)} вакансий, беру ${fmt(limit)}.`,
-    "",
-    "Отправка идёт с паузами 45–180 секунд и лимитами тарифа — так нас не считают ботом.",
-    "Письма персонализированы под каждую вакансию.",
-    "",
-    "Прогресс придёт сообщением: /статистика",
-  ].join("\n");
+  /*
+   * Нумерация — по совпадению с резюме, а не по порядку каталога.
+   *
+   * Иначе «/отклик 2» означал бы произвольную вакансию из выдачи (порядок
+   * задаётся сортировкой по источнику и названию), и человек нажимал бы на
+   * номер, не понимая, что выберет. Тот же порядок, что на сайте: сначала то,
+   * что подходит лучше всего.
+   */
+  const ranked = rankVacancies(matched, resumes, skills);
+
+  const index = Number(args.trim());
+  if (Number.isFinite(index) && Number.isInteger(index) && index >= 1) {
+    const target = ranked[index - 1]?.vacancy;
+    if (!target) {
+      return { text: `В подборе только ${ranked.length} вакансий. Позовите /подбор, чтобы увидеть список.` };
+    }
+    return { text: "", action: { kind: "apply", vacancy: target } };
+  }
+
+  const lines = ["Подбор по вашим активным поискам:", ""];
+  for (const [i, r] of ranked.slice(0, 5).entries()) {
+    const v = r.vacancy;
+    const fit = r.ratio > 0 ? ` · навыков ${Math.round(r.ratio * 100)}%` : "";
+    lines.push(`${i + 1}. ${v.title} — ${v.company}${v.salary ? ` · ${v.salary}` : ""}${fit}`);
+  }
+  lines.push("", `Всего найдено: ${fmt(ranked.length)}`, "", "Откликнуться: /отклик 1, /отклик 2 и так далее.");
+  return { text: lines.join("\n") };
 }
 
 /** Разбирает команду и аргументы: "/поиск React удалённо" -> ["поиск", "React удалённо"]. */
@@ -201,7 +264,7 @@ export function replyFor(
   command: string,
   args: string,
   user: User | null,
-): { text: string; action?: "link" | "unlink" } {
+): Reply {
   switch (command) {
     case "start":
     case "help":
@@ -227,23 +290,20 @@ export function replyFor(
     case "статистика":
     case "stats":
       return { text: statsReply(user) };
+    case "подбор":
     case "поиск":
     case "search":
       return { text: searchReply(user, args) };
     case "отклик":
     case "apply":
-      return { text: applyReply(user) };
+      return applyReply(user, args);
     case "пауза":
-      return {
-        text: [
-          "Поставьте паузу в кабинете: /dashboard/settings → «Поставить на паузу».",
-          "",
-          "Это надёжнее, чем из чата: пауза сохраняется между сессиями и видна в статистике.",
-        ].join("\n"),
-      };
+    case "stop":
+      return { text: "", action: "pause" };
     case "старт":
-    case "start2":
-      return { text: "Возобновить автоотклики: /dashboard/settings → «Возобновить автоотклики»." };
+    case "run":
+    case "resume":
+      return { text: "", action: "resume" };
     default:
       return { text: `Не знаю команду /${command}.\n\n${HELP}` };
   }
@@ -286,9 +346,10 @@ export async function handleUpdate(update: TelegramUpdate): Promise<boolean | nu
         `Готово, ${linked.name || "аккаунт"} привязан! ✅`,
         "",
         "Что доступно:",
-        "— /поиск — подобрать вакансии по вашим критериям",
-        "— /отклик — запустить отклики на hh.ru",
+        "— /подбор — вакансии по вашим критериям",
+        "— /отклик 1 — откликнуться на вакансию №1 из подбора",
         "— /статистика — воронка откликов",
+        "— /пауза и /старт — остановить и возобновить отправку",
         "",
         `Отклики отправляются по тарифу «${planLabel(linked)}» с человеческими паузами.`,
       ].join("\n"),
@@ -303,6 +364,98 @@ export async function handleUpdate(update: TelegramUpdate): Promise<boolean | nu
         ? "Чат отвязан. Привязать обратно можно в кабинете: /dashboard/settings"
         : "Этот чат и так не был привязан.",
     );
+  }
+
+  /*
+   * Пауза и возобновление.
+   *
+   * Раньше обе команды отвечали «сделайте это в кабинете», хотя сайт
+   * рекламировал мгновенную остановку прямо в боте. Теперь состояние
+   * меняется здесь и сразу видно в кабинете — это одна и та же строка в БД.
+   */
+  if (reply.action === "pause") {
+    const user = userByChatId(chat);
+    if (!user) return sendTelegramMessage(chat, NOT_LINKED);
+    const changed = setPaused(user, true);
+    const queued = db
+      .prepare("SELECT COUNT(*) AS c FROM searches WHERE user_id = ? AND active = 1")
+      .get(user.id) as { c: number };
+    return sendTelegramMessage(
+      chat,
+      changed
+        ? [
+            "Автоотклики на паузе ⏸",
+            "",
+            queued.c > 0
+              ? `Остановлю отправку сразу. Активных поисков: ${queued.c} — на возобновлении они вернутся в очередь.`
+              : "Активных поисков нет, так что ничего не теряется.",
+            "",
+            "Продолжить: /старт",
+          ].join("\n")
+        : "Автоотклики уже были на паузе.",
+    );
+  }
+
+  if (reply.action === "resume") {
+    const user = userByChatId(chat);
+    if (!user) return sendTelegramMessage(chat, NOT_LINKED);
+    if (!isPlanActive(user)) {
+      return sendTelegramMessage(
+        chat,
+        [
+          `Тариф «${planLabel(user)}» истёк — сначала продлите его.`,
+          "",
+          "Продлить: /dashboard/settings",
+        ].join("\n"),
+      );
+    }
+    const changed = setPaused(user, false);
+    const queued = db
+      .prepare("SELECT COUNT(*) AS c FROM searches WHERE user_id = ? AND active = 1")
+      .get(user.id) as { c: number };
+    return sendTelegramMessage(
+      chat,
+      changed
+        ? [
+            "Отправка возобновлена ✅",
+            "",
+            queued.c > 0
+              ? `Активных поисков: ${queued.c}. Следующий прогон — в ближайшие минуты.`
+              : "Но активных поисков нет: создайте поиск, иначе откликаться не на что.",
+          ].join("\n")
+        : "Отправка уже была включена.",
+    );
+  }
+
+  /*
+   * Отклик на конкретную вакансию.
+   *
+   * Единственное место, где бот отправляет отклик по прямому указанию.
+   * Идёт через applyToVacancy — тот же код, что у планового прогона, поэтому
+   * лимиты, паузы, подбор резюме и письмо работают одинаково.
+   */
+  if (typeof reply.action === "object" && reply.action.kind === "apply") {
+    const user = userByChatId(chat);
+    if (!user) return sendTelegramMessage(chat, NOT_LINKED);
+
+    const vacancy = reply.action.vacancy;
+    const result = await applyToVacancy(user, vacancy);
+
+    if (result.ok) {
+      return sendTelegramMessage(
+        chat,
+        [
+          "Отклик отправлен ✅",
+          "",
+          `Вакансия: ${vacancy.title}`,
+          `Компания: ${vacancy.company}`,
+          result.withLetter ? "Сопроводительное письмо приложено." : "Без письма — подходящего текста не нашлось.",
+          "",
+          "Статистика: /статистика",
+        ].join("\n"),
+      );
+    }
+    return sendTelegramMessage(chat, `Не отправил: ${result.error}`);
   }
 
   return sendTelegramMessage(chat, reply.text);

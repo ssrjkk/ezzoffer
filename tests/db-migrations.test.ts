@@ -29,7 +29,8 @@ const SCHEMA = `
     sent_at INTEGER NOT NULL,
     viewed_at INTEGER,
     responded_at INTEGER,
-    withdrawn INTEGER NOT NULL DEFAULT 0
+    withdrawn INTEGER NOT NULL DEFAULT 0,
+    notified_at INTEGER
   );
   CREATE INDEX IF NOT EXISTS idx_applications_user ON applications(user_id);
   CREATE INDEX IF NOT EXISTS idx_applications_job ON applications(job_slug);

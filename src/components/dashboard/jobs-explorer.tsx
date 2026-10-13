@@ -52,6 +52,8 @@ export function JobExplorer() {
   const [letters, setLetters] = useState<Letter[]>([]);
   const [searches, setSearches] = useState<Search[]>([]);
   const [applied, setApplied] = useState<Set<string>>(new Set());
+  /** Закладки: какие вакансии человек отложил «на потом». */
+  const [saved, setSaved] = useState<Set<string>>(new Set());
   const [appliedId, setAppliedId] = useState(0);
   const [letterId, setLetterId] = useState(0);
   const [q, setQ] = useState("");
@@ -128,19 +130,25 @@ export function JobExplorer() {
     let alive = true;
     (async () => {
       try {
-        const [r, l, s, a, jobs, ai] = await Promise.all([
+        const [r, l, s, a, jobs, ai, bm] = await Promise.all([
           fetch("/api/resumes").then((x) => x.json()),
           fetch("/api/letters").then((x) => x.json()),
           fetch("/api/searches").then((x) => x.json()),
           fetch("/api/applications").then((x) => x.json()),
           fetch("/api/jobs").then((x) => x.json()),
           fetch("/api/ai-recommendations").then((x) => x.json()),
+          // Отдельный запрос, а не часть jobs: закладки живут в своей таблице,
+          // и их отсутствие не должно ломать загрузку каталога.
+          fetch("/api/bookmarks")
+            .then((x) => x.json())
+            .catch(() => ({ bookmarks: [] })),
         ]);
         if (!alive) return;
         setResumes(r.resumes ?? []);
         setLetters(l.letters ?? []);
         setSearches(s.searches ?? []);
         setApplied(new Set((a.applications as Application[]).map((x) => x.job_slug)));
+        setSaved(new Set(((bm.bookmarks ?? []) as { slug: string }[]).map((x) => x.slug)));
         setAppliedId((r.resumes?.[0]?.id as number) ?? 0);
         setLetterId((l.letters?.[0]?.id as number) ?? 0);
         if (Array.isArray(jobs.vacancies)) setVacancies(jobs.vacancies);
@@ -310,6 +318,36 @@ export function JobExplorer() {
       setError("Сеть недоступна — поиск не создан");
     } finally {
       setCreating(false);
+    }
+  };
+
+  /**
+   * Переключение закладки.
+   *
+   * Состояние переключается по ответу сервера, а не сразу по клику: иначе при
+   * ошибке сети вакансия осталась бы помеченной в интерфейсе и не сохранилась
+   * бы на самом деле — человек потом не нашёл бы её в избранном.
+   */
+  const toggleBookmark = async (slug: string) => {
+    const wasSaved = saved.has(slug);
+    try {
+      const res = await fetch("/api/bookmarks", {
+        method: wasSaved ? "DELETE" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slug }),
+      });
+      if (!res.ok) {
+        setError("Не удалось изменить избранное");
+        return;
+      }
+      setSaved((prev) => {
+        const next = new Set(prev);
+        if (wasSaved) next.delete(slug);
+        else next.add(slug);
+        return next;
+      });
+    } catch {
+      setError("Сеть недоступна — закладка не сохранена");
     }
   };
 
@@ -562,6 +600,19 @@ export function JobExplorer() {
                         На сайте
                       </a>
                     ) : null}
+                    {/*
+                     * Закладка доступна всегда, в том числе когда ссылка на
+                     * площадку есть: именно в этом случае человек чаще всего
+                     * и хочет сохранить вакансию — чтобы вернуться позже.
+                     */}
+                    <button
+                      type="button"
+                      onClick={() => toggleBookmark(v.slug)}
+                      aria-pressed={saved.has(v.slug)}
+                      className={`${btnGhost} shrink-0`}
+                    >
+                      {saved.has(v.slug) ? "В избранном" : "В избранное"}
+                    </button>
                   </div>
                   {!applied.has(v.slug) && v.source !== "hh" ? (
                     <div className="flex gap-2">

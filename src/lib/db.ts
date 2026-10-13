@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { logInfo } from "./logger";
-import { migrateApplicationsResumeId } from "./db-migrations";
+import { migrateApplicationsResumeId, addNotifiedAtColumn } from "./db-migrations";
 import { envStr } from "./env";
 
 /**
@@ -136,7 +136,15 @@ CREATE TABLE IF NOT EXISTS applications (
   sent_at INTEGER NOT NULL,
   viewed_at INTEGER,
   responded_at INTEGER,
-  withdrawn INTEGER NOT NULL DEFAULT 0
+  withdrawn INTEGER NOT NULL DEFAULT 0,
+  notified_at INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS bookmarks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  job_slug TEXT NOT NULL,
+  created_at INTEGER NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_applications_user ON applications(user_id);
@@ -274,8 +282,22 @@ function migrate(instance: Database.Database): void {
   if (!appCols.has("external_url")) {
     instance.exec("ALTER TABLE applications ADD COLUMN external_url TEXT");
   }
-  // Смена типа resume_id на TEXT — отдельным шагом: он пересобирает таблицу.
-  migrateApplicationsResumeId(instance);
+  /*
+ * Порядок обязателен.
+ *
+ * Миграция resume_id пересобирает таблицу и переносит notified_at, поэтому
+ * колонка должна существовать ДО неё. Наоборот получается ошибка
+ * «no such column: notified_at» на любой свежей базе: в CREATE TABLE её ещё
+ * нет, а перенос уже читает.
+ */
+addNotifiedAtColumn(instance);
+migrateApplicationsResumeId(instance);
+  // Избранное: уникальность по (пользователь, вакансия) выражена в самой
+  // таблице — иначе повторное нажатие «в избранное» плодило бы дубли, и в
+  // списке одна вакансия появлялась бы дважды.
+  instance.exec(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_bookmarks_user_job ON bookmarks(user_id, job_slug)",
+  );
 }
 
 export const db = createDatabase(DB_PATH);

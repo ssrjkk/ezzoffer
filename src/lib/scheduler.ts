@@ -3,6 +3,8 @@ import { db } from "./db";
 import { refreshCatalogForSearches, slowProvidersDue, fastProvidersDue } from "./catalog-refresh";
 import { runAutoApply } from "./autoapply";
 import { saveLastRun } from "./autoapply-store";
+import { sendAlerts, sendDigests } from "./telegram-digest";
+import { getVacancyBySlug } from "./vacancies";
 import { syncAllHhUsers } from "./hh-sync";
 import { logError, logInfo } from "./logger";
 
@@ -120,6 +122,23 @@ export async function runScheduledJobs(): Promise<void> {
      */
     saveLastRun(await runAutoApply(), now);
     await syncAllHhUsers();
+
+    /*
+     * Уведомления в Telegram.
+     *
+     * Идут после синхронизации: приглашения и ответы приходят оттуда, и
+     * рассылка до неё видела бы пустую таблицу и молчала. Сначала — по одному
+     * ответу на конкретную вакансию, потом — общий дайджест об откликах.
+     *
+     * Ошибки не поднимаются: упавший Telegram не должен ломать планировщик и
+     * останавливать автоотклики.
+     */
+    try {
+      await sendAlerts((slug) => getVacancyBySlug(slug)?.title ?? null);
+      await sendDigests();
+    } catch (err) {
+      logError("scheduler:telegram", err);
+    }
   } catch (err) {
     logError("scheduler", err);
   } finally {

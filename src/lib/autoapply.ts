@@ -8,7 +8,7 @@ import { createPacing, type Pacing, type PacingConfig } from "./anti-ban";
 import { effectivePacing } from "./config";
 import { renderLetterTemplate } from "./cover-letter";
 import { rankLettersForVacancy } from "./ai-matching";
-import { rankVacancies, type ResumeTarget } from "./resume-targeting";
+import { rankVacancies, bestResumeFor, type ResumeTarget } from "./resume-targeting";
 import type { Vacancy } from "./vacancies/types";
 import { logError, logInfo } from "./logger";
 
@@ -97,8 +97,12 @@ function getLatestResume(userId: number): { id: number; title: string; content: 
  * Порядок — по обновлению, чтобы при полном равенстве совпадений выбор падал
  * на то, за которым человек работает сейчас, а не на случайно созданное
  * раньше. Совпадения считаются в resume-targeting по навыкам, а не здесь.
+ *
+ * Экспортируется, потому что подбор резюме нужен и планировщику, и боту: если
+ * каждый напишет свой запрос, рано или поздно они разойдутся, и список в чате
+ * перестанет совпадать с тем, что реально уходит.
  */
-function getUserResumes(userId: number): ResumeTarget[] {
+export function getUserResumes(userId: number): ResumeTarget[] {
   return db
     .prepare("SELECT id, title, content, hh_id FROM resumes WHERE user_id = ? ORDER BY updated_at DESC, id DESC")
     .all(userId) as ResumeTarget[];
@@ -501,4 +505,108 @@ export async function runAutoApply(opts?: {
     };
   }
   return { ran: true, searches, applied, failed, skipped, stale: staleTotal, pausedFor, pausedUsers, withLetter, withoutLetter };
+}
+
+export type ApplyOutcome =
+  | { ok: true; resumeId: string; withLetter: boolean }
+  | { ok: false; kind: "closed" | "rate_limit" | "auth" | "network" | "other" | "not_found" | "already" | "paused" | "no_resume" | "stale"; error: string };
+
+/**
+ * Отклик на одну вакансию по прямому указанию человека.
+ *
+ * Нужен для команды бота `/отклик N`. Раньше бот на такую команду отвечал
+ * «Запускаю отклики» и не делал ничего — человек нажимал и ждал откликов,
+ * которых не было.
+ *
+ * Идёт через тот же путь, что и плановый прогон: подбор резюме, письмо,
+ * классификация отказа, паузер, запись в applications. Отдельный путь означал бы
+ * второе место, где эти правила могут разойтись с плановым — а они уже разошлись
+ * один раз, когда сортировка брала одно резюме, а отправлялось другое.
+ */
+export async function applyToVacancy(user: User, vacancy: Vacancy): Promise<ApplyOutcome> {
+  if (!isPlanActive(user)) return { ok: false, kind: "auth", error: "Тариф истёк — автоотклики на паузе" };
+  if (user.autoapply_paused) return { ok: false, kind: "paused", error: "Автоотклики на паузе" };
+
+  const limit = planDailyLimit(user.plan);
+  if (todayCount(user.id) >= limit) {
+    return { ok: false, kind: "rate_limit", error: `Дневной лимит тарифа исчерпан (${limit})` };
+  }
+
+  if (!onlyFresh([vacancy]).length) {
+    return {
+      ok: false,
+      kind: "stale",
+      error: "Вакансия старше двух дней — скорее всего, она уже закрыта",
+    };
+  }
+
+  const already = db
+    .prepare("SELECT id FROM applications WHERE user_id = ? AND job_slug = ? AND withdrawn = 0")
+    .get(user.id, vacancy.slug);
+  if (already) return { ok: false, kind: "already", error: "Вы уже откликались на эту вакансию" };
+
+  const resumes = getUserResumes(user.id);
+  const fallbackResumeId = user.hh_resume_id?.trim() || null;
+  const picked = bestResumeFor(vacancy, resumes);
+  const sendableId = picked?.hh_id ?? fallbackResumeId;
+  if (!sendableId) {
+    return {
+      ok: false,
+      kind: "no_resume",
+      error: "Нет резюме для отправки — импортируйте его с hh в кабинете",
+    };
+  }
+
+  const valid = await getValidHhToken(user);
+  const token = valid?.token ?? null;
+  if (!token) return { ok: false, kind: "auth", error: "Аккаунт hh.ru не привязан" };
+  if (!hhProvider.apply) return { ok: false, kind: "other", error: "Отправка недоступна" };
+
+  const base = effectivePacing(limit);
+  const remaining = Math.max(0, limit - todayCount(user.id));
+  const pacing = pacingFor(
+    user.id,
+    { ...base, dailyLimit: Math.min(remaining, base.dailyCap) },
+    () => Date.now(),
+  );
+  const decision = pacing.decide();
+  if (!decision.allowed) {
+    return {
+      ok: false,
+      kind: decision.reason === "backoff" ? "rate_limit" : "paused",
+      error:
+        decision.reason === "backoff"
+          ? "Пауза после отказа платформы — она снимется сама"
+          : "Сейчас не время отправки: лимит или ночной режим",
+    };
+  }
+
+  const letter = await buildLetter(vacancy, getLetters(user.id), picked?.content ?? "");
+  const message = letter?.text;
+  const result = await hhProvider.apply(vacancy, {
+    resumeId: sendableId,
+    ...(message ? { message } : {}),
+    accessToken: token,
+  });
+
+  if (!result.ok) {
+    const kind = result.kind ?? "other";
+    if (kind !== "closed") pacing.recordFailure(kind === "rate_limit" ? "platform" : "network");
+    return { ok: false, kind, error: result.error ?? "Платформа отклонила отклик" };
+  }
+
+  pacing.recordSent();
+  db.prepare(
+    `INSERT INTO applications (user_id, job_slug, resume_id, letter_id, message, status, sent_at)
+     VALUES (?, ?, ?, ?, ?, 'sent', ?)`,
+  ).run(
+    user.id,
+    vacancy.slug,
+    sendableId,
+    letter?.letterId ?? null,
+    message ?? "",
+    Date.now(),
+  );
+
+  return { ok: true, resumeId: sendableId, withLetter: Boolean(message) };
 }
