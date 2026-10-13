@@ -4,6 +4,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { getStats, type Stats } from "@/lib/stats";
 import { isPlanActive, planDailyLimit, planLabel, daysLeft } from "@/lib/plans";
 import { StatsPanel } from "@/components/dashboard/stats-panel";
+import { NextActionsPanel } from "@/components/dashboard/next-actions";
+import { nextActions } from "@/lib/pipeline";
 import { Badge, Panel, btnPrimary, btnGhost } from "@/components/dashboard/ui";
 import Link from "next/link";
 
@@ -15,6 +17,7 @@ export default async function DashboardPage() {
   if (!user) redirect("/login");
 
   const stats = getStats(user.id);
+  const actions = nextActions(user.id);
   const active = isPlanActive(user);
   const limit = planDailyLimit(user.plan);
   const days = daysLeft(user);
@@ -60,6 +63,14 @@ export default async function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/*
+        Что делать дальше — первым. Человек открыл кабинет с вопросом
+        «что делать», и статистика на этот вопрос не отвечает: она отвечает
+        на другой («как идут дела»). Ставить её первой было значит перехватить
+        внимание, не дав ответить на главный.
+      */}
+      <NextActionsPanel actions={actions} />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard label="Отправлено" value={stats.sent} trend={weeklyTrend(stats.series, "sent")} />

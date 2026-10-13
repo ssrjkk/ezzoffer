@@ -24,6 +24,7 @@ const vacancy: Vacancy = {
   source_url: null,
   contact_email: null,
   contact_phone: null,
+  published_at: null,
 };
 
 test("renderLetterTemplate подставляет поля вакансии в шаблон", () => {

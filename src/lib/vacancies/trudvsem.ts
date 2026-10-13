@@ -1,6 +1,7 @@
 import type { Level, WorkFormat } from "../data";
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
 import { sanitizeExternalUrl, toSalaryNumber } from "./util";
+import { parsePublishedAt } from "./published";
 import { httpFetch, parseJson } from "../http-client";
 
 const BASE = "https://opendata.trudvsem.ru/api/v1/vacancies";
@@ -113,6 +114,7 @@ export function mapTrudVacancy(raw: TrudVacancyRaw): Vacancy | null {
     format: inferFormat(raw.schedule),
     city: extractCity(raw),
     posted: relativePosted(raw["creation-date"] ?? ""),
+    published_at: parsePublishedAt(raw["creation-date"]),
     category: raw.category?.specialisation ?? "Работа",
     about: aboutParts.join("\n\n") || "Описание вакансии обновляется на портале «Работа в России».",
     responsibilities: raw.duty ? [raw.duty] : [],

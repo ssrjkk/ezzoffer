@@ -1,6 +1,7 @@
 import type { Level, WorkFormat } from "../data";
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
 import { sanitizeExternalUrl, toSalaryNumber } from "./util";
+import { parsePublishedAt } from "./published";
 import { filterOutboundUrls } from "../ssrf";
 import { httpFetch } from "../http-client";
 
@@ -163,6 +164,7 @@ export function mapCompanyFeedItem(raw: RssItem, sourceSlug: string): Vacancy | 
     format: inferFormat(raw.description),
     city,
     posted: relativePosted(raw.pubDate),
+    published_at: parsePublishedAt(raw.pubDate),
     category: "Работа",
     about: raw.description.slice(0, 2000) || "Описание на странице компании.",
     responsibilities: [],

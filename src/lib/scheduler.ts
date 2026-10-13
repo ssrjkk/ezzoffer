@@ -1,10 +1,10 @@
 import type BetterSqlite3 from "better-sqlite3";
 import { db } from "./db";
-import { refreshProviders } from "./vacancies";
+import { refreshCatalogForSearches, slowProvidersDue, fastProvidersDue } from "./catalog-refresh";
 import { runAutoApply } from "./autoapply";
+import { saveLastRun } from "./autoapply-store";
 import { syncAllHhUsers } from "./hh-sync";
 import { logError, logInfo } from "./logger";
-import { envNum } from "./env";
 
 /**
  * Центральный планировщик реальных фоновых задач (однопоточный, с блокировкой от перекрытия):
@@ -15,6 +15,7 @@ import { envNum } from "./env";
 
 const LOCK_KEY = "scheduler:lock";
 const CATALOG_REFRESH_KEY = "scheduler:catalog_refresh";
+const CATALOG_FAST_REFRESH_KEY = "scheduler:catalog_fast_refresh";
 const LOCK_TTL_MS = 30 * 60 * 1000;
 
 type MetaStore = Pick<BetterSqlite3.Database, "prepare">;
@@ -65,17 +66,41 @@ export function lockHeldAt(instance: MetaStore): number {
 
 async function refreshCatalogIfStale(now: number): Promise<void> {
   const last = Number(getMeta(db, CATALOG_REFRESH_KEY) ?? 0);
-  // envNum, а не Number(process.env.X ?? default): Number("") === 0, из-за чего
-  // пустая переменная в .env.example делала каталог «просроченным» всегда —
-  // провайдеры дёргались на каждом тике вместо раза в 6 часов.
-  const ttlMs = envNum(process.env, "CATALOG_TTL_MS", 6 * 60 * 60 * 1000, { min: 60_000 });
-  if (now - last < ttlMs) return;
+  /*
+   * Каталог обновляется под активные поиски пользователей, а не «общей
+   * витриной»: запросы берутся из searches. Раньше здесь стоял вызов
+   * refreshProviders({ limit: 50 }) без текста запроса — то есть в базу
+   * попадали первые 50 вакансий площадки вообще, независимо от того, что
+   * кто-то ищет.
+   */
+  if (!slowProvidersDue(now, last)) return;
   try {
-    await refreshProviders({ limit: 50 });
+    const report = await refreshCatalogForSearches({ now: () => now });
     setMeta(db, CATALOG_REFRESH_KEY, String(now));
-    logInfo("scheduler", "каталог обновлён");
+    if (!report.ran) {
+      logInfo("scheduler", `каталог не обновлялся: ${report.skipped}`);
+    }
   } catch (err) {
     logError("scheduler:refresh", err);
+  }
+}
+
+/**
+ * Быстрый круг: обновление только быстрых источников.
+ *
+ * Нужен, чтобы обещание «отклик в первые минуты после публикации» было
+ * выполнимо. При шестичасовом интервале вакансия, опубликованная два часа
+ * назад, попадала в автоотклик через шесть — то есть обещание нарушалось бы
+ * по построению, независимо от настроек пользователя.
+ */
+async function refreshFastCatalog(now: number): Promise<void> {
+  const last = Number(getMeta(db, CATALOG_FAST_REFRESH_KEY) ?? 0);
+  if (!fastProvidersDue(now, last)) return;
+  try {
+    await refreshCatalogForSearches({ now: () => now });
+    setMeta(db, CATALOG_FAST_REFRESH_KEY, String(now));
+  } catch (err) {
+    logError("scheduler:refresh-fast", err);
   }
 }
 
@@ -84,8 +109,16 @@ export async function runScheduledJobs(): Promise<void> {
   if (!acquireLock(db, now)) return;
 
   try {
+    await refreshFastCatalog(now);
     await refreshCatalogIfStale(now);
-    await runAutoApply();
+    /*
+     * Итог прогона сохраняем, а не только логируем.
+     *
+     * Иначе человек открывает панель автооткликов и не видит ничего: откликов
+     * «молча ноль», и это неотличимо от поломки. Разбор прогона (почему столько,
+     * что мешает) берётся из этой записи.
+     */
+    saveLastRun(await runAutoApply(), now);
     await syncAllHhUsers();
   } catch (err) {
     logError("scheduler", err);

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * Иерархия заголовков.
@@ -18,11 +18,33 @@ import { execSync } from "node:child_process";
  * Проверка по исходнику, а не по DOM: в DOM эти стили считались бы
  * одинаковыми, различие только в теге.
  */
+/**
+ * Все исходники, а не только отслеживаемые git.
+ *
+ * Раньше список брался из `git ls-files src`, и тест молча проверял ноль новых
+ * файлов: всё, что ещё не закоммичено, из выдачи исчезало. Так в код попал
+ * заголовок без антиквы — нарушение было видно только после `git add`.
+ *
+ * Обход каталога вместо выдачи git: проверка правила темы не должна зависеть
+ * от того, закоммичен файл или нет. Недостаток — файлы в .gitignore тоже
+ * попадут в обход, но для правила оформления это скорее правильно, чем нет.
+ */
 function sourceFiles(): string[] {
-  return execSync("git ls-files src", { encoding: "utf8" })
-    .trim()
-    .split("\n")
-    .filter((f) => /\.(tsx|ts)$/.test(f));
+  const root = process.cwd();
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === "node_modules" || entry.name === ".next" || entry.name.startsWith(".")) continue;
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (/\.(tsx|ts)$/.test(entry.name)) {
+        out.push(full);
+      }
+    }
+  };
+  walk(join(root, "src"));
+  return out.sort();
 }
 
 test("служебная метка не надета на заголовок", () => {

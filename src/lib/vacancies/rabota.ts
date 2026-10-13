@@ -1,6 +1,7 @@
 import type { Level, WorkFormat } from "../data";
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
 import { sanitizeExternalUrl, toSalaryNumber } from "./util";
+import { parsePublishedAt } from "./published";
 import { httpFetch } from "../http-client";
 
 const BASE = "https://www.rabota.ru/vacancy/";
@@ -175,6 +176,7 @@ export function mapRabotaVacancy(raw: RabotaJsonLd, idx: number): Vacancy | null
     format: inferFormat(about, raw.employmentType),
     city: extractCity(raw),
     posted: relativePosted(raw.datePosted),
+    published_at: parsePublishedAt(raw.datePosted),
     category: "Работа",
     about: about.slice(0, 2000) || "Описание вакансии доступно на сайте Работа.ру.",
     responsibilities: [],

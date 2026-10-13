@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Badge, EmptyState, btnDanger, btnGhost } from "@/components/dashboard/ui";
+import { Badge, EmptyState, StatusMessage, btnDanger, btnGhost } from "@/components/dashboard/ui";
+import { InterviewPrepPanel } from "./interview-prep";
+import type { InterviewPrep } from "@/lib/interview";
 
 export type ApplicationItem = {
   id: number;
@@ -28,6 +30,54 @@ export type ApplicationItem = {
 };
 
 import { SOURCE_LABELS } from "@/lib/source-labels";
+
+/**
+ * Загрузчик подготовки.
+ *
+ * Данные берутся по требованию: приглашений на странице обычно ноль, а
+ * подготовка нужна одна и только по этому отклику. Загружать её для всех
+ * приглашений сразу значило бы посылать запрос на каждое при открытии
+ * страницы ради блока, который человек, скорее всего, не раскроет.
+ */
+function InterviewPrepLoader({ id }: { id: number }) {
+  const [prep, setPrep] = useState<InterviewPrep | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={async () => {
+          if (prep || error) return;
+          try {
+            const res = await fetch(`/api/applications/${id}/interview`);
+            const data = await res.json();
+            if (!res.ok) {
+              setError(data.error ?? "Не удалось подготовить материалы");
+              return;
+            }
+            setPrep(data.prep);
+          } catch {
+            setError("Сеть недоступна");
+          }
+        }}
+        className="mt-2 font-mono text-[11px] uppercase tracking-[0.14em] text-accent transition-colors hover:text-ink"
+      >
+        {prep ? "Подготовиться к собеседованию" : "Подготовиться к собеседованию"}
+      </button>
+
+      {/*
+        Ошибка — в живой области. Иначе нажатие «Подготовиться» при
+        недоступном сервере выглядит как ничего не сделавшее: экран молчит,
+        и человек повторяет нажатие.
+      */}
+      <StatusMessage tone="error" className="mt-2 py-2 text-xs">
+        {error}
+      </StatusMessage>
+      {prep ? <InterviewPrepPanel prep={prep} /> : null}
+    </>
+  );
+}
 
 type Filter = "all" | "sent" | "viewed" | "responded" | "withdrawn";
 
@@ -213,6 +263,15 @@ export function ApplicationsView({ initial }: { initial: ApplicationItem[] }) {
                     )}
                   </p>
                 ) : null}
+
+                {/* Причина отказа с площадки: без неё «отказ» ничего не объясняет. */}
+                {a.response === "decline" && a.response_note ? (
+                  <p className="mt-1 text-xs leading-relaxed text-muted">
+                    Причина с hh.ru: {a.response_note}
+                  </p>
+                ) : null}
+
+                {a.response === "interview" ? <InterviewPrepLoader id={a.id} /> : null}
               </div>
               {!a.withdrawn ? (
                 <div className="flex shrink-0 flex-col items-end gap-2">

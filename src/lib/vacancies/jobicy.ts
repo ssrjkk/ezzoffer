@@ -1,6 +1,7 @@
 import type { Level } from "../data";
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
 import { cleanHtml, toSalaryNumber } from "./util";
+import { parsePublishedAt } from "./published";
 import { httpFetch, parseJson } from "../http-client";
 
 const BASE = "https://jobicy.com/api/v2/remote-jobs";
@@ -94,6 +95,7 @@ export function mapJobicyVacancy(raw: JobicyJob): Vacancy | null {
     format: /remote/i.test(geoLower) ? "Удалённо" : "В офисе",
     city: geo,
     posted: relativePosted(raw.pubDate),
+    published_at: parsePublishedAt(raw.pubDate),
     category: (raw.jobIndustry ?? [])[0] ?? "Работа",
     about: desc.slice(0, 2000) || "Описание доступно на Jobicy.",
     responsibilities: [],

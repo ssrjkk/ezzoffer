@@ -5,6 +5,7 @@ import { ScoreBadge } from "./score-badge";
 import { Badge, EmptyState, Field, btnPrimary, btnGhost, btnDanger, inputCls, StatusMessage } from "@/components/dashboard/ui";
 import { Dialog, ConfirmDialog } from "@/components/dialog";
 import { RESUME_TEMPLATES } from "@/lib/data";
+import { HhImportButton } from "./hh-import";
 import { FileDown, Sparkles } from "lucide-react";
 
 type Resume = {
@@ -13,6 +14,8 @@ type Resume = {
   content: string;
   years_label: string;
   ai_improved: number;
+  /** id резюме на hh; null — резюме создано вручную и отправлено не будет. */
+  hh_id: string | null;
   updated_at: number;
 };
 
@@ -135,6 +138,28 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
             ))}
           </div>
         </div>
+
+        <HhImportButton
+          onImported={(resume) => {
+            /*
+             * Замена по id, а не добавление в начало.
+             *
+             * Повторный импорт того же резюме с hh обновляет существующую
+             * запись, а не создаёт вторую: так человек перезаливает одно и то же.
+             * Если бы мы добавляли, в списке появились бы две одинаковые
+             * карточки, и человек решил бы, что импорт создал дубль.
+             */
+            setResumes((prev) => {
+              const at = prev.findIndex((r) => r.id === resume.id);
+              if (at === -1) return [resume, ...prev];
+              const next = [...prev];
+              next[at] = resume;
+              return next;
+            });
+            setError(null);
+          }}
+          onError={(text) => setError(text)}
+        />
       </div>
 
       {/* Ошибки удаления/улучшения. Ошибки сохранения показываются внутри
@@ -201,6 +226,13 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="font-serif leading-snug text-ink">{r.title}</h2>
                   {r.ai_improved ? <Badge tone="success">Улучшено AI</Badge> : <Badge>Черновик</Badge>}
+                  {/*
+                   * Привязка к hh определяет, какое резюме уйдёт в отклике.
+                   * Без этой метки человек не видит разницы между резюме,
+                   * которое участвует в подборе, и тем, которое реально
+                   * отправляется — а это разные вещи, когда привязки нет.
+                   */}
+                  {r.hh_id ? <Badge tone="success">Отправляется на hh</Badge> : <Badge tone="warn">Только для подбора</Badge>}
                   <ScoreBadge content={r.content} />
                 </div>
                 <p className="mt-1 line-clamp-2 text-sm text-muted">{r.content.split("\n").slice(0, 4).join(" · ")}</p>

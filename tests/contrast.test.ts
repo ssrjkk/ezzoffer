@@ -117,6 +117,108 @@ test("кнопка удаления и её наведение проходят 
   }
 });
 
+/**
+ * Акцент на тёмном фоне.
+ *
+ * Регрессия, пойманная при переводе «Историй успеха» в инверсную полосу:
+ * результат истории («Оффер через 2 недели») был покрашен обычным
+ * `--color-accent` и на `bg-ink` давал 2.41:1 — метку было почти не видно.
+ *
+ * Причина в том, что `--color-accent` рассчитан как ФОН под белый текст
+ * (7.1:1 на бумаге). Как цвет текста на тёмном он не годится никогда,
+ * поэтому для чернил существует отдельный токен.
+ *
+ * Проверяются оба: наличие токена и его контраст на чернилах.
+ */
+test("акцент на чернилах проходит AA", () => {
+  const ratio = contrast(cssVar("accent-on-dark"), cssVar("ink"));
+  assert.ok(
+    ratio >= AA_TEXT,
+    `--color-accent-on-dark ${cssVar("accent-on-dark")} даёт ${ratio.toFixed(2)}:1 на чернилах — нужно ${AA_TEXT}:1`,
+  );
+});
+
+test("обычный акцент на чернилах НЕ проходит — значит токен обязателен", () => {
+  /*
+   * Обратная проверка. Если бы `--color-accent` вдруг оказался достаточно
+   * светлым для чернил, отдельный токен стал бы лишним и две палитры
+   * разошлись бы без причины. Тест фиксирует, что различие намеренное.
+   */
+  const ratio = contrast(cssVar("accent"), cssVar("ink"));
+  assert.ok(
+    ratio < AA_TEXT,
+    `--color-accent ${cssVar("accent")} неожиданно проходит на чернилах (${ratio.toFixed(2)}:1) — ` +
+      "лишний токен accent-on-dark, проверьте, нужен ли он",
+  );
+});
+
+/**
+ * На тёмной поверхности — только светлый акцент.
+ *
+ * Предыдущий тест проверяет палитру, а этот — разметку: тёмная полоса может
+ * появиться где угодно (секция, карточка, диалог), и обычный `text-accent`
+ * внутри неё даст 2.41:1. Тест палитры этого не увидит: он читает
+ * globals.css, а фон задан классом в компоненте.
+ *
+ * Ищутся два случая: тёмный фон и акцент в одном наборе классов, и тёмный
+ * фон у контейнера с акцентом внутри (так оформлены инверсные секции).
+ */
+test("на тёмном фоне используется светлый акцент", () => {
+  const files = execSync("git ls-files src", { encoding: "utf8" })
+    .trim()
+    .split("\n")
+    .filter((f) => /\.(tsx|ts)$/.test(f));
+
+  const DARK_BG = /\bbg-ink\b|\bbg-black\b/;
+  // text-accent-2 и text-accent-on-dark подходят; голый text-accent — нет.
+  // Важно: hover: и focus: варианты не считаются — на тёмном фоне их можно
+  // и нужно красить в бумагу, а проверять надо БАЗОВЫЙ цвет текста.
+  const BAD_ACCENT = /(?<![\w-])(text-accent)(?![\w-])/;
+
+  const offenders: string[] = [];
+  for (const file of files) {
+    const source = readFileSync(file, "utf8");
+
+    // 1. Тёмный фон и БАЗОВЫЙ акцент в одном наборе классов — заведомо плохо.
+    for (const m of source.matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/g)) {
+      const cls = m[1] ?? m[2] ?? "";
+      if (!DARK_BG.test(cls)) continue;
+      // Убираем варианты с префиксом состояния, остаётся базовый цвет.
+      const base = cls.replace(/[a-z-]+:(text|bg)-[^\s]+/g, "");
+      if (BAD_ACCENT.test(base)) {
+        const line = source.slice(0, m.index).split("\n").length;
+        offenders.push(`${file}:${line}  «${cls.slice(0, 90)}»`);
+      }
+    }
+
+    /*
+     * 2. Тёмный фон у контейнера, акцент у вложенного элемента.
+     *    Так оформлены инверсные секции: фон на <section>, акцент на <p>.
+     *    Окно берётся до закрытия секции, иначе поймало бы соседние блоки.
+     */
+    for (const m of source.matchAll(/\bbg-ink\b|\bbg-black\b/g)) {
+      const win = source.slice(m.index, m.index + 3000);
+      const end = win.indexOf("</section>");
+      if (end < 0) continue; // не секция — случай 1 уже покрывает вложенность
+      const scope = win.slice(0, end);
+
+      for (const a of scope.matchAll(/className="([^"]*)"/g)) {
+        const base = a[1]!.replace(/[a-z-]+:(text|bg)-[^\s]+/g, "");
+        if (BAD_ACCENT.test(base)) {
+          const line = source.slice(0, m.index).split("\n").length;
+          offenders.push(`${file}:~${line}  тёмная секция → «${a[1]!.slice(0, 80)}»`);
+        }
+      }
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    `text-accent на тёмном фоне даёт 2.41:1 — нужен accent-on-dark:\n${offenders.join("\n")}`,
+  );
+});
+
 test("надзаголовки акцентом-2 проходят AA на подложке секции", () => {
   const sectionBg = blend(cssVar("surface"), cssVar("bg"), 0.4);
   const ratio = contrast(cssVar("accent-2"), sectionBg);

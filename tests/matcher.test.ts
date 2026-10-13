@@ -38,6 +38,7 @@ const makeVacancy = (over: Partial<Vacancy> = {}): Vacancy => ({
   source_url: null,
   contact_email: null,
   contact_phone: null,
+  published_at: null,
   ...over,
 });
 

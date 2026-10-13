@@ -1,6 +1,7 @@
 import type { Level, WorkFormat } from "../data";
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
 import { cleanHtml, sanitizeExternalUrl } from "./util";
+import { parsePublishedAt } from "./published";
 import { httpFetch, parseJson } from "../http-client";
 
 const DEFAULT_BOARDS = ["mozilla", "airbnb", "spotify", "stripe", "gitlab", "netflix"];
@@ -80,6 +81,7 @@ export function mapGreenhouseVacancy(raw: GreenhouseJob, fallbackCompany = "Ко
     format: inferFormat(loc),
     city,
     posted: relativePosted(raw.first_published),
+    published_at: parsePublishedAt(raw.first_published),
     category: departments || "Работа",
     about: content.slice(0, 2000) || "Описание доступно на странице вакансии.",
     responsibilities: responsibilitiesSection,

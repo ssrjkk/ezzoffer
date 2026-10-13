@@ -1,6 +1,7 @@
 import type { Level } from "../data";
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
 import { cleanHtml, sanitizeExternalUrl } from "./util";
+import { parsePublishedAt } from "./published";
 import { httpFetch } from "../http-client";
 
 const RSS_URL = "https://weworkremotely.com/remote-jobs.rss";
@@ -91,6 +92,7 @@ export function mapWwRItem(raw: WwRItem): Vacancy | null {
     format: "Удалённо",
     city: region,
     posted: relativePosted(raw.pubDate),
+        published_at: parsePublishedAt(raw.pubDate),
     category: raw.category || "Работа",
     about: desc.slice(0, 2000) || "Описание доступно на We Work Remotely.",
     responsibilities: [],

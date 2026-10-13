@@ -44,6 +44,7 @@ function makeVacancy(overrides: Partial<Vacancy> = {}): Vacancy {
     source_url: "https://hh.ru/vacancy/1",
     contact_email: null,
     contact_phone: null,
+    published_at: null,
     ...overrides,
   };
 }

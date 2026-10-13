@@ -118,6 +118,180 @@ test("POST /api/resumes отклоняет пустое содержимое", a
   assert.equal((await POST(post({}))).status, 400);
 });
 
+/**
+ * Повторный импорт одного резюме с hh обновляет, а не плодит дубли.
+ *
+ * Уникальный индекс (user_id, hh_id) нужен, чтобы в подборе не появлялись два
+ * одинаковых кандидата. Но без обработки дубля API отвечал бы 500 на совершенно
+ * обычное действие — человек перезалил резюме на hh и хочет обновить копию у
+ * нас. Такой ответ невыносим и выглядит как поломка.
+ */
+test("повторный импорт с hh обновляет существующее резюме", async () => {
+  makeUser(1, "me@example.test");
+  // Токен задаётся в заглушке сессии: requireUser возвращает её, а не строку из БД.
+  loginAs({ hh_token: "t", hh_token_expires_at: Date.now() + 3_600_000 });
+
+  const net = stubHhResume("hh-resume-1");
+  try {
+    const { POST } = await import("../src/app/api/resumes/route");
+
+    const first = await POST(post({ fromHh: "hh-resume-1" }));
+    assert.equal(first.status, 201, `первый импорт не создал резюме: ${first.status}`);
+
+    net.setText("Вторая версия резюме с hh, обновлено");
+    const second = await POST(post({ fromHh: "hh-resume-1" }));
+
+    assert.equal(second.status, 200, `повторный импорт вернул ${second.status} вместо обновления`);
+    const rows = db.prepare("SELECT * FROM resumes WHERE user_id = 1").all() as {
+      hh_id: string;
+      content: string;
+    }[];
+    assert.equal(rows.length, 1, `повторный импорт создал дубль: ${rows.length} записей`);
+    assert.equal(rows[0]!.hh_id, "hh-resume-1");
+    assert.match(rows[0]!.content, /Вторая версия/, "повторный импорт не обновил содержимое");
+  } finally {
+    net.restore();
+  }
+});
+
+test("привязка к hh сохраняется при импорте", async () => {
+  makeUser(1, "me@example.test");
+  // Токен задаётся в заглушке сессии: requireUser возвращает её, а не строку из БД.
+  loginAs({ hh_token: "t", hh_token_expires_at: Date.now() + 3_600_000 });
+
+  const net = stubHhResume("hh-abc-123");
+  try {
+    const { POST } = await import("../src/app/api/resumes/route");
+    const res = await POST(post({ fromHh: "hh-abc-123" }));
+    assert.equal(res.status, 201);
+
+    const row = db.prepare("SELECT hh_id FROM resumes WHERE user_id = 1").get() as { hh_id: string };
+    assert.equal(
+      row.hh_id,
+      "hh-abc-123",
+      "id резюме hh не сохранён — отклик уйдёт с чужим резюме",
+    );
+  } finally {
+    net.restore();
+  }
+});
+
+/**
+ * Подготовка к собеседованию берёт то резюме, что ушло в отклик.
+ *
+ * Найденный баг. В applications.resume_id лежит идентификатор резюме на hh —
+ * строка, потому что именно она уходит в POST /negotiations. Маршрут искал
+ * `SELECT * FROM resumes WHERE id = ?`, то есть по локальному автоинкременту.
+ * Для обычного hh-id вроде «a1b2c3» сравнение молча не находит ничего и
+ * подготовка строится ни на чём; для числового вроде «123» — находит, и это
+ * хуже: вернётся другое резюме той же учётной записи, то есть подготовка к
+ * вакансии фронтенда напишется по резюме про бэкенд.
+ *
+ * Здесь hh-id намеренно числовой — именно этот случай проходит молча.
+ */
+test("подготовка к собеседованию берёт отправленное резюме, а не любое", async () => {
+  makeUser(1, "me@example.test");
+  const now = Date.now();
+
+  /*
+   * Ключевая деталь: hh_id = '7', а локальные id 1 и 2.
+   *
+   * Если бы hh_id совпадал с каким-нибудь resumes.id, старый запрос вернул бы
+   * правильное резюме по счастливому совпадению — и тест прошёл бы при
+   * сломанном коде. Здесь номера 7 в таблице нет, поэтому старый запрос
+   * `id = '7'` ничего не находит и скатывается на «последнее обновлённое».
+   * А последним обновлённым специально сделано БЭКЕНД-резюме.
+   */
+  db.prepare(
+    `INSERT INTO resumes (id, user_id, title, content, years_label, ai_improved, hh_id, created_at, updated_at)
+     VALUES (1, 1, 'Frontend', 'React, TypeScript, Next.js, Redux, Vite', '', 0, '7', ?, ?)`,
+  ).run(now - 60_000, now - 60_000);
+  db.prepare(
+    `INSERT INTO resumes (id, user_id, title, content, years_label, ai_improved, hh_id, created_at, updated_at)
+     VALUES (2, 1, 'Backend', 'Python, Django, PostgreSQL, микросервисы, Redis', '', 0, NULL, ?, ?)`,
+  ).run(now, now);
+
+  db.prepare(
+    `INSERT INTO vacancies (slug, source, source_id, title, company, salary, salary_min, salary_max,
+       level, format, city, posted, published_at, category, about, responsibilities, requirements, bonus,
+       contact_email, contact_phone, fetched_at)
+     VALUES ('hh-itv', 'hh', 'itv', 'React-разработчик', 'Тест', '', NULL, NULL,
+       'Middle', 'Удалённо', 'Москва', 'сегодня', ?, 'Разработка', 'Требуются: React, TypeScript, Next.js',
+       '[]', '["React","TypeScript","Next.js"]', '[]', NULL, NULL, ?)`,
+  ).run(now - 3_600_000, now);
+
+  const appId = Number(
+    db
+      .prepare(
+        `INSERT INTO applications (user_id, job_slug, resume_id, status, sent_at) VALUES (1, 'hh-itv', '7', 'sent', ?)`,
+      )
+      .run(now).lastInsertRowid,
+  );
+
+  const { GET } = await import("../src/app/api/applications/[id]/interview/route");
+  const res = await GET({} as never, { params: Promise.resolve({ id: String(appId) }) });
+  assert.equal(res.status, 200, `маршрут вернул ${res.status}`);
+
+  const data = (await res.json()) as { brief: { matched: string[]; missing: string[] } };
+  /*
+   * Проверяется brief, а не questions.
+   *
+   * Вопросы prepareInterview строятся вокруг самой вакансии и от резюме почти
+   * не зависят, поэтому различать два резюме по ним бесполезно. А brief — это
+   * разбор «ваше резюме против этой вакансии», и он обязан отличаться: с чужим
+   * резюме в matched пусто, а весь перечень навыков уезжает в missing.
+   */
+  assert.ok(
+    data.brief.matched.includes("React"),
+    `подготовка построена не по отправленному резюме: matched=${JSON.stringify(data.brief.matched)}`,
+  );
+  assert.deepEqual(
+    data.brief.missing,
+    [],
+    `в пробелы ушли навыки вакансии, то есть резюме чужое: ${JSON.stringify(data.brief.missing)}`,
+  );
+});
+
+/**
+ * Заглушка чтения резюме с hh через перехват сети.
+ *
+ * Пробовать подменить экспорт модуля бесполезно: ESM-модуль отдаёт свойства
+ * только через геттеры, и присваивание падает. Поэтому перехватывается fetch —
+ * это та же точка, где в остальных тестах.
+ */
+function stubHhResume(id: string): { setText: (t: string) => void; restore: () => void } {
+  const saved = globalThis.fetch;
+  let text = "Первая версия резюме с hh";
+  const json = (value: unknown) => ({ ok: true, status: 200, json: async () => value }) as unknown as Response;
+
+  globalThis.fetch = (async (url: string | URL) => {
+    const u = String(url);
+    /*
+     * Именно json, а не text: hh-resumes читает res.json(), в отличие от
+     * httpFetch в остальных тестах. Заглушка с одним text проходила мимо этой
+     * ветки и давала 502 на нормальный импорт.
+     */
+    if (u.includes("/token")) return json({ access_token: "t", expires_in: 3600 });
+    if (u.includes(`/resumes/${id}`)) {
+      return json({
+        id,
+        title: "Из hh",
+        blocks: [{ name: "О себе", paragraphs: [{ text }] }],
+      });
+    }
+    return json({});
+  }) as typeof globalThis.fetch;
+
+  return {
+    setText: (t: string) => {
+      text = t;
+    },
+    restore: () => {
+      globalThis.fetch = saved;
+    },
+  };
+}
+
 test("чужое резюме нельзя изменить (IDOR)", async () => {
   makeUser(1, "me@example.test");
   makeUser(2, "other@example.test");

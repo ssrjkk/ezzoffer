@@ -1,6 +1,7 @@
 import type { Level, WorkFormat } from "../data";
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
 import { cleanHtml, sanitizeExternalUrl, toSalaryNumber } from "./util";
+import { parsePublishedAt } from "./published";
 import { httpFetch, parseJson } from "../http-client";
 
 const BASE = "https://remoteok.com/api";
@@ -87,6 +88,7 @@ export function mapRemoteOkVacancy(raw: RemoteOkRaw): Vacancy | null {
     format: inferFormat(),
     city: loc || "Remote",
     posted: "сегодня",
+        published_at: parsePublishedAt(raw.date ?? null),
     category: "Работа",
     about: about.slice(0, 2000) || "Описание доступно на RemoteOK.",
     responsibilities: [],

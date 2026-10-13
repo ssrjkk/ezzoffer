@@ -19,6 +19,8 @@ export default async function ResumesPage() {
     content: string;
     years_label: string;
     ai_improved: number;
+    /** id резюме на hh; null — отправлено не будет, только подбор. */
+    hh_id: string | null;
     created_at: number;
     updated_at: number;
   }[];

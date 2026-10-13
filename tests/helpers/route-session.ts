@@ -43,6 +43,8 @@ export function fakeUser(over: Partial<User> = {}): User {
     email_verification_token: null,
     password_reset_token: null,
     password_reset_expires: null,
+    salary_expectation: null,
+    city_preference: "",
     ...over,
   };
 }

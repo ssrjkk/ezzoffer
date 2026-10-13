@@ -1,6 +1,7 @@
 import type { Level, WorkFormat } from "../data";
 import type { Vacancy, VacancyApplyResult, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
 import { sanitizeExternalUrl, toSalaryNumber } from "./util";
+import { parsePublishedAt } from "./published";
 import { httpFetch, parseJson } from "../http-client";
 import { getHhAppToken, hhSearchConfigured } from "../hh-app-token";
 import { logError } from "../logger";
@@ -99,6 +100,7 @@ export function mapHhVacancy(raw: HhVacancyRaw): Vacancy | null {
     format: inferFormat(raw.schedule?.id),
     city: raw.area?.name ?? "Россия",
     posted: relativePosted(raw.published_at ?? ""),
+    published_at: parsePublishedAt(raw.published_at),
     category: raw.professional_roles?.[0]?.name ?? "Работа",
     about: resp ? `${resp}\n\n${req}` : req || "Описание доступно на hh.ru.",
     responsibilities: resp ? [resp] : [],
@@ -107,6 +109,52 @@ export function mapHhVacancy(raw: HhVacancyRaw): Vacancy | null {
     source_url: sanitizeExternalUrl(raw.alternate_url),
     contact_email: null,
     contact_phone: null,
+  };
+}
+
+/**
+ * Классификация отказа hh по POST /negotiations.
+ *
+ * Разделение принципиальное: backoff существует ради риска блокировки, а не
+ * ради очистки мусора. Если на закрытую вакансию включать паузу, то одна
+ * запись, пролежавшая в каталоге неделю, замедлит весь прогон.
+ *
+ *   404 / 400 «не найдена», «закрыта», «недоступна»  → closed
+ *   401 / 403                                          → auth
+ *   429 / 503                                           → rate_limit
+ *   прочее                                              → other
+ *
+ * Текст ошибки нужен: hh не всегда пишет код, соответствующий сути, и по
+ * одному 400 нельзя понять, закрыта вакансия или отказали по резюме.
+ */
+export function classifyApplyFailure(
+  status: number,
+  body: string,
+): { kind: NonNullable<VacancyApplyResult["kind"]>; error: string } {
+  const text = (body ?? "").toLowerCase();
+
+  const looksClosed =
+    text.includes("closed") ||
+    text.includes("not found") ||
+    text.includes("закрыт") ||
+    text.includes("не найден") ||
+    text.includes("недоступн") ||
+    text.includes("архив") ||
+    text.includes("vacancy not") ||
+    text.includes("not available");
+
+  if (status === 404 || (status === 400 && looksClosed)) {
+    return { kind: "closed", error: "Вакансия закрыта на hh.ru" };
+  }
+  if (status === 401 || status === 403) {
+    return { kind: "auth", error: "hh.ru не принял авторизацию — перепривяжите аккаунт" };
+  }
+  if (status === 429 || status === 503) {
+    return { kind: "rate_limit", error: `Платформа ограничивает темп (HTTP ${status})` };
+  }
+  return {
+    kind: "other",
+    error: `${status === 0 ? "сетевая ошибка" : `HTTP ${status}`} ${(body ?? "").slice(0, 180)}`.trim(),
   };
 }
 
@@ -141,12 +189,12 @@ export const hhProvider: VacancyProvider = {
      * человека, и подставлять сюда токен приложения нельзя — hh отвергнет
      * запрос или пришлёт вакансию от служебного аккаунта.
      *
-     * Раньше фолбэк на HH_ACCESS_TOKEN позволял отправить отклик НЕ от того
-     * пользователя, которому он принадлежит.
+     * Раньше был фолбэк на HH_ACCESS_TOKEN, позволявший отправить отклик НЕ
+     * от того пользователя, которому он принадлежит.
      */
     const token = ctx.accessToken?.trim();
     if (!token) {
-      return { ok: false, error: "Аккаунт hh.ru не привязан" };
+      return { ok: false, kind: "auth", error: "Аккаунт hh.ru не привязан" };
     }
 
     const vacancyId = /^hh-/.test(vacancy.slug) ? vacancy.slug.slice(3) : vacancy.source_id;
@@ -168,10 +216,21 @@ export const hhProvider: VacancyProvider = {
       },
       body: JSON.stringify(payload),
     });
-    if (!res.ok) {
-      return { ok: false, error: `${res.error ?? "network error"} ${res.body.slice(0, 200)}`.trim() };
-    }
-    return { ok: true };
+
+    if (res.ok) return { ok: true };
+
+    /*
+     * Классификация отказа.
+     *
+     * Без неё каждая неудачная отправка считалась «платформа отталкивает»
+     * и включала backoff. Закрытая за два дня вакансия при этом замедляла
+     * весь прогон на часы — то есть каталог, где запись живёт неделю,
+     * мог отравить автоотклик целиком.
+     */
+    return {
+      ok: false,
+      ...classifyApplyFailure(res.status, res.body),
+    };
   },
 
   /**

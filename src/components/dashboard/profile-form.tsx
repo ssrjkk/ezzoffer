@@ -3,8 +3,36 @@
 import { useState, type FormEvent } from "react";
 import { Field, Panel, btnPrimary, inputCls } from "@/components/dashboard/ui";
 
-export function ProfileForm({ name, email }: { name: string; email: string }) {
-  const [draft, setDraft] = useState({ name, email, password: "", currentPassword: "" });
+/*
+ * Профиль.
+ *
+ * Кроме учётных данных здесь то, по чему сервис понимает, что искать:
+ * зарплатные ожидания и предпочитаемый город.
+ *
+ * Раньше полей не было вообще, и это была не мелочь: без зарплатных
+ * ожиданий фактор «Зарплата» в оценке вакансии всегда оставался нейтральным,
+ * то есть подсказка «вакансия на 60к против ваших ожиданий 180к» физически
+ * не могла появиться. Один из самых частых фильтров при поиске был недоступен.
+ */
+export function ProfileForm({
+  name,
+  email,
+  salaryExpectation,
+  cityPreference,
+}: {
+  name: string;
+  email: string;
+  salaryExpectation: number | null;
+  cityPreference: string;
+}) {
+  const [draft, setDraft] = useState({
+    name,
+    email,
+    password: "",
+    currentPassword: "",
+    salary: salaryExpectation ? String(salaryExpectation) : "",
+    city: cityPreference,
+  });
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -21,6 +49,10 @@ export function ProfileForm({ name, email }: { name: string; email: string }) {
           email: draft.email,
           password: draft.password || undefined,
           currentPassword: draft.email !== email ? draft.currentPassword || undefined : undefined,
+          // Пустая строка означает «ожиданий не назвал», а не ноль: при нуле
+          // любая вакансия считалась бы выше ожиданий.
+          salaryExpectation: draft.salary.trim() === "" ? null : Number(draft.salary),
+          cityPreference: draft.city.trim(),
         }),
       });
       const data = await res.json();
@@ -40,6 +72,7 @@ export function ProfileForm({ name, email }: { name: string; email: string }) {
   return (
     <Panel>
       <h2 className="font-serif text-lg leading-snug text-ink">Профиль</h2>
+
       <form onSubmit={submit} className="mt-5 grid gap-4 md:grid-cols-2">
         <Field label="Имя">
           <input
@@ -62,6 +95,33 @@ export function ProfileForm({ name, email }: { name: string; email: string }) {
             onChange={(e) => setDraft({ ...draft, email: e.target.value })}
           />
         </Field>
+
+        {/*
+          Зарплатные ожидания — влияют на оценку вакансий и на подбор.
+          Ввод числом без потери фокуса: пустое поле означает «не назвал».
+        */}
+        <Field label="Зарплатные ожидания, ₽ (необязательно)" hint="Вакансии ниже этого порога будут получать меньшую оценку">
+          <input
+            type="number"
+            min={0}
+            step={10000}
+            inputMode="numeric"
+            className={inputCls}
+            value={draft.salary}
+            onChange={(e) => setDraft({ ...draft, salary: e.target.value })}
+            placeholder="180000"
+          />
+        </Field>
+        <Field label="Предпочитаемый город (необязательно)" hint="Используется в новых поисках под ваш выбор">
+          <input
+            maxLength={80}
+            className={inputCls}
+            value={draft.city}
+            onChange={(e) => setDraft({ ...draft, city: e.target.value })}
+            placeholder="Москва"
+          />
+        </Field>
+
         <div className="md:col-span-2">
           <Field label="Новый пароль (оставьте пустым, если не меняете)">
             <input
@@ -92,6 +152,7 @@ export function ProfileForm({ name, email }: { name: string; email: string }) {
             </Field>
           </div>
         ) : null}
+
         {/* Ошибка и успех попадают в разные живые области: ошибка должна
             прервать голос скринридера (alert), а подтверждение — озвучиться
             вежливо, не перебивая. Без этого форма выглядит «нерабочей»:

@@ -68,6 +68,7 @@ type VacancyRow = {
   format: WorkFormat;
   city: string;
   posted: string;
+  published_at: number | null;
   category: string;
   about: string;
   responsibilities: string;
@@ -103,6 +104,7 @@ function rowToVacancy(row: VacancyRow): Vacancy {
     format: row.format,
     city: row.city,
     posted: row.posted,
+    published_at: row.published_at,
     category: row.category,
     about: row.about,
     responsibilities: parseList(row.responsibilities),
@@ -119,12 +121,12 @@ const upsertStmt = db.prepare(
      slug, source, source_id, title, company, salary, salary_min, salary_max,
      level, format, city, posted, category, about,
      responsibilities, requirements, bonus,
-     source_url, contact_email, contact_phone, fetched_at
+     source_url, contact_email, contact_phone, published_at, fetched_at
    ) VALUES (
      @slug, @source, @source_id, @title, @company, @salary, @salary_min, @salary_max,
      @level, @format, @city, @posted, @category, @about,
      @responsibilities, @requirements, @bonus,
-     @source_url, @contact_email, @contact_phone, @fetched_at
+     @source_url, @contact_email, @contact_phone, @published_at, @fetched_at
    )
    ON CONFLICT(slug) DO UPDATE SET
      source = excluded.source,
@@ -146,6 +148,7 @@ const upsertStmt = db.prepare(
      source_url = excluded.source_url,
      contact_email = excluded.contact_email,
      contact_phone = excluded.contact_phone,
+     published_at = COALESCE(excluded.published_at, vacancies.published_at),
      fetched_at = excluded.fetched_at`,
 );
 
@@ -174,6 +177,7 @@ function upsertMany(list: Vacancy[], fetchedAt = Date.now()): number {
         source_url: v.source_url,
         contact_email: v.contact_email,
         contact_phone: v.contact_phone,
+        published_at: v.published_at,
         fetched_at: fetchedAt,
       });
     }
@@ -191,6 +195,20 @@ let catalogCachedAt = 0;
 function invalidateCatalog(): void {
   catalogCache = null;
   catalogCachedAt = 0;
+}
+
+/**
+ * Сбросить кэш каталога.
+ *
+ * Кэш живёт 30 секунд и сбрасывается сам, когда вакансии попадают в базу
+ * через upsertMany. Но если запись идёт в обход — напрямую в SQL, как в
+ * тестах, — кэш остаётся и каталог молча не показывает новое. Это уже стоило
+ * тестам прохождения не по той причине: вакансия из первого теста попадала
+ * в кэш, а вакансии из следующих тестов туда не попадали, и проверки
+ * «отклик ушёл» выполнялись на первой попавшейся записи.
+ */
+export function resetCatalogCache(): void {
+  invalidateCatalog();
 }
 
 export function ensureLocalSeeded(): void {

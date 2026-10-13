@@ -22,6 +22,7 @@ export function localVacancy(job: (typeof jobs)[number]): Vacancy {
     format: job.format,
     city: job.city,
     posted: job.posted,
+        published_at: null,
     category: job.category,
     about: job.about,
     responsibilities: job.responsibilities,

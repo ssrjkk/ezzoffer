@@ -8,7 +8,7 @@ import { createPacing, type Pacing, type PacingConfig } from "./anti-ban";
 import { effectivePacing } from "./config";
 import { renderLetterTemplate } from "./cover-letter";
 import { rankLettersForVacancy } from "./ai-matching";
-import { extractSkills } from "./skills";
+import { rankVacancies, type ResumeTarget } from "./resume-targeting";
 import type { Vacancy } from "./vacancies/types";
 import { logError, logInfo } from "./logger";
 
@@ -35,7 +35,18 @@ export type AutoApplyRun = {
   searches: number;
   applied: number;
   failed: number;
+  /**
+   * Подходящие вакансии, на которые отклик не пошёл.
+   *
+   * Смешивает две разные причины, поэтому для устаревших есть отдельный счётчик
+   * `stale`: «вакансия закрыта» и «вы уже откликались» требуют от человека
+   * противоположных действий — первую надо исправлять настройкой возраста,
+   * второе делать не нужно вовсе. В одной цифре это не различить, и человек
+   * чинит несуществующую проблему.
+   */
   skipped: number;
+  /** Подходящие вакансии старше порога — отклик на них не отправлен намеренно. */
+  stale: number;
   pausedFor: string | null;
   pausedUsers: number;
   /** Отклики, к которым приложено письмо. */
@@ -78,6 +89,19 @@ function getLatestResume(userId: number): { id: number; title: string; content: 
     .prepare("SELECT id, title, content FROM resumes WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1")
     .get(userId) as { id: number; title: string; content: string } | undefined;
   return row ?? null;
+}
+
+/**
+ * Все резюме пользователя для подбора и назначения.
+ *
+ * Порядок — по обновлению, чтобы при полном равенстве совпадений выбор падал
+ * на то, за которым человек работает сейчас, а не на случайно созданное
+ * раньше. Совпадения считаются в resume-targeting по навыкам, а не здесь.
+ */
+function getUserResumes(userId: number): ResumeTarget[] {
+  return db
+    .prepare("SELECT id, title, content, hh_id FROM resumes WHERE user_id = ? ORDER BY updated_at DESC, id DESC")
+    .all(userId) as ResumeTarget[];
 }
 
 /**
@@ -159,6 +183,43 @@ function defaultLetterTemplate(resumeContent: string): string {
   );
 }
 
+/**
+ * Максимальный возраст вакансии для автоотклика.
+ *
+ * Два дня — не произвольное число. При лимите 50 откликов в сутки и паузах
+ * 45–180 секунд весь дневной лимит расходуется примерно за полчаса-час. За
+ * это время список вакансий устаревает, и часть записей к моменту отклика
+ * уже закрыта.
+ *
+ * Потеря от отказа на закрытой вакансии двойная: тратится слот дневного
+ * лимита (а он один на день) и включается backoff, который замедляет все
+ * последующие отклики. Вакансия, которой два дня, ещё может быть открыта;
+ * вакансия недельной давности — почти наверняка нет.
+ */
+const MAX_APPLY_AGE_MS = 2 * 24 * 60 * 60 * 1000;
+
+/**
+ * Только вакансии, на которые ещё имеет смысл откликаться.
+ *
+ * Дата публикации неизвестна (площадка её не отдала) — вакансия пропускается:
+ * сказать «свежая» без данных было бы предположением, а предположение здесь
+ * стоит слота дневного лимита. Для источников без даты (RSS-фиды компаний)
+ * это заметно консервативнее, но консервативно — правильно: лимит конечен.
+ */
+export function onlyFresh(
+  vacancies: Vacancy[],
+  now = Date.now(),
+  maxAgeMs = MAX_APPLY_AGE_MS,
+): Vacancy[] {
+  return vacancies.filter((v) => {
+    if (typeof v.published_at !== "number") return false;
+    const age = now - v.published_at;
+    // Дата из будущего — мусор в данных площадки, а не свежая вакансия.
+    if (age < 0) return false;
+    return age <= maxAgeMs;
+  });
+}
+
 export async function runAutoApply(opts?: {
   pacing?: Partial<PacingConfig>;
   now?: () => number;
@@ -169,6 +230,7 @@ export async function runAutoApply(opts?: {
   let applied = 0;
   let failed = 0;
   let skipped = 0;
+  let staleTotal = 0;
   let ran = false;
   let pausedFor: string | null = null;
   let pausedUsers = 0;
@@ -198,19 +260,55 @@ export async function runAutoApply(opts?: {
     // потолка), часовой лимит и паузы — из конфигурации.
     const base = effectivePacing(limit);
     const effectiveDaily = Math.min(remaining, base.dailyCap);
+    /*
+     * Переданные извне паузы имеют приоритет над конфигурацией.
+     *
+     * Раньше здесь стояло `pacing.configure({ ...base, dailyLimit })` уже
+     * ПОСЛЕ createPacing с opts.pacing — и configure делает Object.assign, то
+     * есть затирал инъекцию значениями по умолчанию. Инъекция existла, была
+     * задокументирована параметром opts.pacing и молча ничего не делала:
+     * тест, который просил нулевую паузу, получал 45 секунд и мог проверить
+     * только первый отклик за тик. Теперь явные значения побеждают.
+     */
+    const overrides = opts?.pacing ?? {};
     const pacing = opts?.pacing
-      ? createPacing({ ...opts.pacing, dailyLimit: effectiveDaily }, nowFn)
+      ? createPacing({ ...base, ...overrides, dailyLimit: effectiveDaily }, nowFn)
       : pacingFor(user.id, { ...base, dailyLimit: effectiveDaily }, nowFn);
-    pacing.configure({ ...base, dailyLimit: effectiveDaily });
+    pacing.configure({ ...base, dailyLimit: effectiveDaily, ...overrides });
 
     const appliedSet = new Set<string>();
-    const resumeId = user.hh_resume_id?.trim() || null;
-    const valid = resumeId ? await getValidHhToken(user) : null;
-    const token = valid?.token ?? null;
+    /*
+     * Резюме пользователя — все, а не одно.
+     *
+     * Раньше подбор шёл по последнему обновлённому резюме, а отправлялось
+     * users.hh_resume_id. При нескольких резюме это расхождение становилось
+     * системным: система выбирала вакансии под «Python», а уходило резюме
+     * «React». Теперь на каждую вакансию резюме выбирается отдельно.
+     *
+     * Резюме, созданные вручную, отправлять нельзя — hh принимает свой id.
+     * Они остаются в оценке и письме, но id отклика берётся из того резюме,
+     * которое реально привязано к hh, либо из общего hh_resume_id.
+     */
+    const resumes = getUserResumes(user.id);
+    const sendableResumes = resumes.filter((r) => r.hh_id);
+    const fallbackResumeId = user.hh_resume_id?.trim() || null;
+    // Отправлять имеет смысл, только если резюме на hh вообще есть: либо
+    // привязанное к конкретному резюме, либо общее на уровне аккаунта.
+    const anySendable = sendableResumes.length > 0 || fallbackResumeId !== null;
+    /*
+     * Токен берём только если есть куда отправлять. Раньше здесь стояло
+     * `resumeId ? await getValidHhToken(user) : null` — без привязанного резюме
+     * токен не трогали вовсе. Обращение к hh лишнее, когда отправлять нечего.
+     */
+    const token = anySendable
+      ? ((await getValidHhToken(user))?.token ?? null)
+      : null;
 
     const letters = getLetters(user.id);
-    const resume = getLatestResume(user.id);
-    const resumeText = resume?.content ?? "";
+    // Резюме для письма: последнее обновлённое, как и раньше. Письмо — это
+    // текст, и тут важно совпадение с резюме человека, а не с вакансией.
+    const primaryResume = getLatestResume(user.id);
+    const primaryResumeText = primaryResume?.content ?? "";
 
     // Каталог и навыки — один раз на пользователя, а не на каждый поиск.
     const catalog = getCatalog();
@@ -234,25 +332,61 @@ export async function runAutoApply(opts?: {
        * разница между «первые 50 из каталога» и «50 самых подходящих» — это
        * разница между откликами в пустоту и откликами в ответ.
        */
-      const ordered = sortByResumeOverlap(candidates, resumeText, resume?.title ?? "");
+      const fresh = onlyFresh(candidates);
+      const stale = candidates.length - fresh.length;
+      if (stale > 0) {
+        /*
+         * Отдельно считаем пропущенные по устаревшим вакансиям: это не то же
+         * самое, что «уже отправлено». Человек, у которого лимит расходуется
+         * впустую на закрытые вакансии, должен видеть, сколько именно таких.
+         */
+        staleTotal += stale;
+        skipped += stale;
+      }
+      if (fresh.length === 0) continue;
 
-      for (const vacancy of ordered) {
+      /*
+       * Порядок отправки и назначение резюме — одним проходом.
+       *
+       * Раньше сортировка шла по пересечению с ОДНИМ резюме (последним
+       * обновлённым), и вакансия, идеально подходящая под второе резюме,
+       * могла оказаться в конце списка просто потому, что с первым не
+       * пересекалась. Теперь оценка берётся от лучшего подходящего резюме, то
+       * есть отвечает на вопрос «насколько эта вакансия подходит кому-то из
+       * моих резюме» — именно его человек и задаёт, заполняя несколько
+       * резюме.
+       *
+       * Ранжировать только по отправляемым нельзя: ручное резюме без привязки к
+       * hh годится для оценки, и его навыки должны влиять на порядок.
+       */
+      const ranked = rankVacancies(fresh, resumes.length > 0 ? resumes : [], skillsCache);
+
+      for (const { vacancy, resume: picked } of ranked) {
         if (appliedSet.size >= remaining) break;
         if (appliedSet.has(vacancy.slug)) continue;
-        // Проверяем ВОЗМОЖНОСТЬ ОТПРАВКИ (пользовательский токен + резюме),
-        // а не доступность поиска по hh (токен приложения). Раньше здесь стояла
-        // проверка isAvailable(), и пользователь с привязанным hh не отправлял
-        // ни одного отклика, если у сервиса не было токена приложения.
+
+        /*
+         * id резюме для отклика.
+         *
+         * Приоритет у привязанного резюме, подобранного под вакансию. Если
+         * подходящего привязанного нет — берётся общее hh_resume_id: так
+         * продолжают работать люди, у которых резюме заведено вручную и
+         * привязка задана на уровне аккаунта.
+         *
+         * Резюме без привязки отправлять нельзя: hh принимает только свой id,
+         * и подставлять локальный — значит отправлять мусор.
+         */
+        const sendableId = (picked?.hh_id ?? null) ?? fallbackResumeId;
         const canApply = hhProvider.canApply
-          ? hhProvider.canApply(token, resumeId)
-          : Boolean(token && resumeId);
+          ? hhProvider.canApply(token, sendableId)
+          : Boolean(token && sendableId);
         if (!canApply) {
           // Считаем только те вакансии этого поиска, которые ещё не отправлены
           // в этом прогоне. Раньше здесь стояло `skipped += candidates.length`:
           // список целиком учитывался для КАЖДОГО поиска, и уже отправленные
           // вакансии попадали в «пропущено» повторно — метрика раздувалась
           // в разы и показывала несуществующую проблему в статистике.
-          skipped += ordered.filter((v) => !appliedSet.has(v.slug)).length;
+          skipped += ranked.filter((r) => !appliedSet.has(r.vacancy.slug)).length;
           break;
         }
 
@@ -271,7 +405,7 @@ export async function runAutoApply(opts?: {
           .get(user.id, vacancy.slug);
         if (already) continue;
 
-        if (!hhProvider.apply || !resumeId) break;
+        if (!hhProvider.apply || !sendableId) break;
 
         /*
          * Письмо.
@@ -281,27 +415,52 @@ export async function runAutoApply(opts?: {
          * построить не удалось (LLM недоступен и шаблон пуст), отклик всё
          * равно отправляется — письмо улучшает отклик, но не является его
          * условием, и лучше отправить резюме, чем не отправить ничего.
+         *
+         * Текст для письма берётся из того же резюме, которое уходит на hh.
+         * Раньше письмо писалось по последнему обновлённому резюме, а уходило
+         * другое — то есть человек мог писать в сопроводительном «5 лет Python»,
+         * а отклик уходил с резюме «React». Берём то, что действительно отправляется.
          */
-        const letter = await buildLetter(vacancy, letters, resumeText);
+        const letterResumeText = picked?.content || primaryResumeText;
+        const letter = await buildLetter(vacancy, letters, letterResumeText);
         const message = letter?.text;
 
         const result = await hhProvider.apply(vacancy, {
-          resumeId,
+          resumeId: sendableId,
           ...(message ? { message } : {}),
           accessToken: token ?? undefined,
         });
         if (!result.ok) {
           failed++;
-          pacing.recordFailure("platform");
+          /*
+           * Backoff включается не на каждый отказ, а только на тот, который
+           * говорит о риске для аккаунта.
+           *
+           * Раньше здесь стояло безусловное recordFailure("platform"), и
+           * закрытая вакансия — а каталог держит записи неделю — включала
+           * экспоненциальную паузу. То есть мёртвая запись, попавшая в
+           * подбор, замедляла все последующие отклики на часы. Теперь
+           * «вакансии больше нет» просто пропускается: это не отказ платформы
+           * и никакого отношения к риску блокировки не имеет.
+           */
+          const kind = result.kind ?? "other";
+          if (kind !== "closed") {
+            pacing.recordFailure(kind === "rate_limit" ? "platform" : "network");
+          }
           logError("autoapply", new Error(result.error ?? "apply failed"), {
             userId: user.id,
             slug: vacancy.slug,
+            kind,
           });
           continue;
         }
 
         pacing.recordSent();
         const now = Date.now();
+        /* В applications пишется именно то резюме, что ушло, а не общее
+           users.hh_resume_id. Иначе история откликов показывала бы чужое
+           резюме, и понять, почему на вакансию фронтенда ушло «Python», было
+           бы невозможно. */
         db.prepare(
           `INSERT INTO applications (user_id, job_slug, search_id, resume_id, letter_id, message, status, sent_at)
            VALUES (?, ?, ?, ?, ?, ?, 'sent', ?)`,
@@ -309,7 +468,7 @@ export async function runAutoApply(opts?: {
           user.id,
           vacancy.slug,
           search.id,
-          user.hh_resume_id ?? null,
+          sendableId,
           letter?.letterId ?? null,
           message ?? "",
           now,
@@ -334,43 +493,12 @@ export async function runAutoApply(opts?: {
       applied,
       failed,
       skipped,
+      stale: staleTotal,
       pausedFor,
       pausedUsers,
       withLetter,
       withoutLetter,
     };
   }
-  return { ran: true, searches, applied, failed, skipped, pausedFor, pausedUsers, withLetter, withoutLetter };
-}
-
-/**
- * Порядок отправки: сначала вакансии, где резюме пересекается с требованиями
- * сильнее.
- *
- * Считаем пересечение навыков вакансии и резюме. Это дешёвый и предсказуемый
- * признак: лимит откликов в день ограничен, и тратить его нужно на то, что
- * действительно подходит.
- */
-function sortByResumeOverlap(
-  vacancies: Vacancy[],
-  resumeText: string,
-  resumeTitle: string,
-): Vacancy[] {
-  if (!resumeText.trim() && !resumeTitle.trim()) return vacancies;
-
-  const resumeSkills = new Set(extractSkills(`${resumeTitle} ${resumeText}`));
-  if (resumeSkills.size === 0) return vacancies;
-
-  // Стабильная сортировка: при равном пересечении порядок каталога сохраняется,
-  // чтобы поведение не «прыгало» между прогонами.
-  return vacancies
-    .map((v, i) => {
-      const vacancySkills = extractSkills(
-        `${v.title} ${v.category} ${v.about} ${v.requirements.join(" ")}`,
-      );
-      const overlap = vacancySkills.filter((s) => resumeSkills.has(s)).length;
-      return { v, i, overlap };
-    })
-    .sort((a, b) => (b.overlap - a.overlap) || (a.i - b.i))
-    .map((x) => x.v);
+  return { ran: true, searches, applied, failed, skipped, stale: staleTotal, pausedFor, pausedUsers, withLetter, withoutLetter };
 }

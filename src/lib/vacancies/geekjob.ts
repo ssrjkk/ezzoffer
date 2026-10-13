@@ -1,6 +1,7 @@
 import type { Level, WorkFormat } from "../data";
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
 import { cleanHtml, parseSalaryText, sanitizeExternalUrl, unwrapExtended } from "./util";
+import { parsePublishedAt } from "./published";
 import { httpFetch, parseJson } from "../http-client";
 
 const FILTER_URL = "https://geekjob.ru/json/find/vacancy";
@@ -140,6 +141,7 @@ export function mapGeekVacancy(raw: GeekRawVacancy): Vacancy | null {
     format: extractFormat(raw.jobFormat, city),
     city: city || (remote ? "Remote" : "Россия"),
     posted: parseRusDate(raw.log?.modify ?? raw.published),
+        published_at: parsePublishedAt(String(raw.log?.modify ?? raw.published ?? "")),
     category: "Работа",
     about:
       desc.slice(0, 2000) ||

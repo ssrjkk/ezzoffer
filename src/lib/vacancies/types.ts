@@ -26,7 +26,17 @@ export type Vacancy = {
   level: Level;
   format: WorkFormat;
   city: string;
+  /** Текст «3 дн. назад» — для показа человеку. */
   posted: string;
+  /**
+   * Дата публикации в миллисекундах. null, если площадка её не отдала.
+   *
+   * Нужна отдельно от `posted`: текст нельзя сравнивать, а именно возраст
+   * решает, стоит ли вообще откликаться. Вакансия недельной давности почти
+   * наверняка закрыта, и отклик на неё — это потраченный слот дневного
+   * лимита, а лимит у человека один.
+   */
+  published_at: number | null;
   category: string;
   about: string;
   responsibilities: string[];
@@ -53,6 +63,15 @@ export type VacancyFetchResult = {
 export type VacancyApplyResult = {
   ok: boolean;
   error?: string;
+  /**
+   * Причина неудачи — по ней автоотклик решает, включать ли backoff.
+   *
+   * Разделение существенно. Backoff нужен, чтобы не выглядеть ботом и не
+   * ловить блокировку. Отказ по закрытой вакансии — это не «платформа вас
+   * отталкивает», а «вакансии больше нет»: включать по ней паузу значит
+   * позволить одной мёртвой записи замедлить все последующие отклики.
+   */
+  kind?: "closed" | "rate_limit" | "auth" | "network" | "other";
 };
 
 export interface VacancyProvider {

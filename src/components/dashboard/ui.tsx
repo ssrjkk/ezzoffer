@@ -131,9 +131,12 @@ export function StatCard({
 
 export function Field({
   label,
+  hint,
   children,
 }: {
   label: string;
+  /** Подсказка под полем: зачем оно и что будет, если его не заполнить. */
+  hint?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -142,6 +145,7 @@ export function Field({
         {label}
       </span>
       {children}
+      {hint ? <span className="mt-1.5 block text-xs leading-snug text-muted">{hint}</span> : null}
     </label>
   );
 }

@@ -1,5 +1,6 @@
 import { db, type User } from "./db";
 import { getValidHhToken } from "./hh-oauth";
+import { responseForHhState, isViewedState, isClosedState, hhStateLabel } from "./hh-states";
 import { logError, logInfo } from "./logger";
 
 /**
@@ -71,8 +72,18 @@ export async function syncHhStatuses(userId: number): Promise<{ updated: number;
       const hh = hhVacancies.get(app.source_id);
       if (!hh?.state) continue;
       const updatedAt = hh.updatedAt ? new Date(hh.updatedAt).getTime() : Date.now();
-      const responded = hh.state === "invitation" || hh.state === "offer" || hh.state === "chat";
-      const viewed = hh.state === "viewed" || responded;
+
+      /*
+       * Раньше здесь стояли четыре сравнения (`viewed`, `invitation`, `offer`,
+       * `chat`), а всё остальное молча игнорировалось. Из-за этого «Отказы» в
+       * статистике были нулем всегда: `decline` считался в getStats, но не
+       * записывался нигде. Теперь соответствие состояний площадки вынесено в
+       * hh-states и покрывает отказы, вопросы, приглашения и просмотры.
+       */
+      const response = responseForHhState(hh.state);
+      const viewed = isViewedState(hh.state);
+      const closed = isClosedState(hh.state);
+      const label = hhStateLabel(hh.state);
 
       if (viewed) {
         const r = db
@@ -80,15 +91,45 @@ export async function syncHhStatuses(userId: number): Promise<{ updated: number;
           .run(updatedAt, app.id);
         if (r.changes > 0) updated++;
       }
-      if (responded) {
-        const response = hh.state === "invitation" || hh.state === "offer" ? "interview" : "question";
+
+      /*
+       * Отказ — это и ответ, и закрытие. Ответом он делает responded_at:
+       * дальше по воронке видно, что резюме открыли, а уже потом отказали.
+       * Иначе отказы выпадали бы из знаменателя «ответили HR» и портили
+       * расчёт конверсии.
+       */
+      if (closed) {
+        const r = db
+          .prepare(
+            `UPDATE applications
+             SET responded_at = COALESCE(responded_at, ?),
+                 status = 'declined',
+                 response = CASE WHEN response IN ('', 'question') THEN 'decline' ELSE response END,
+                 response_note = COALESCE(NULLIF(response_note, ''), ?)
+             WHERE id = ?`,
+          )
+          .run(updatedAt, label ?? "отказ", app.id);
+        if (r.changes > 0) updated++;
+        continue;
+      }
+
+      if (response === "interview" || response === "question") {
         const r = db
           .prepare(
             `UPDATE applications SET responded_at = COALESCE(responded_at, ?), status = 'responded',
-             response = CASE WHEN response = '' THEN ? ELSE response END
-             WHERE id = ? AND responded_at IS NULL`,
+             response = CASE WHEN response IN ('', 'viewed') THEN ? ELSE response END,
+             response_note = COALESCE(NULLIF(response_note, ''), ?)
+             WHERE id = ?`,
           )
-          .run(updatedAt, response, app.id);
+          .run(updatedAt, response, label, app.id);
+        if (r.changes > 0) updated++;
+      } else if (viewed && response === "viewed") {
+        const r = db
+          .prepare(
+            `UPDATE applications SET response = CASE WHEN response = '' THEN 'viewed' ELSE response END
+             WHERE id = ?`,
+          )
+          .run(app.id);
         if (r.changes > 0) updated++;
       }
     }

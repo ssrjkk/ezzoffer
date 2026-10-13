@@ -6,7 +6,15 @@ export type ApplicationRow = {
   user_id: number;
   job_slug: string;
   search_id: number | null;
-  resume_id: number | null;
+  /**
+   * id резюме, отправленного в этом отклике.
+   *
+   * Строка, а не число: это идентификатор резюме на hh — именно он уходит в
+   * POST /negotiations. Объявлять его числом означало бы искать резюме по
+   * локальному resumes.id, что молча не находит ничего (а для числового hh-id
+   * находит чужое).
+   */
+  resume_id: string | null;
   letter_id: number | null;
   status: string;
   response: string;

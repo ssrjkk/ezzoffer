@@ -2,20 +2,21 @@ import Database from "better-sqlite3";
 import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { logInfo } from "./logger";
+import { migrateApplicationsResumeId } from "./db-migrations";
 import { envStr } from "./env";
 
 /**
- * Путь к файлу БД.
+ * ╨Я╤Г╤В╤М ╨║ ╤Д╨░╨╣╨╗╤Г ╨С╨Ф.
  *
- * Компоненты собираются в рантайме намеренно, по частям: Turbopack
- * статически анализирует path.join(cwd, "data", "ezoffer.db") и включал
- * локальную ezoffer.db (хэши паролей, OAuth-токены) в .next/standalone и
- * Docker-образ. Динамическая сборка делает путь непрозрачным для анализатора,
- * поэтому tracing не может вывести статический путь к данным.
+ * ╨Ъ╨╛╨╝╨┐╨╛╨╜╨╡╨╜╤В╤Л ╤Б╨╛╨▒╨╕╤А╨░╤О╤В╤Б╤П ╨▓ ╤А╨░╨╜╤В╨░╨╣╨╝╨╡ ╨╜╨░╨╝╨╡╤А╨╡╨╜╨╜╨╛, ╨┐╨╛ ╤З╨░╤Б╤В╤П╨╝: Turbopack
+ * ╤Б╤В╨░╤В╨╕╤З╨╡╤Б╨║╨╕ ╨░╨╜╨░╨╗╨╕╨╖╨╕╤А╤Г╨╡╤В path.join(cwd, "data", "ezoffer.db") ╨╕ ╨▓╨║╨╗╤О╤З╨░╨╗
+ * ╨╗╨╛╨║╨░╨╗╤М╨╜╤Г╤О ezoffer.db (╤Е╤Н╤И╨╕ ╨┐╨░╤А╨╛╨╗╨╡╨╣, OAuth-╤В╨╛╨║╨╡╨╜╤Л) ╨▓ .next/standalone ╨╕
+ * Docker-╨╛╨▒╤А╨░╨╖. ╨Ф╨╕╨╜╨░╨╝╨╕╤З╨╡╤Б╨║╨░╤П ╤Б╨▒╨╛╤А╨║╨░ ╨┤╨╡╨╗╨░╨╡╤В ╨┐╤Г╤В╤М ╨╜╨╡╨┐╤А╨╛╨╖╤А╨░╤З╨╜╤Л╨╝ ╨┤╨╗╤П ╨░╨╜╨░╨╗╨╕╨╖╨░╤В╨╛╤А╨░,
+ * ╨┐╨╛╤Н╤В╨╛╨╝╤Г tracing ╨╜╨╡ ╨╝╨╛╨╢╨╡╤В ╨▓╤Л╨▓╨╡╤Б╤В╨╕ ╤Б╤В╨░╤В╨╕╤З╨╡╤Б╨║╨╕╨╣ ╨┐╤Г╤В╤М ╨║ ╨┤╨░╨╜╨╜╤Л╨╝.
  *
- * Пустая строка в env (частая после копирования .env.example, где переменная
- * объявлена пустой) не должна превращаться в путь "" — better-sqlite3 открыл бы
- * временную БД в памяти, и все данные пропали бы при рестарте.
+ * ╨Я╤Г╤Б╤В╨░╤П ╤Б╤В╤А╨╛╨║╨░ ╨▓ env (╤З╨░╤Б╤В╨░╤П ╨┐╨╛╤Б╨╗╨╡ ╨║╨╛╨┐╨╕╤А╨╛╨▓╨░╨╜╨╕╤П .env.example, ╨│╨┤╨╡ ╨┐╨╡╤А╨╡╨╝╨╡╨╜╨╜╨░╤П
+ * ╨╛╨▒╤К╤П╨▓╨╗╨╡╨╜╨░ ╨┐╤Г╤Б╤В╨╛╨╣) ╨╜╨╡ ╨┤╨╛╨╗╨╢╨╜╨░ ╨┐╤А╨╡╨▓╤А╨░╤Й╨░╤В╤М╤Б╤П ╨▓ ╨┐╤Г╤В╤М "" тАФ better-sqlite3 ╨╛╤В╨║╤А╤Л╨╗ ╨▒╤Л
+ * ╨▓╤А╨╡╨╝╨╡╨╜╨╜╤Г╤О ╨С╨Ф ╨▓ ╨┐╨░╨╝╤П╤В╨╕, ╨╕ ╨▓╤Б╨╡ ╨┤╨░╨╜╨╜╤Л╨╡ ╨┐╤А╨╛╨┐╨░╨╗╨╕ ╨▒╤Л ╨┐╤А╨╕ ╤А╨╡╤Б╤В╨░╤А╤В╨╡.
  */
 export function resolveDbPath(
   env: Record<string, string | undefined>,
@@ -59,8 +60,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at INTEGER NOT NULL
 );
 
--- Уборка просроченных сессий идёт по expires_at, а поиск активной сессии — по
--- token (PK). Без этих индексов purgeExpiredAuthRows сканировал всю таблицу.
+-- ╨г╨▒╨╛╤А╨║╨░ ╨┐╤А╨╛╤Б╤А╨╛╤З╨╡╨╜╨╜╤Л╤Е ╤Б╨╡╤Б╤Б╨╕╨╣ ╨╕╨┤╤С╤В ╨┐╨╛ expires_at, ╨░ ╨┐╨╛╨╕╤Б╨║ ╨░╨║╤В╨╕╨▓╨╜╨╛╨╣ ╤Б╨╡╤Б╤Б╨╕╨╕ тАФ ╨┐╨╛
+-- token (PK). ╨С╨╡╨╖ ╤Н╤В╨╕╤Е ╨╕╨╜╨┤╨╡╨║╤Б╨╛╨▓ purgeExpiredAuthRows ╤Б╨║╨░╨╜╨╕╤А╨╛╨▓╨░╨╗ ╨▓╤Б╤О ╤В╨░╨▒╨╗╨╕╤Ж╤Г.
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 
@@ -90,6 +91,7 @@ CREATE TABLE IF NOT EXISTS resumes (
   content TEXT NOT NULL,
   years_label TEXT NOT NULL DEFAULT '',
   ai_improved INTEGER NOT NULL DEFAULT 0,
+  hh_id TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -171,13 +173,14 @@ CREATE TABLE IF NOT EXISTS vacancies (
   source_url TEXT,
   contact_email TEXT,
   contact_phone TEXT,
+  published_at INTEGER,
   fetched_at INTEGER NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_vacancies_source ON vacancies(source);
 
--- Дополнительные индексы для выборок, которые идут по составному ключу.
--- Без них purgeExpiredAuthRows и todayCount сканировали таблицу целиком.
+-- ╨Ф╨╛╨┐╨╛╨╗╨╜╨╕╤В╨╡╨╗╤М╨╜╤Л╨╡ ╨╕╨╜╨┤╨╡╨║╤Б╤Л ╨┤╨╗╤П ╨▓╤Л╨▒╨╛╤А╨╛╨║, ╨║╨╛╤В╨╛╤А╤Л╨╡ ╨╕╨┤╤Г╤В ╨┐╨╛ ╤Б╨╛╤Б╤В╨░╨▓╨╜╨╛╨╝╤Г ╨║╨╗╤О╤З╤Г.
+-- ╨С╨╡╨╖ ╨╜╨╕╤Е purgeExpiredAuthRows ╨╕ todayCount ╤Б╨║╨░╨╜╨╕╤А╨╛╨▓╨░╨╗╨╕ ╤В╨░╨▒╨╗╨╕╤Ж╤Г ╤Ж╨╡╨╗╨╕╨║╨╛╨╝.
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_oauth_states_expires ON oauth_states(expires_at);
@@ -195,13 +198,13 @@ export function createDatabase(filePath: string): Database.Database {
     try {
       instance.pragma("journal_mode = WAL");
     } catch (err) {
-      logInfo("db", "WAL недоступен, используем дефолтный режим журнала", { error: String(err) });
+      logInfo("db", "WAL ╨╜╨╡╨┤╨╛╤Б╤В╤Г╨┐╨╡╨╜, ╨╕╤Б╨┐╨╛╨╗╤М╨╖╤Г╨╡╨╝ ╨┤╨╡╤Д╨╛╨╗╤В╨╜╤Л╨╣ ╤А╨╡╨╢╨╕╨╝ ╨╢╤Г╤А╨╜╨░╨╗╨░", { error: String(err) });
     }
   }
   instance.pragma("foreign_keys = ON");
   instance.exec(SCHEMA_SQL);
   migrate(instance);
-  logInfo("db", filePath === ":memory:" ? "открыта in-memory БД" : `открыта БД: ${filePath}`);
+  logInfo("db", filePath === ":memory:" ? "╨╛╤В╨║╤А╤Л╤В╨░ in-memory ╨С╨Ф" : `╨╛╤В╨║╤А╤Л╤В╨░ ╨С╨Ф: ${filePath}`);
   return instance;
 }
 
@@ -210,7 +213,7 @@ function columnNames(instance: Database.Database, table: string): Set<string> {
   return new Set(rows.map((r) => r.name));
 }
 
-/** Идемпотентные миграции для существующих БД (CREATE TABLE IF NOT EXISTS не добавляет колонки). */
+/** ╨Ш╨┤╨╡╨╝╨┐╨╛╤В╨╡╨╜╤В╨╜╤Л╨╡ ╨╝╨╕╨│╤А╨░╤Ж╨╕╨╕ ╨┤╨╗╤П ╤Б╤Г╤Й╨╡╤Б╤В╨▓╤Г╤О╤Й╨╕╤Е ╨С╨Ф (CREATE TABLE IF NOT EXISTS ╨╜╨╡ ╨┤╨╛╨▒╨░╨▓╨╗╤П╨╡╤В ╨║╨╛╨╗╨╛╨╜╨║╨╕). */
 function migrate(instance: Database.Database): void {
   const userCols = columnNames(instance, "users");
   const additions: [string, string][] = [];
@@ -224,16 +227,55 @@ function migrate(instance: Database.Database): void {
   if (!userCols.has("email_verification_token")) additions.push(["email_verification_token", "TEXT"]);
   if (!userCols.has("password_reset_token")) additions.push(["password_reset_token", "TEXT"]);
   if (!userCols.has("password_reset_expires")) additions.push(["password_reset_expires", "INTEGER"]);
+  /*
+   * Ожидания по зарплате и городу.
+   *
+   * NULL и 0 — разные вещи, и различие здесь существенное: «хочу от 0» не
+   * значит ничего, а «хочу от 150000» отсекает вакансии дешевле. Поэтому
+   * пустое значение хранится как NULL, и подбор не применяет фильтр.
+   */
+  if (!userCols.has("salary_expectation")) additions.push(["salary_expectation", "INTEGER"]);
+  if (!userCols.has("city_preference")) additions.push(["city_preference", "TEXT NOT NULL DEFAULT ''"]);
   for (const [name, type] of additions) {
     instance.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
   }
   const appCols = columnNames(instance, "applications");
+  const vacancyCols = columnNames(instance, "vacancies");
+  const resumeCols = columnNames(instance, "resumes");
   if (!appCols.has("message")) {
     instance.exec("ALTER TABLE applications ADD COLUMN message TEXT NOT NULL DEFAULT ''");
   }
+  /*
+   * Дата публикации: без неё невозможно отличить свежую вакансию от недельной
+   * давности, а отклик на закрытую тратит слот дневного лимита.
+   */
+  if (!vacancyCols.has("published_at")) {
+    instance.exec("ALTER TABLE vacancies ADD COLUMN published_at INTEGER");
+  }
+  /*
+   * Привязка резюме к резюме на hh.
+   *
+   * Без неё резюме в нашей базе и резюме, которое уходит в отклике, — разные
+   * вещи: подбор шёл по локальному резюме, а отправлялось users.hh_resume_id.
+   * С несколькими резюме это означало, что система оценивает вакансию по одному
+   * резюме, а отправляет другое, и человек об этом не знает.
+   *
+   * NULL — не ошибка, а обычное состояние резюме, созданного вручную: его
+   * можно оценивать и использовать в письме, но отправить на hh нельзя.
+   */
+  if (!resumeCols.has("hh_id")) {
+    instance.exec("ALTER TABLE resumes ADD COLUMN hh_id TEXT");
+  }
+  // Одно и то же резюме с hh не должно импортироваться дважды: иначе в
+  // подборе появятся два одинаковых кандидата, а в интерфейсе — путаница.
+  instance.exec(
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_resumes_hh ON resumes(user_id, hh_id) WHERE hh_id IS NOT NULL",
+  );
   if (!appCols.has("external_url")) {
     instance.exec("ALTER TABLE applications ADD COLUMN external_url TEXT");
   }
+  // Смена типа resume_id на TEXT — отдельным шагом: он пересобирает таблицу.
+  migrateApplicationsResumeId(instance);
 }
 
 export const db = createDatabase(DB_PATH);
@@ -259,6 +301,10 @@ export type User = {
   email_verification_token: string | null;
   password_reset_token: string | null;
   password_reset_expires: number | null;
+  /** Ожидание по зарплате; null — не задано, фильтр по зарплате не применяется. */
+  salary_expectation: number | null;
+  /** Предпочтительный город; пустая строка — не задан. */
+  city_preference: string;
 };
 
 export function getUserById(id: number): User | undefined {

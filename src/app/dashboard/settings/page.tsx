@@ -40,7 +40,12 @@ export default async function SettingsPage() {
         trialExpiresAt={user.plan_expires_at}
       />
 
-      <ProfileForm name={user.name} email={user.email} />
+      <ProfileForm
+        name={user.name}
+        email={user.email}
+        salaryExpectation={user.salary_expectation ?? null}
+        cityPreference={user.city_preference ?? ""}
+      />
     </div>
   );
 }
