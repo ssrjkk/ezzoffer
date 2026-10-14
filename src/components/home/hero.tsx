@@ -59,7 +59,7 @@ export function Hero() {
       <div className="container-x">
         <div className="grid gap-12 lg:grid-cols-12 lg:gap-16">
           <div className="lg:col-span-7">
-            <Eyebrow>AI-агент для поиска работы</Eyebrow>
+            <Eyebrow>Автоотклик с сопроводительным письмом</Eyebrow>
 
             <h1 className="display mt-7 text-[2.75rem] text-balance sm:text-6xl md:text-7xl">
               Поиск работы

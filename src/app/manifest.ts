@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "EZOffer — поиск работы без стресса и отказов",
     short_name: "EZOffer",
-    description: "AI-агент для поиска работы: резюме, вакансии и автоотклики.",
+    description: "Подбор вакансий по резюме, автоотклик с сопроводительным письмом и уведомления в Telegram.",
     start_url: "/",
     display: "standalone",
     background_color: "#06060b",

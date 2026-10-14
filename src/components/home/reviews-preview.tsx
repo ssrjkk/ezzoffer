@@ -1,39 +1,37 @@
 import Link from "next/link";
 import { Section, SectionHead } from "@/components/ui";
-import { ReviewsList } from "@/components/reviews-list";
+import { HowItWorks } from "@/components/how-it-works";
 
 /*
- * Превью отзывов на главной.
+ * Было: превью отзывов на главной — те же выдуманные карточки, что и на
+ * странице /reviews, плюс «Средняя оценка 4.9» в подзаголовке.
  *
- * Здесь была третья копия разметки отзывов (после /reviews и списка на
- * главной в другом виде) — со своими «градиентными кружками» и своей
- * разметкой звёзд. Три копии означают, что при смене палитры придётся
- * править три места, и однажды одно забудется — что и произошло.
- *
- * Теперь переиспользуется ReviewsList с limit.
+ * Теперь блок показывает работу сервиса на конкретном примере. Отзывы не
+ * выдумываются, потому что их неоткуда взять: сервис новый. Вместо этого
+ * показано то, что проверить можно — письмо и разбор резюме, посчитанные
+ * тем же кодом, что работает в проде.
  */
-
 export function ReviewsPreview() {
   return (
     <Section>
       <SectionHead
-        eyebrow="Отзывы клиентов"
+        eyebrow="Как это работает"
         title={
           <>
-            Нам доверяют <span className="text-accent">сотни клиентов</span>
+            Не обещания, <span className="text-accent">а пример</span>
           </>
         }
-        sub="Средняя оценка 4.9 — вот что говорят те, кто уже получил оффер"
+        sub="Отзывов, которые можно показать, у нового сервиса честно мало. Показываем вместо них то, что проверяется: письмо и разбор резюме."
       />
 
-      <ReviewsList limit={9} />
+      <HowItWorks />
 
       <div className="mt-10 flex flex-col items-start gap-4">
         <Link
           href="/reviews"
           className="inline-flex items-center gap-2 border-b border-ink pb-0.5 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
         >
-          Смотреть все отзывы
+          Разобрать подробнее
           <span aria-hidden>→</span>
         </Link>
         <Link href="/#tariff" className="text-sm text-muted transition-colors hover:text-accent">

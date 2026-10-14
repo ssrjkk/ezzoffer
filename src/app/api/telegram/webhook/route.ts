@@ -31,7 +31,14 @@ export async function POST(request: Request) {
   // Telegram ждёт 200 даже при ошибке обработки, иначе будет ретраить апдейт.
   try {
     const reply = await handleUpdate(update);
-    if (reply) logInfo("telegram", "апдейт обработан", { updateId: update.update_id });
+    if (reply) {
+      // Нажатие кнопки и обычное сообщение различаются в логах: без этого
+      // нельзя отличить «человек нажал кнопку и ничего не произошло» от
+      // «сообщение дошло и осталось без ответа».
+      logInfo("telegram", update.callback_query ? "нажатие кнопки" : "апдейт обработан", {
+        updateId: update.update_id,
+      });
+    }
   } catch (err) {
     logError("telegram:webhook", err);
   } finally {

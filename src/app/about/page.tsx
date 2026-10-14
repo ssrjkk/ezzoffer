@@ -6,7 +6,7 @@ import { team, stats } from "@/lib/data";
 
 export const metadata: Metadata = {
   title: "О нас",
-  description: "Команда EZOffer — AI-агент для поиска работы. Наша миссия, принципы и люди, которые делают продукт.",
+  description: "О EZOffer: как устроен сервис автоматических откликов, какие у него ограничения и кто его делает.",
 };
 
 const values = [

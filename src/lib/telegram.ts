@@ -15,6 +15,112 @@ const SEND_TIMEOUT_MS = 10_000;
 const TELEGRAM_TEXT_LIMIT = 4096;
 const CODE_TTL_MS = 15 * 60 * 1000;
 
+/**
+ * Кнопка под сообщением.
+ *
+ * Без кнопок бот — это терминал: человек обязан помнить синтаксис и набирать
+ * «/отклик 2». Ошибка в цифре означает не тот отклик. Кнопка снимает и
+ * опечатку, и необходимость помнить команды.
+ */
+export type InlineButton = {
+  text: string;
+  /** Данные колбэка. Не требуется для кнопки-ссылки. */
+  data?: string;
+  /** Ссылка вместо действия. */
+  url?: string;
+};
+
+export type InlineKeyboard = {
+  inline_keyboard: InlineButton[][];
+};
+
+export type SendOptions = {
+  keyboard?: InlineKeyboard;
+  /**
+   * HTML-разметка вместо голого текста.
+   *
+   * HTML, а не MarkdownV2: экранировать надо три символа (`& < >`) вместо
+   * семнадцати. Данные приходят с площадок — названия вакансий, компании, —
+   * и любой неэкранированный символ ломает разметку всего сообщения. С тремя
+   * символами шанс ошибиться заметно ниже, а выделение нужно.
+   */
+  html?: boolean;
+};
+
+/** Экранирование для HTML-режима Telegram. */
+export function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * Подтверждение нажатия кнопки.
+ *
+ * Без него Telegram показывает «часики» на кнопке, пока бот думает, и человек
+ * нажимает повторно — два отклика на одну вакансию. Ответ снимает ожидание
+ * сразу, а текст показывает, что именно произошло.
+ */
+export async function answerCallbackQuery(
+  callbackId: string,
+  opts: { text?: string; alert?: boolean } = {},
+): Promise<boolean> {
+  const token = envToken();
+  if (!token) return false;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        callback_query_id: callbackId,
+        text: opts.text?.slice(0, 200),
+        show_alert: opts.alert ?? false,
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+    });
+    return res.ok;
+  } catch (err) {
+    logInfo("telegram", "не удалось подтвердить нажатие", { error: String(err) });
+    return false;
+  }
+}
+
+/**
+ * Заменить текст уже отправленного сообщения.
+ *
+ * Кнопка нажимается один раз — сообщение должно меняться на месте. Новое
+ * сообщение после каждого нажатия превращало бы переписку в простыню из
+ * одинаковых «Готово», и нужный ответ уезжал бы вверх.
+ */
+export async function editTelegramMessage(
+  chatId: string,
+  messageId: number,
+  text: string,
+  opts: SendOptions = {},
+): Promise<boolean> {
+  const token = envToken();
+  if (!token) return false;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/editMessageText`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: chatId,
+        message_id: messageId,
+        text: text.slice(0, TELEGRAM_TEXT_LIMIT),
+        parse_mode: opts.html ? "HTML" : undefined,
+        reply_markup: opts.keyboard,
+        disable_web_page_preview: true,
+      }),
+      cache: "no-store",
+      signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
+    });
+    return res.ok;
+  } catch (err) {
+    logInfo("telegram", "не удалось изменить сообщение", { error: String(err) });
+    return false;
+  }
+}
+
 export function telegramConfigured(): boolean {
   return Boolean(envToken());
 }
@@ -33,7 +139,11 @@ export function telegramWebhookSecret(): string | null {
  * без таймаута зависший API держал бы запрос открытым, а текст длиннее лимита
  * Telegram отверг бы с 400.
  */
-export async function sendTelegramMessage(chatId: string, text: string): Promise<boolean> {
+export async function sendTelegramMessage(
+  chatId: string,
+  text: string,
+  opts: SendOptions = {},
+): Promise<boolean> {
   const token = envToken();
   if (!token) return false;
 
@@ -46,6 +156,8 @@ export async function sendTelegramMessage(chatId: string, text: string): Promise
       body: JSON.stringify({
         chat_id: chatId,
         text: text.slice(0, TELEGRAM_TEXT_LIMIT),
+        parse_mode: opts.html ? "HTML" : undefined,
+        reply_markup: opts.keyboard,
         disable_web_page_preview: true,
       }),
       cache: "no-store",

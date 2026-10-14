@@ -1,8 +1,29 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
+/**
+ * Все исходники, а не только отслеживаемые git.
+ *
+ * Список из `git ls-files src` содержал удалённые файлы (индекс обновляется
+ * только при явном `git rm`), и проверка падала с ENOENT на файле, которого
+ * на диске уже нет. Заодно новые файлы не проверялись вовсе — ровно тот
+ * дефект, что был в heading-hierarchy.
+ */
+function sourceFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === "node_modules" || e.name === ".next" || e.name.startsWith(".")) continue;
+      const full = join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(e.name)) out.push(full);
+    }
+  };
+  walk(join(process.cwd(), "src"));
+  return out.sort();
+}
 /**
  * Контраст палитры (WCAG 2.1).
  *
@@ -164,10 +185,7 @@ test("обычный акцент на чернилах НЕ проходит �
  * фон у контейнера с акцентом внутри (так оформлены инверсные секции).
  */
 test("на тёмном фоне используется светлый акцент", () => {
-  const files = execSync("git ls-files src", { encoding: "utf8" })
-    .trim()
-    .split("\n")
-    .filter((f) => /\.(tsx|ts)$/.test(f));
+  const files = sourceFiles()
 
   const DARK_BG = /\bbg-ink\b|\bbg-black\b/;
   // text-accent-2 и text-accent-on-dark подходят; голый text-accent — нет.
@@ -261,10 +279,7 @@ test("в globals.css есть поддержка prefers-reduced-motion", () => 
  * bg-accent/15 и 4.48:1 на bg-accent/10. Проверяем, что паттерн не вернулся.
  */
 test("цветной текст на подложке своего цвета использует accent-2", () => {
-  const files = execSync("git ls-files src", { encoding: "utf8" })
-    .trim()
-    .split("\n")
-    .filter((f) => f.endsWith(".tsx"));
+const files = sourceFiles();
 
   const offenders: string[] = [];
   for (const file of files) {
@@ -298,10 +313,7 @@ test("цветной текст на подложке своего цвета и
  * а эти значения живут в разметке, и проверка их не видит. Тест закрывает щель.
  */
 test("нейтральный текст не красится сырыми цветами Tailwind", () => {
-  const files = execSync("git ls-files src", { encoding: "utf8" })
-    .trim()
-    .split("\n")
-    .filter((f) => /\.tsx$/.test(f));
+const files = sourceFiles();
 
   // Проверяем только НЕЙТРАЛЬНУЮ шкалу: она заменяет приглушённый текст,
   // и именно на ней контраст падал ниже порога. Семантические цвета
@@ -337,10 +349,7 @@ test("нейтральный текст не красится сырыми цв�
  * комментарии он находил их в том же файле.
  */
 test("цветные шкалы Tailwind не используются напрямую", () => {
-  const files = execSync("git ls-files src", { encoding: "utf8" })
-    .trim()
-    .split("\n")
-    .filter((f) => /\.tsx$/.test(f));
+const files = sourceFiles();
 
   const COLOR =
     /(?:text|bg|border|ring|fill|stroke|from|via|to|divide|accent|caret)-(?:violet|indigo|purple|fuchsia|sky|blue|rose|pink|red|orange|amber|emerald|lime|teal)-[0-9]{2,3}\b/g;

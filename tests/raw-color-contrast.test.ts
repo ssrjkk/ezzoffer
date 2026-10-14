@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * Контраст сырых цветов Tailwind, которые остались в разметке.
@@ -85,6 +85,27 @@ function cssVar(name: string): string {
 const SURFACE = cssVar("surface");
 const BG = cssVar("bg");
 
+/**
+ * Все исходники на диске.
+ *
+ * Список из `git ls-files src` содержал удалённые файлы — индекс обновляется
+ * только при явном `git rm` — и проверки падали с ENOENT на файле, которого
+ * на диске уже нет. Заодно новые файлы в индекс не попадали и не проверялись.
+ */
+function sourceFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === "node_modules" || e.name === ".next" || e.name.startsWith(".")) continue;
+      const full = join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(e.name)) out.push(full);
+    }
+  };
+  walk(join(process.cwd(), "src"));
+  return out.sort();
+}
+
 test("подложки в тесте совпадают с темой", () => {
   // Если тест считает по цветам другой темы, он будет зелёным на бумаге —
   // ровно то, что случилось при переходе.
@@ -92,12 +113,6 @@ test("подложки в тесте совпадают с темой", () => {
   assert.notEqual(BG, "#0a0a0f", "тест всё ещё считает по тёмной теме");
 });
 
-function sourceFiles(): string[] {
-  return execSync("git ls-files src", { encoding: "utf8" })
-    .trim()
-    .split("\n")
-    .filter((f) => /\.tsx$/.test(f));
-}
 
 test("текст на подложке сырого тона проходит AA", () => {
   const failures: string[] = [];

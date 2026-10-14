@@ -12,7 +12,7 @@ import { BOT_COMMANDS, BOT_MESSAGES, type BotMessage } from "@/lib/bot-data";
  */
 type Replay =
   | { phase: "thinking" }
-  | { phase: "typing"; msg: BotMessage }
+  | { phase: "typing"; index: number; text: string }
   | { phase: "idle"; index: number };
 
 /** Следующее состояние и задержка до него. */
@@ -21,23 +21,33 @@ function advance(state: Replay): { state: Replay; delay: number } {
     const msg = BOT_MESSAGES[state.index];
     if (!msg) return { state, delay: 0 };
     // Пауза «печати» перед сообщением, затем первая буква.
-    return { state: { phase: "typing", msg: { ...msg, text: msg.text.slice(0, 1) } }, delay: 16 };
+    return { state: { phase: "typing", index: state.index, text: msg.text.slice(0, 1) }, delay: 16 };
   }
   if (state.phase === "thinking") {
     const msg = BOT_MESSAGES[0];
     if (!msg) return { state: { phase: "idle", index: 0 }, delay: 0 };
-    return { state: { phase: "typing", msg: { ...msg, text: msg.text.slice(0, 1) } }, delay: 16 };
+    return { state: { phase: "typing", index: 0, text: msg.text.slice(0, 1) }, delay: 16 };
   }
 
-  // phase === "typing": дописываем очередной символ.
-  const full = BOT_MESSAGES.find((m) => m.text.startsWith(state.msg.text)) ?? null;
-  if (!full || state.msg.text.length >= full.text.length) {
-    // Сообщение дописано: возвращаемся в idle с указанием индекса.
-    const index = BOT_MESSAGES.indexOf(full ?? BOT_MESSAGES[0]);
-    return { state: { phase: "idle", index: index + 1 }, delay: full?.pauseAfterMs ?? 0 };
+  /*
+   * Индекс, а не поиск по префиксу текста.
+   *
+   * Раньше следующее сообщение находилось через `BOT_MESSAGES.find(m =>
+   * m.text.startsWith(typed))`, и это ломалось дважды. Нажатие кнопки —
+   * сообщение с пустым текстом, а `startsWith("")` истина для первого
+   * сообщения, то есть проигрыватель перескакивал бы в начало диалога.
+   * Второй случай: текст одного сообщения — префикс другого, и печаталось
+   * бы не то.
+   */
+  const full = BOT_MESSAGES[state.index];
+  if (!full || state.text.length >= full.text.length) {
+    return {
+      state: { phase: "idle", index: state.index + 1 },
+      delay: full?.pauseAfterMs ?? 0,
+    };
   }
   return {
-    state: { phase: "typing", msg: { ...full, text: full.text.slice(0, state.msg.text.length + 1) } },
+    state: { phase: "typing", index: state.index, text: full.text.slice(0, state.text.length + 1) },
     delay: 16,
   };
 }
@@ -59,9 +69,10 @@ function TelegramFrame() {
     const step = () => {
       // Сообщение дописывается, когда следующий шаг его завершит.
       if (state.phase === "typing") {
-        const typed = state.msg.text;
-        const full = BOT_MESSAGES.find((m) => m.text.startsWith(typed));
-        if (full && full.text.length === typed.length) {
+        const full = BOT_MESSAGES[state.index];
+        // Пустой текст — это нажатие кнопки: оно появляется целиком, и
+        // сравнение «дописано» верно уже на первом символе.
+        if (full && full.text.length === state.text.length) {
           setDone((prev) => [...prev, full]);
         }
       }
@@ -82,7 +93,8 @@ function TelegramFrame() {
     };
   }, []);
 
-  const partial = replay.phase === "typing" ? replay.msg : null;
+  const partial = replay.phase === "typing" ? BOT_MESSAGES[replay.index] : null;
+  const partialText = replay.phase === "typing" ? replay.text : "";
   const thinking = replay.phase === "thinking";
   const finished = replay.phase === "idle" && replay.index >= BOT_MESSAGES.length;
 
@@ -114,7 +126,7 @@ function TelegramFrame() {
 
           {thinking && <TypingBubble />}
 
-          {partial && <Bubble msg={partial} caret />}
+          {partial && <Bubble msg={partial} text={partialText} caret={partialText.length > 0} />}
 
           {finished && (
             <p className="pt-6 text-center font-mono text-xs text-muted">Диалог проигран полностью</p>
@@ -179,28 +191,85 @@ function Caret() {
   );
 }
 
-function Bubble({ msg, caret = false }: { msg: BotMessage; caret?: boolean }) {
+/**
+ * Клавиатура под сообщением.
+ *
+ * Показывается в макете, потому что именно она отличает нынешнего бота от
+ * прежнего: раньше он отвечал голым текстом и требовал набрать «/отклик 2»,
+ * теперь у вакансии есть кнопка. Без неё демонстрация показывала бы бота,
+ * которого нет.
+ *
+ * Кнопки не интерактивны — это запись разговора, а не чат.
+ */
+function Keyboard({ rows }: { rows: string[][] }) {
+  return (
+    <div className="mt-3 space-y-1.5 border-t border-line pt-3">
+      {rows.map((row, i) => (
+        <div key={i} className="flex flex-wrap gap-1.5">
+          {row.map((label) => (
+            <span
+              key={label}
+              className="rounded-sm border border-line bg-surface px-2.5 py-1.5 text-xs font-medium text-muted"
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Нажатие кнопки: в переписке это не сообщение, а выбор из клавиатуры. */
+function TapNote({ label }: { label: string }) {
+  return (
+    <div className="flex justify-end">
+      <span className="flex items-center gap-2 rounded-sm border border-dashed border-line px-3 py-1.5 text-xs text-muted">
+        <svg viewBox="0 0 24 24" className="size-3.5 shrink-0" fill="currentColor" aria-hidden>
+          <path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z" />
+        </svg>
+        нажата кнопка «{label}»
+      </span>
+    </div>
+  );
+}
+
+function Bubble({
+  msg,
+  text,
+  caret = false,
+}: {
+  msg: BotMessage;
+  /** Текст для отрисовки: во время печати он короче полного. */
+  text?: string;
+  caret?: boolean;
+}) {
+  const shown = text ?? msg.text;
+
   if (msg.from === "user") {
+    if (msg.tap) return <TapNote label={msg.tap} />;
     return (
       <div className="flex justify-end">
         <div className="max-w-[82%] rounded-sm rounded-br-md bg-ink px-4 py-2.5 text-sm leading-relaxed text-paper">
-          {msg.text}
+          {shown}
           {caret ? <Caret /> : null}
         </div>
       </div>
     );
   }
-  const lines = msg.text.split("\n");
+
+  const lines = shown.split("\n");
   return (
     <div className="flex items-end gap-2">
       <Avatar />
-      <div className="max-w-[82%] rounded-sm rounded-bl-md border border-line bg-surface-2 px-4 py-2.5 text-sm leading-relaxed text-ink">
+      <div className="max-w-[88%] rounded-sm rounded-bl-md border border-line bg-surface-2 px-4 py-2.5 text-sm leading-relaxed text-ink">
         {lines.map((line, i) => (
           <span key={i} className="block">
             {line}
             {caret && i === lines.length - 1 ? <Caret /> : null}
           </span>
         ))}
+        {!caret && msg.keyboard ? <Keyboard rows={msg.keyboard} /> : null}
       </div>
     </div>
   );

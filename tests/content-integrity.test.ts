@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { articleDateIso, articleMonthIso } from "../src/lib/article-date";
-import { articles, jobs, internships, plans, reviews } from "../src/lib/data";
+import { articles, jobs, internships, plans } from "../src/lib/data";
 
 /**
  * Даты статей и целостность контента.
@@ -86,13 +86,179 @@ test("цены тарифов заданы для всех периодов и �
   }
 });
 
-test("рейтинги отзывов в допустимом диапазоне", () => {
-  for (const review of reviews) {
-    assert.ok(
-      review.rating >= 1 && review.rating <= 5,
-      `рейтинг ${review.rating} вне диапазона 1..5`,
-    );
+/**
+ * Выдуманных отзывов на сайте нет.
+ *
+ * Раньше здесь стоял тест на диапазон рейтингов у восьми отзывов, которых не
+ * существовало: сервис был новым, а отзывы читались как подтверждённый опыт.
+ * Проверка диапазона 1..5 выглядела как контроль качества и ничего не
+ * контролировала — она просто разбирала список выдуманных данных.
+ *
+ * Теперь проверяется обратное: данных нет, и в текстах страниц не появилось
+ * утверждений об опыте пользователей. Возвращать такой блок нельзя.
+ */
+test("в исходниках нет выдуманных отзывов", async () => {
+  const data = await import("../src/lib/data");
+  assert.equal(
+    (data as Record<string, unknown>).reviews,
+    undefined,
+    "массив отзывов снова в данных — вернитесь к выдуманным историям успеха",
+  );
+
+  const { readFileSync, readdirSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const offenders: string[] = [];
+  const stripped: string[] = [];
+
+  const walk = (dir: string): void => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!/\.(ts|tsx)$/.test(entry.name)) continue;
+      const raw = readFileSync(full, "utf8");
+      /*
+       * Комментарии вырезаются. Они цитируют удалённые формулировки, чтобы
+       * объяснить, что было убрано, — и без этого проверка находила бы сама
+       * себя. Проверяются только строки, которые видит человек.
+       */
+      const text = raw
+        .replace(/\/\*[\s\S]*?\*\//g, " ")
+        .replace(/(^|[^:])\/\/[^\n]*/g, "$1 ");
+      stripped.push(text);
+      for (const claim of [
+        "Нам доверяют",
+        "сотни клиентов",
+        "средняя оценка",
+        "средний рейтинг",
+        "офферов получено",
+        "получают оффер за",
+      ]) {
+        if (text.includes(claim)) offenders.push(`${full}: ${claim}`);
+      }
+    }
+  };
+  walk(join(process.cwd(), "src"));
+
+  assert.deepEqual(offenders, [], `в текстах остались утверждения об опыте пользователей:\n${offenders.join("\n")}`);
+
+  /*
+   * Обещания результата в шагах воронки.
+   *
+   * Плашки шагов стояли рядом с цифрами сервиса и читались как его замеры:
+   * «В 4 раза больше приглашений», «Экономия до 27 часов», «Оффер за 3–4
+   * недели». Ни одну из них сервис не измерял — это была оценка автора текста.
+   * Плюс «До 100 откликов в день» противоречило коду: дневной лимит в
+   * anti-ban.ts равен 50.
+   *
+   * Проверяются и цифры-обещания, и само слово «AI-агент»: LLM в отклике не
+   * участвует (это блокировало бы планировщик), и называть сервис агентом
+   * было преувеличением, которое FAQ уже не поддерживает.
+   */
+  const promises = [
+    "В 4 раза больше",
+    "Экономия до 27",
+    "Оффер за 3",
+    "AI-агент",
+    "оффер через 2 недели",
+  ];
+  const promiseOffenders: string[] = [];
+  for (const [i, text] of stripped.entries()) {
+    for (const claim of promises) {
+      if (text.includes(claim)) promiseOffenders.push(`файл #${i}: ${claim}`);
+    }
   }
+  assert.deepEqual(
+    promiseOffenders,
+    [],
+    `в текстах остались обещания результата, которых сервис не измеряет:\n${promiseOffenders.join("\n")}`,
+  );
+
+  /*
+   * Лимит откликов должен совпадать с лимитом в коде.
+   *
+   * Проверяются только те массивы, где сервис что-то обещает покупателю:
+   * плашки на главной, шаги воронки и список возможностей тарифов. Первая
+   * версия сканировала весь исходник и ловила статьи блога — «первые 20
+   * откликов, которые HR просматривает», «платформы ограничивают 200 в
+   * сутки», — где числа верны и относятся к рынку, а не к сервису.
+   *
+   * Лимиты разные по тарифам (plans.ts — 50 / 100 / 250), и «до 100 откликов»
+   * на тарифе Pro — правда. Поэтому сверка идёт со всей таблицей лимитов, а
+   * не с одной константой: любое обещанное число должно совпадать с одним из
+   * реальных.
+   */
+  const plansSource = readFileSync(join(process.cwd(), "src/lib/plans.ts"), "utf8");
+  const fn =
+    /function planDailyLimit[\s\S]*?switch[\s\S]*?default:[\s\S]*?\}/.exec(plansSource)?.[0] ?? "";
+  const limits = [...fn.matchAll(/return\s+(\d+);/g)]
+    .map((m) => Number(m[1]))
+    .filter((n) => n > 0);
+  assert.ok(limits.length > 0, "не удалось прочитать лимиты откликов из plans.ts");
+
+  const promised = JSON.stringify([data.stats, data.steps, data.plans]);
+
+  /*
+   * \p{L}, а не \w.
+   *
+   * В JavaScript \w — это [A-Za-z0-9_], кириллицу он не покрывает. Вариант
+   * с \w* не совпадал ни с одной строкой и проверял пустоту: тест проходил
+   * при любом числе в любом тексте. Тот же дефект, что был с `git ls-files`:
+   * проверка выглядела работающей, а не работала.
+   */
+  const found = [...promised.matchAll(/(\d+)\s+отклик\p{L}*/gu)];
+  const mismatches = found
+    .map((m) => Number(m[1]))
+    .filter((claimed) => !limits.includes(claimed))
+    .map((claimed) => `обещано ${claimed}, в plans.ts: ${limits.join(" / ")}`);
+
+  assert.deepEqual(
+    mismatches,
+    [],
+    `обещанный лимит откликов не совпадает с кодом:\n${mismatches.join("\n")}`,
+  );
+
+  // Регулярка обязана что-то находить, иначе она проверяет пустоту.
+  assert.ok(
+    found.length > 0,
+    "в плашках, шагах и тарифах нет ни одного упоминания лимита — проверка перестала видеть текст",
+  );
+
+  /*
+   * Числа о тарифах без слова «отклик» рядом.
+   *
+   * Первая проверка ловит «900 откликов», но не «до 400 на «Эксперте»» — там
+   * между числом и словом «отклик» стоит целое предложение, и такая формулировка
+   * читалась бы как настоящий лимит тарифа. Поэтому отдельный проход по
+   * строкам, где речь о тарифе или о частоте: любое крупное число в такой
+   * строке должно быть реальным лимитом.
+   *
+   * Порог 200, а не 100: в шагах есть пауза «45–180 с», и 180 — не лимит.
+   * Числа поменьше рядом со словом «отклик» ловит проверка выше.
+   */
+  const tariffStrings: string[] = [];
+  const collect = (node: unknown): void => {
+    if (typeof node === "string") tariffStrings.push(node);
+    else if (Array.isArray(node)) node.forEach(collect);
+    else if (node && typeof node === "object") Object.values(node).forEach(collect);
+  };
+  collect([data.stats, data.steps, data.plans]);
+
+  const loose: string[] = [];
+  for (const s of tariffStrings) {
+    if (!/тариф|Эксперт|в день|в сутки|отклик/i.test(s)) continue;
+    for (const m of s.matchAll(/(\d{3,})/g)) {
+      const n = Number(m[1]);
+      if (n >= 200 && !limits.includes(n)) loose.push(`«${n}» в «${s.slice(0, 60)}…»`);
+    }
+  }
+  assert.deepEqual(
+    loose,
+    [],
+    `крупные числа о тарифах не совпадают с лимитами (${limits.join(" / ")}):\n${loose.join("\n")}`,
+  );
 });
 
 test("у вакансий заполнены обязательные поля", () => {

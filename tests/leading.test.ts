@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * Интерлиньяж антиквы.
@@ -31,12 +31,6 @@ const MIN_GAP_EM = 0.15;
 
 const MIN_LINE_HEIGHT = PLAYFAIR_INK_EM + MIN_GAP_EM; // 1.12
 
-function sourceFiles(): string[] {
-  return execSync("git ls-files src", { encoding: "utf8" })
-    .trim()
-    .split("\n")
-    .filter((f) => /\.tsx$/.test(f));
-}
 
 /** Разбирает line-height из класса вида leading-tight / leading-[1.05]. */
 function lineHeightOf(cls: string): number | null {
@@ -47,6 +41,27 @@ function lineHeightOf(cls: string): number | null {
   if (/\bleading-relaxed\b/.test(cls)) return 1.625;
   const m = cls.match(/leading-\[([\d.]+)\]/);
   return m ? Number(m[1]) : null;
+}
+
+/**
+ * Все исходники на диске.
+ *
+ * Список из `git ls-files src` содержал удалённые файлы — индекс обновляется
+ * только при явном `git rm` — и проверки падали с ENOENT на файле, которого
+ * на диске уже нет. Заодно новые файлы в индекс не попадали и не проверялись.
+ */
+function sourceFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === "node_modules" || e.name === ".next" || e.name.startsWith(".")) continue;
+      const full = join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(e.name)) out.push(full);
+    }
+  };
+  walk(join(process.cwd(), "src"));
+  return out.sort();
 }
 
 test("утилита display не сжимает строки", () => {

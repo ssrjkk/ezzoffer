@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * Обещания о безопасности должны соответствовать коду.
@@ -28,11 +28,25 @@ import { execSync } from "node:child_process";
  * hh-oauth. Здесь проверяется одно: текст не обещает того, чего нет.
  */
 
+/**
+ * Все исходники на диске.
+ *
+ * Список из `git ls-files src` содержал удалённые файлы — индекс обновляется
+ * только при явном `git rm` — и проверки падали с ENOENT на файле, которого
+ * на диске уже нет. Заодно новые файлы в индекс не попадали и не проверялись.
+ */
 function sourceFiles(): string[] {
-  return execSync("git ls-files src", { encoding: "utf8" })
-    .trim()
-    .split("\n")
-    .filter((f) => /\.(tsx|ts)$/.test(f));
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === "node_modules" || e.name === ".next" || e.name.startsWith(".")) continue;
+      const full = join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(e.name)) out.push(full);
+    }
+  };
+  walk(join(process.cwd(), "src"));
+  return out.sort();
 }
 
 /** Возвращает текст, попадающий пользователю: убираем комментарии и код. */

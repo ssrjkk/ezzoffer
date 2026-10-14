@@ -1,8 +1,28 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { execSync } from "node:child_process";
+import { readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 
+/**
+ * Все исходники на диске.
+ *
+ * Список из `git ls-files src` содержал удалённые файлы (индекс обновляется
+ * только при явном `git rm`), и проверки падали с ENOENT на файле, которого
+ * уже нет. Заодно новые файлы не проверялись вовсе.
+ */
+function sourceFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string): void => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === "node_modules" || e.name === ".next" || e.name.startsWith(".")) continue;
+      const full = join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (/\.tsx?$/.test(e.name)) out.push(full);
+    }
+  };
+  walk(join(process.cwd(), "src"));
+  return out.sort();
+}
 /**
  * Структурные стражи по кабинету.
  *
@@ -17,18 +37,20 @@ import { execSync } from "node:child_process";
  * сломай поведение, оставив текст, — тест пройдёт.
  */
 
+/**
+ * Файлы кабинета.
+ *
+ * Обход каталога, а не выдача `git ls-files`: индекс хранит удалённые файлы
+ * до явного `git rm`, и проверка падала с ENOENT на файле, которого на диске
+ * уже нет. Новые файлы, наоборот, в индекс не попадали и не проверялись.
+ */
 function dashboardFiles(): string[] {
-  return execSync("git ls-files src", { encoding: "utf8" })
-    .trim()
-    .split("\n")
-    .filter((f) => f.startsWith("src/components/dashboard/"));
+  return sourceFiles().filter((f) => f.replace(/\\/g, "/").includes("src/components/dashboard/"));
 }
 
 test("модальные окна не собираются вручную", () => {
   const offenders: string[] = [];
-  for (const file of execSync("git ls-files src", { encoding: "utf8" })
-    .trim()
-    .split("\n")
+  for (const file of sourceFiles()
     .filter((f) => /\.tsx$/.test(f))) {
     const content = readFileSync(file, "utf8");
     // Регулярки смотрим по коду без блочных комментариев: в шапке

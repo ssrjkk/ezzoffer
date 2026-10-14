@@ -1,43 +1,47 @@
 import Link from "next/link";
 import { Logo } from "./site-header";
 
+/*
+ * Подвал.
+ *
+ * Было четыре колонки и двадцать ссылок, из которых восемь вели на те же
+ * адреса: /faq стоял трижды («Вопросы и ответы», «База знаний», «Безопасность»),
+ * /about — дважды («О нас», «Консультации»), /pricing, /blog, /jobs и /reviews
+ * — по два раза. Это не разнообразие, а шум: человек выбирал между тремя
+ * ссылками с одинаковым адресом и не мог понять, чем они различаются.
+ *
+ * Две ссылки обещали то, чего на странице больше нет: «Отзывы» и «Истории
+ * успеха» вели на /reviews, где вместо отзывов теперь пример работы.
+ *
+ * И одна вела не туда: «Консультации» открывала /about. Сами консультации
+ * существуют — есть api/consultations и страница в кабинете, — просто ссылка
+ * была не на ту страницу.
+ */
 const columns = [
   {
     title: "Инструменты",
     links: [
-      { href: "/#resume", label: "Улучшение резюме с AI" },
       { href: "/jobs", label: "Вакансии" },
       { href: "/resume-examples", label: "Примеры резюме" },
       { href: "/internships", label: "Стажировки" },
-      { href: "/pricing", label: "Автоотклики" },
+      { href: "/pricing", label: "Тарифы на автоотклики" },
     ],
   },
   {
     title: "О сервисе",
     links: [
-      { href: "/about", label: "О нас" },
-      { href: "/reviews", label: "Отзывы" },
-      { href: "/blog", label: "Новости и статьи" },
-      { href: "/faq", label: "Вопросы и ответы" },
-    ],
-  },
-  {
-    title: "Поддержка",
-    links: [
-      { href: "/faq", label: "База знаний" },
+      { href: "/reviews", label: "Как это работает" },
       { href: "/platform-rules", label: "Правила платформ и безопасность" },
-      { href: "/about", label: "Консультации" },
-      { href: "/pricing", label: "Тарифы" },
-      { href: "/signup", label: "Начать бесплатно" },
+      { href: "/about", label: "О сервисе" },
+      { href: "/blog", label: "Блог о поиске работы" },
     ],
   },
   {
-    title: "Медиа",
+    title: "Помощь",
     links: [
-      { href: "/blog", label: "Блог о поиске работы" },
-      { href: "/reviews", label: "Истории успеха" },
-      { href: "/jobs", label: "Свежие вакансии" },
-      { href: "/faq", label: "Безопасность" },
+      { href: "/faq", label: "Вопросы и ответы" },
+      { href: "/dashboard/consultations", label: "Записаться на консультацию" },
+      { href: "/signup", label: "Начать бесплатно" },
     ],
   },
 ];
@@ -46,12 +50,14 @@ export function SiteFooter() {
   return (
     <footer className="border-t border-line bg-surface-2">
       <div className="container-x py-14 md:py-16">
-        <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(4,1fr)]">
+        {/* Три колонки, а не четыре: повторялась бы пустая полоса на широком
+            экране, а колонок с неповторяющимися ссылками осталось три. */}
+        <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(3,1fr)]">
           <div>
             <Logo />
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted">
-              AI-агент для поиска работы: резюме, вакансии и отклики без рутины.
-              Пробный период 24 часа без привязки карты.
+              Подбор вакансий, подходящее резюме и автоотклик с сопроводительным
+              письмом. Пробный период 24 часа без привязки карты.
             </p>
             <p className="mt-5 flex items-center gap-2 font-mono text-xs uppercase tracking-[0.1em] text-muted">
               <span className="inline-block size-1.5 rounded-full bg-success" aria-hidden />

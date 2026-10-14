@@ -161,7 +161,15 @@ test("отклик с номером выбирает вакансию, а не 
   const u = user();
   const preview = replyFor("отклик", "", u);
   assert.match(preview.text, /1\./, "в подборе нет нумерации — выбрать вакансию нечем");
-  assert.match(preview.text, /\/отклик 1/, "не сказано, как откликнуться");
+  /*
+   * Раньше здесь требовалась подсказка «/отклик 1». Теперь отклик делается
+   * кнопкой под списком: промахнуться по номеру нельзя, а человек не обязан
+   * помнить синтаксис. Проверяется наличие кнопки, а не текст-подсказка.
+   */
+  const rows = preview.keyboard?.inline_keyboard ?? [];
+  const applyRows = rows.filter((r) => r[0]?.data?.startsWith("apply:"));
+  assert.ok(applyRows.length >= 2, `кнопок отклика ${applyRows.length} вместо двух`);
+  assert.equal(applyRows[0]![0]!.data, "apply:1");
 
   // Первым идёт то, что подходит под резюме, а не первое попавшееся.
   const first = replyFor("отклик", "1", u).action;

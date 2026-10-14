@@ -1,3 +1,13 @@
+import {
+  mainKeyboard,
+  commandKeyboard,
+  keyboardFor,
+} from "./telegram-keyboard";
+
+// Реэкспорт: клавиатуры живут в отдельном модуле, но это часть бота, и
+// потребители (тесты, превью) обращаются к telegram-bot.
+export { mainKeyboard, commandKeyboard, keyboardFor };
+
 import { db, type User } from "./db";
 import { getStats } from "./stats";
 import { isPlanActive, planLabel } from "./plans";
@@ -6,7 +16,16 @@ import { matchesSearch, skillsByVacancy } from "./matcher";
 import { applyToVacancy, getUserResumes } from "./autoapply";
 import { rankVacancies } from "./resume-targeting";
 import type { Vacancy } from "./vacancies/types";
-import { sendTelegramMessage, unlinkChat, userByChatId, linkChatByCode } from "./telegram";
+import {
+  sendTelegramMessage,
+  unlinkChat,
+  userByChatId,
+  linkChatByCode,
+  answerCallbackQuery,
+  editTelegramMessage,
+  escapeHtml,
+  type InlineKeyboard,
+} from "./telegram";
 import { BOT_COMMANDS, BOT_MESSAGES } from "./bot-data";
 
 /**
@@ -23,6 +42,19 @@ export type TelegramUpdate = {
     chat?: { id?: number | string };
     text?: string;
     from?: { first_name?: string; username?: string };
+  };
+  /**
+   * Нажатие кнопки под сообщением.
+   *
+   * Отдельный вид апдейта: у него нет `text`, и без этой ветки бот молчал бы
+   * на любое нажатие. Для человека это выглядит как сломанная кнопка.
+   */
+  callback_query?: {
+    id?: string;
+    data?: string;
+    message_id?: number;
+    chat?: { id?: number | string };
+    message?: { message_id?: number; chat?: { id?: number | string } };
   };
 };
 
@@ -62,7 +94,12 @@ export function resetSeenUpdates(): void {
   seenUpdates.clear();
 }
 
-export type Reply = { text: string; action?: BotAction };
+export type Reply = {
+  text: string;
+  action?: BotAction;
+  /** Кнопки под сообщением; undefined — сообщение без кнопок. */
+  keyboard?: InlineKeyboard;
+};
 
 /**
  * Что команда должна сделать помимо текста.
@@ -135,44 +172,6 @@ function statsReply(user: User): string {
   return lines.join("\n");
 }
 
-function searchReply(user: User, query: string): string {
-  if (!isPlanActive(user)) return "Сначала активируйте тариф или пробный период.";
-
-  const searches = db
-    .prepare("SELECT * FROM searches WHERE user_id = ? AND active = 1 ORDER BY created_at DESC LIMIT 5")
-    .all(user.id) as Parameters<typeof matchesSearch>[1][];
-
-  if (searches.length === 0) {
-    return [
-      "У вас нет активных автопоисков.",
-      "",
-      "Создайте поиск в кабинете: /dashboard/jobs",
-      "После этого бот будет подбирать вакансии и откликаться сам.",
-    ].join("\n");
-  }
-
-  const catalog = getCatalog();
-  const results = searches.map((search) => {
-    const matched = catalog.filter((v) => matchesSearch(v, search));
-    return { search, matched };
-  });
-
-  const lines = ["Подбор по вашим активным поискам:"];
-  for (const { search, matched } of results) {
-    lines.push("", `— ${search.title}: ${fmt(matched.length)} вакансий`);
-    for (const v of matched.slice(0, 3)) {
-      lines.push(`  · ${v.title} — ${v.company}${v.salary ? ` · ${v.salary}` : ""}`);
-    }
-  }
-  if (query.trim()) lines.push("", `Фильтр: «${query.trim()}» применится к отклику.`);
-
-  const total = results.reduce((acc, r) => acc + r.matched.length, 0);
-  if (total === 0) {
-    lines.push("", "Подходящих вакансий пока нет. Каталог обновляется каждые 6 часов.");
-  }
-  return lines.join("\n");
-}
-
 /**
  * Ответ на `/отклик`.
  *
@@ -185,7 +184,7 @@ function searchReply(user: User, query: string): string {
  * с номером — отправляет один отклик через applyToVacancy, то есть тем же
  * кодом, что и плановый прогон.
  */
-function applyReply(user: User, args: string): { text: string; action?: BotAction } {
+function applyReply(user: User, args: string): Reply {
   if (!isPlanActive(user)) return { text: "Сначала активируйте тариф или пробный период." };
   if (user.autoapply_paused) {
     return { text: "Автоотклики на паузе ⏸ Снимите паузу: /старт" };
@@ -214,10 +213,11 @@ function applyReply(user: User, args: string): { text: string; action?: BotActio
   if (matched.length === 0) {
     return {
       text: [
-        "Подходящих вакансий на hh.ru пока нет.",
+        "<b>Подходящих вакансий на hh.ru пока нет.</b>",
         "",
         "Бот откликается только на вакансии hh.ru — на остальных площадках отклик делается вручную из кабинета.",
       ].join("\n"),
+      keyboard: mainKeyboard(),
     };
   }
 
@@ -235,19 +235,51 @@ function applyReply(user: User, args: string): { text: string; action?: BotActio
   if (Number.isFinite(index) && Number.isInteger(index) && index >= 1) {
     const target = ranked[index - 1]?.vacancy;
     if (!target) {
-      return { text: `В подборе только ${ranked.length} вакансий. Позовите /подбор, чтобы увидеть список.` };
+      return {
+        text: `В подборе только ${ranked.length} вакансий. Нажмите «Подбор вакансий», чтобы увидеть список.`,
+        keyboard: mainKeyboard(),
+      };
     }
     return { text: "", action: { kind: "apply", vacancy: target } };
   }
 
-  const lines = ["Подбор по вашим активным поискам:", ""];
-  for (const [i, r] of ranked.slice(0, 5).entries()) {
+  /*
+   * Список показывается пятью лучшими, а не всеми: под каждым заголовком в
+   * подбор попадают сотни вакансий, и список на двадцать строк в чате никто не
+   * не читает. Ограничение прямо названо, чтобы «показано 5» не читалось как
+   * «показаны все».
+   */
+  const shown = ranked.slice(0, 5);
+  const lines = [`<b>Подбор по вашим активным поискам</b>`, ""];
+  for (const [i, r] of shown.entries()) {
     const v = r.vacancy;
-    const fit = r.ratio > 0 ? ` · навыков ${Math.round(r.ratio * 100)}%` : "";
-    lines.push(`${i + 1}. ${v.title} — ${v.company}${v.salary ? ` · ${v.salary}` : ""}${fit}`);
+    const match = r.ratio > 0 ? ` · навыков ${Math.round(r.ratio * 100)}%` : "";
+    lines.push(
+      `${i + 1}. ${escapeHtml(v.title)} — ${escapeHtml(v.company)}${v.salary ? ` · ${escapeHtml(v.salary)}` : ""}${match}`,
+    );
   }
-  lines.push("", `Всего найдено: ${fmt(ranked.length)}`, "", "Откликнуться: /отклик 1, /отклик 2 и так далее.");
-  return { text: lines.join("\n") };
+  if (ranked.length > shown.length) {
+    lines.push("", `и ещё ${ranked.length - shown.length} — в кабинете виден полный список.`);
+  }
+
+  /*
+   * Кнопки под списком, а не только команды.
+   *
+   * Команда «/отклик 2» требует помнить номер и угадывать, есть ли он вообще.
+   * Кнопка ставит выбор рядом с названием вакансии, и промахнуться нельзя.
+   */
+  return {
+    text: lines.join("\n"),
+    keyboard: keyboardFor(
+      shown.map((r) => ({ title: r.vacancy.title, company: r.vacancy.company })),
+      [
+        [
+          { text: "Статистика", data: "menu:stats" },
+          { text: "Пауза", data: "menu:pause" },
+        ],
+      ],
+    ),
+  };
 }
 
 /** Разбирает команду и аргументы: "/поиск React удалённо" -> ["поиск", "React удалённо"]. */
@@ -269,7 +301,7 @@ export function replyFor(
     case "start":
     case "help":
     case "помощь":
-      return { text: HELP };
+      return { text: HELP, keyboard: commandKeyboard() };
 
     case "связать":
     case "link":
@@ -289,11 +321,20 @@ export function replyFor(
   switch (command) {
     case "статистика":
     case "stats":
-      return { text: statsReply(user) };
+      return { text: statsReply(user), keyboard: mainKeyboard() };
+    /*
+     * Подбор и отклик — одна команда.
+     *
+     * Раньше их было три: /подбор показывал сводку по поискам, /поиск делал
+     * то же самое, а /отклик — отдельный список. Человек получал три разных
+     * экрана на один и тот же вопрос и не мог понять, где ему откликнуться.
+     *
+     * Теперь: без номера — список с кнопками, с номером — отклик на вакансию
+     * из этого списка. Команда одна, поведение очевидное.
+     */
     case "подбор":
     case "поиск":
     case "search":
-      return { text: searchReply(user, args) };
     case "отклик":
     case "apply":
       return applyReply(user, args);
@@ -305,8 +346,108 @@ export function replyFor(
     case "resume":
       return { text: "", action: "resume" };
     default:
-      return { text: `Не знаю команду /${command}.\n\n${HELP}` };
+      return { text: `Не знаю команду /${command}.\n\n${HELP}`, keyboard: commandKeyboard() };
   }
+}
+
+/**
+ * Нажатие кнопки под сообщением.
+ *
+ * Отдельная ветка, потому что у колбэка нет текста: он приходит в
+ * `callback_query`, и обработчик текстовых команд его просто игнорировал бы —
+ * кнопка выглядела бы рабочей и не делала ничего.
+ *
+ * Ответ подтверждается всегда, даже при ошибке: иначе кнопка «часит» секунд
+ * десять, и человек нажимает её повторно — то есть отправляет второй отклик.
+ */
+async function handleCallback(update: TelegramUpdate): Promise<boolean | null> {
+  const cb = update.callback_query;
+  if (!cb) return null;
+
+  const chatId = cb.chat?.id ?? cb.message?.chat?.id;
+  const data = cb.data ?? "";
+  if (chatId === undefined) return null;
+  const chat = String(chatId);
+
+  const user = userByChatId(chat) ?? null;
+  if (!user) {
+    if (cb.id) await answerCallbackQuery(cb.id, { text: "Аккаунт не привязан" });
+    return sendTelegramMessage(chat, NOT_LINKED, { keyboard: commandKeyboard(), html: true });
+  }
+
+  const [kind, value] = data.split(":");
+
+  if (kind === "menu") {
+    const command =
+      value === "search"
+        ? "подбор"
+        : value === "stats"
+          ? "статистика"
+          : value === "pause"
+            ? "пауза"
+            : value === "resume"
+              ? "старт"
+              : "помощь";
+
+    /*
+     * Действие выполняется ДО правки сообщения.
+     *
+     * Обратный порядок был багом: правка возвращала true, обработчик на этом
+     * выходил — и пауза не наступала. Кнопка выглядела работающей, а отклики
+     * продолжали уходить. Ровно тот случай, который страшнее отсутствия
+     * кнопки: человек нажимает «Пауза» и не получает откликов.
+     */
+    if (command === "пауза" || command === "старт") {
+      if (cb.id) await answerCallbackQuery(cb.id);
+      const text = togglePause(chat, command === "пауза");
+      if (cb.message_id !== undefined) {
+        const changed = await editTelegramMessage(chat, cb.message_id, text, {
+          keyboard: mainKeyboard(),
+          html: true,
+        });
+        if (changed) return true;
+      }
+      return sendTelegramMessage(chat, text, { keyboard: mainKeyboard(), html: true });
+    }
+
+    const reply = replyFor(command, "", user);
+    if (cb.id) await answerCallbackQuery(cb.id);
+
+    const text = reply.text || HELP;
+    const changed =
+      cb.message_id !== undefined
+        ? await editTelegramMessage(chat, cb.message_id, text, {
+            keyboard: reply.keyboard,
+            html: true,
+          })
+        : false;
+
+    if (changed) return true;
+    return sendTelegramMessage(chat, text, { keyboard: reply.keyboard, html: true });
+  }
+
+  if (kind === "apply" && value) {
+    if (cb.id) await answerCallbackQuery(cb.id, { text: "Отправляю…" });
+    const reply = applyReply(user, value);
+    const action = reply.action;
+    if (!action || typeof action !== "object") {
+      const text = reply.text || "Не удалось выбрать вакансию.";
+      if (cb.message_id !== undefined) {
+        await editTelegramMessage(chat, cb.message_id, text, {
+          keyboard: mainKeyboard(),
+          html: true,
+        });
+      }
+      return sendTelegramMessage(chat, text, { keyboard: mainKeyboard(), html: true });
+    }
+    return runApplyFromChat(chat, action.vacancy, cb.message_id);
+  }
+
+  if (cb.id) await answerCallbackQuery(cb.id, { text: "Кнопка устарела" });
+  return sendTelegramMessage(chat, "Эта кнопка из старого сообщения. Откройте подбор заново.", {
+    keyboard: mainKeyboard(),
+    html: true,
+  });
 }
 
 /**
@@ -317,6 +458,8 @@ export async function handleUpdate(update: TelegramUpdate): Promise<boolean | nu
   // Telegram повторно доставляет апдейт при не-2xx ответе; обрабатывать его
   // второй раз нельзя, иначе пользователь получит дубликат ответа.
   if (!markUpdateSeen(update.update_id)) return null;
+
+  if (update.callback_query) return handleCallback(update);
 
   const chatId = update.message?.chat?.id;
   const text = update.message?.text;
@@ -366,65 +509,12 @@ export async function handleUpdate(update: TelegramUpdate): Promise<boolean | nu
     );
   }
 
-  /*
-   * Пауза и возобновление.
-   *
-   * Раньше обе команды отвечали «сделайте это в кабинете», хотя сайт
-   * рекламировал мгновенную остановку прямо в боте. Теперь состояние
-   * меняется здесь и сразу видно в кабинете — это одна и та же строка в БД.
-   */
-  if (reply.action === "pause") {
-    const user = userByChatId(chat);
-    if (!user) return sendTelegramMessage(chat, NOT_LINKED);
-    const changed = setPaused(user, true);
-    const queued = db
-      .prepare("SELECT COUNT(*) AS c FROM searches WHERE user_id = ? AND active = 1")
-      .get(user.id) as { c: number };
-    return sendTelegramMessage(
-      chat,
-      changed
-        ? [
-            "Автоотклики на паузе ⏸",
-            "",
-            queued.c > 0
-              ? `Остановлю отправку сразу. Активных поисков: ${queued.c} — на возобновлении они вернутся в очередь.`
-              : "Активных поисков нет, так что ничего не теряется.",
-            "",
-            "Продолжить: /старт",
-          ].join("\n")
-        : "Автоотклики уже были на паузе.",
-    );
-  }
-
-  if (reply.action === "resume") {
-    const user = userByChatId(chat);
-    if (!user) return sendTelegramMessage(chat, NOT_LINKED);
-    if (!isPlanActive(user)) {
-      return sendTelegramMessage(
-        chat,
-        [
-          `Тариф «${planLabel(user)}» истёк — сначала продлите его.`,
-          "",
-          "Продлить: /dashboard/settings",
-        ].join("\n"),
-      );
-    }
-    const changed = setPaused(user, false);
-    const queued = db
-      .prepare("SELECT COUNT(*) AS c FROM searches WHERE user_id = ? AND active = 1")
-      .get(user.id) as { c: number };
-    return sendTelegramMessage(
-      chat,
-      changed
-        ? [
-            "Отправка возобновлена ✅",
-            "",
-            queued.c > 0
-              ? `Активных поисков: ${queued.c}. Следующий прогон — в ближайшие минуты.`
-              : "Но активных поисков нет: создайте поиск, иначе откликаться не на что.",
-          ].join("\n")
-        : "Отправка уже была включена.",
-    );
+  if (reply.action === "pause" || reply.action === "resume") {
+    if (!userByChatId(chat)) return sendTelegramMessage(chat, NOT_LINKED);
+    return sendTelegramMessage(chat, togglePause(chat, reply.action === "pause"), {
+      keyboard: mainKeyboard(),
+      html: true,
+    });
   }
 
   /*
@@ -437,28 +527,105 @@ export async function handleUpdate(update: TelegramUpdate): Promise<boolean | nu
   if (typeof reply.action === "object" && reply.action.kind === "apply") {
     const user = userByChatId(chat);
     if (!user) return sendTelegramMessage(chat, NOT_LINKED);
-
-    const vacancy = reply.action.vacancy;
-    const result = await applyToVacancy(user, vacancy);
-
-    if (result.ok) {
-      return sendTelegramMessage(
-        chat,
-        [
-          "Отклик отправлен ✅",
-          "",
-          `Вакансия: ${vacancy.title}`,
-          `Компания: ${vacancy.company}`,
-          result.withLetter ? "Сопроводительное письмо приложено." : "Без письма — подходящего текста не нашлось.",
-          "",
-          "Статистика: /статистика",
-        ].join("\n"),
-      );
-    }
-    return sendTelegramMessage(chat, `Не отправил: ${result.error}`);
+    return runApplyFromChat(chat, reply.action.vacancy);
   }
 
-  return sendTelegramMessage(chat, reply.text);
+  return sendTelegramMessage(chat, reply.text, { keyboard: reply.keyboard, html: true });
+}
+
+/**
+ * Отправка отклика и ответ в чат.
+ *
+ * Общая функция для команды и для кнопки: раньше это были два места, и
+ * правка одного не доезжала до другого — текст про успех и про отказ
+ * расходился.
+ *
+ * После кнопки сообщение правится на месте, а не отправляется новым: иначе
+ * переписка превращалась бы в стопку одинаковых «Готово», и нужный ответ
+ * уезжал бы наверх.
+ */
+async function runApplyFromChat(
+  chat: string,
+  vacancy: Vacancy,
+  replaceMessageId?: number,
+): Promise<boolean | null> {
+  const user = userByChatId(chat);
+  if (!user) return sendTelegramMessage(chat, NOT_LINKED, { keyboard: commandKeyboard(), html: true });
+
+  const result = await applyToVacancy(user, vacancy);
+  const opts = { keyboard: mainKeyboard(), html: true };
+
+  if (!result.ok) {
+    const text = `Не отправил: ${escapeHtml(result.error)}`;
+    if (replaceMessageId !== undefined) {
+      await editTelegramMessage(chat, replaceMessageId, text, opts);
+    }
+    return sendTelegramMessage(chat, text, opts);
+  }
+
+  const text = [
+    "<b>Отклик отправлен ✅</b>",
+    "",
+    `Вакансия: ${escapeHtml(vacancy.title)}`,
+    `Компания: ${escapeHtml(vacancy.company)}`,
+    result.withLetter
+      ? "Сопроводительное письмо приложено."
+      : "Без письма — подходящего текста не нашлось.",
+  ].join("\n");
+
+  if (replaceMessageId !== undefined) {
+    const changed = await editTelegramMessage(chat, replaceMessageId, text, opts);
+    if (changed) return true;
+  }
+  return sendTelegramMessage(chat, text, opts);
+}
+
+/**
+ * Пауза и возобновление — одна функция для команды и кнопки.
+ *
+ * Раньше это были два места. Кнопка правила сообщение раньше, чем меняла
+ * состояние, и правка возвращала true — обработчик на этом выходил, а пауза
+ * не наступала. Кнопка выглядела работающей, а отклики продолжали уходить.
+ * Общая функция исключает такой порядок по построению.
+ */
+function togglePause(chat: string, paused: boolean): string {
+  const user = userByChatId(chat);
+  if (!user) return NOT_LINKED;
+
+  if (!paused && !isPlanActive(user)) {
+    return [
+      `Тариф «${planLabel(user)}» истёк — сначала продлите его.`,
+      "",
+      "Продлить: /dashboard/settings",
+    ].join("\n");
+  }
+
+  const changed = setPaused(user, paused);
+  const queued = db
+    .prepare("SELECT COUNT(*) AS c FROM searches WHERE user_id = ? AND active = 1")
+    .get(user.id) as { c: number };
+
+  if (!changed) {
+    return paused ? "Автоотклики уже были на паузе." : "Отправка уже была включена.";
+  }
+
+  if (paused) {
+    return [
+      "<b>Автоотклики на паузе ⏸</b>",
+      "",
+      queued.c > 0
+        ? `Остановлю отправку сразу. Активных поисков: ${queued.c} — на возобновлении они вернутся в очередь.`
+        : "Активных поисков нет, так что ничего не теряется.",
+    ].join("\n");
+  }
+
+  return [
+    "<b>Отправка возобновлена ✅</b>",
+    "",
+    queued.c > 0
+      ? `Активных поисков: ${queued.c}. Следующий прогон — в ближайшие минуты.`
+      : "Но активных поисков нет: создайте поиск, иначе откликаться не на что.",
+  ].join("\n");
 }
 
 /** Текст приветственного сообщения для превью (совпадает с /start в боте). */
