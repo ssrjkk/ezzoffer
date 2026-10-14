@@ -71,7 +71,7 @@ export type VacancyApplyResult = {
    * отталкивает», а «вакансии больше нет»: включать по ней паузу значит
    * позволить одной мёртвой записи замедлить все последующие отклики.
    */
-  kind?: "closed" | "rate_limit" | "auth" | "network" | "other";
+  kind?: "closed" | "rate_limit" | "auth" | "token" | "network" | "other";
 };
 
 export interface VacancyProvider {

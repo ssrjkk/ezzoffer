@@ -4,12 +4,13 @@ import { matchesSearch, skillsByVacancy, type SearchRow } from "./matcher";
 import { getCatalog } from "./vacancies";
 import { hhProvider } from "./vacancies/hh";
 import { getValidHhToken } from "./hh-oauth";
-import { createPacing, type Pacing, type PacingConfig } from "./anti-ban";
+import { createPacing, type FailureKind, type Pacing, type PacingConfig } from "./anti-ban";
 import { effectivePacing } from "./config";
+import { notifyAccountBlocked } from "./telegram-digest";
 import { renderLetterTemplate } from "./cover-letter";
 import { rankLettersForVacancy } from "./ai-matching";
 import { rankVacancies, bestResumeFor, type ResumeTarget } from "./resume-targeting";
-import type { Vacancy } from "./vacancies/types";
+import type { Vacancy, VacancyApplyResult } from "./vacancies/types";
 import { logError, logInfo } from "./logger";
 
 /**
@@ -49,11 +50,63 @@ export type AutoApplyRun = {
   stale: number;
   pausedFor: string | null;
   pausedUsers: number;
+  /** Аккаунты, остановленные ограничением hh. */
+  blockedUsers: number;
   /** Отклики, к которым приложено письмо. */
   withLetter: number;
   /** Вакансии без подходящего письма — отправлены без него. */
   withoutLetter: number;
 };
+
+/**
+ * На сколько останавливаем отклики при 403.
+ *
+ * Длиннее, чем пауза anti-ban: ограничение держится часами, и короткая пауза
+ * означала бы, что сервис полезет пробовать снова через несколько минут и
+ * только добьёт аккаунт. Снимается либо временем, либо успешным откликом.
+ */
+const BLOCK_STOP_MS = 6 * 60 * 60 * 1000;
+
+/** Ответ hh → вид отказа для паузера. */
+export function toFailureKind(
+  kind: NonNullable<VacancyApplyResult["kind"]>,
+): FailureKind {
+  switch (kind) {
+    case "auth":
+      return "blocked";
+    case "rate_limit":
+      return "rate_limit";
+    // Истёкший токен — это не ограничение аккаунта. Останавливать на шесть
+    // часов нельзя: он лечится перепривязкой в кабинете за минуту.
+    case "token":
+      return "rate_limit";
+    // «network» и «other» — таймаут, 5xx, невнятный код: про риск для
+    // аккаунта они не говорят, поэтому пауза короткая.
+    default:
+      return "network";
+  }
+}
+
+export function blockedUntil(userId: number): number {
+  const row = db
+    .prepare("SELECT autoapply_blocked_until AS v FROM users WHERE id = ?")
+    .get(userId) as { v: number | null } | undefined;
+  const v = row?.v ?? 0;
+  return v && v > Date.now() ? v : 0;
+}
+
+export function blockedReason(userId: number): string {
+  const row = db
+    .prepare("SELECT autoapply_block_reason AS v FROM users WHERE id = ?")
+    .get(userId) as { v: string | null } | undefined;
+  return row?.v ?? "";
+}
+
+function setBlockedUntil(userId: number, until: number, reason: string): void {
+  db.prepare(
+    `UPDATE users SET autoapply_blocked_until = ?, autoapply_block_reason = ? WHERE id = ?`,
+  ).run(until, reason, userId);
+}
 
 function todayCount(userId: number): number {
   const start = new Date();
@@ -238,6 +291,8 @@ export async function runAutoApply(opts?: {
   let ran = false;
   let pausedFor: string | null = null;
   let pausedUsers = 0;
+  /** Аккаунты, которые hh ограничил: их отклики остановлены до снятия. */
+  let blockedUsers = 0;
   let withLetter = 0;
   let withoutLetter = 0;
 
@@ -249,6 +304,19 @@ export async function runAutoApply(opts?: {
     // Пользователь поставил автоотклики на паузу.
     if (user.autoapply_paused) {
       pausedUsers++;
+      continue;
+    }
+
+    /*
+     * Аккаунт ограничен площадкой — не трогаем его до снятия ограничения.
+     *
+     * Без этой проверки каждый тик планировщика снова стучался бы в hh и снова
+     * получал 403. Ограничение держится часами, и повторные попытки только
+     * ухудшают положение аккаунта.
+     */
+    const stopUntil = blockedUntil(user.id);
+    if (stopUntil > 0) {
+      blockedUsers++;
       continue;
     }
 
@@ -317,6 +385,18 @@ export async function runAutoApply(opts?: {
     // Каталог и навыки — один раз на пользователя, а не на каждый поиск.
     const catalog = getCatalog();
     const skillsCache = skillsByVacancy(catalog);
+
+    /*
+     * Аккаунт ограничили площадкой.
+     *
+     * Один 403 означает, что продолжать нельзя: пока ограничение висит, каждый
+     * следующий отклик только ухудшает положение. Поэтому цикл обрывается, а
+     * причина сохраняется — иначе после перезапуска сервис снова пошёл бы
+     * откликаться, не понимая, что вчера его остановили.
+     */
+    let blockedUser = false;
+    let blockReason = "";
+    const blockedUntilCol = blockedUntil(user.id);
 
     for (const search of activeSearches) {
       if (appliedSet.size >= remaining) break;
@@ -447,10 +527,29 @@ export async function runAutoApply(opts?: {
            * «вакансии больше нет» просто пропускается: это не отказ платформы
            * и никакого отношения к риску блокировки не имеет.
            */
+          /*
+           * Отказ из hh разбирается по виду, а не по факту неудачи.
+           *
+           * Раньше здесь стояло `kind === "rate_limit" ? "platform" :
+           * "network"`, то есть 403 от hh — аккаунт ограничен — считался
+           * сетевым сбоем и получал паузу в несколько минут вместо остановки
+           * на часы. Это ровно тот случай, когда надо молчать нельзя: если
+           * аккаунт ограничили, человек теряет отклики и не понимает почему.
+           *
+           * Закрытая вакансия — не отказ платформы и никакого отношения к риску
+           * блокировки не имеет: каталог хранит записи неделю, и мёртвая
+           * запись, попавшая в подбор, замедляла бы все последующие отклики.
+           */
           const kind = result.kind ?? "other";
-          if (kind !== "closed") {
-            pacing.recordFailure(kind === "rate_limit" ? "platform" : "network");
+          if (kind === "closed") {
+            skipped++;
+            continue;
           }
+          if (kind === "auth") {
+            blockedUser = true;
+            blockReason = "hh.ru ограничил доступ к аккаунту";
+          }
+          pacing.recordFailure(toFailureKind(kind));
           logError("autoapply", new Error(result.error ?? "apply failed"), {
             userId: user.id,
             slug: vacancy.slug,
@@ -481,7 +580,41 @@ export async function runAutoApply(opts?: {
         applied++;
         if (message) withLetter++;
         else withoutLetter++;
+
+        // Успех снимает прошлую блокировку: ограничение могло снять сам hh.
+        if (blockedUntilCol > 0) {
+          db.prepare(
+            `UPDATE users SET autoapply_blocked_until = 0, autoapply_block_reason = '' WHERE id = ?`,
+          ).run(user.id);
+        }
       }
+    }
+
+    if (blockedUser) {
+      /*
+       * Останавливаемся сами, а не ждём следующего тика.
+       *
+       * Планировщик сам вызывает decide() каждый тик, но между тиками может
+       * пройти минута, за которую успеет уйти ещё несколько откликов в
+       * ограниченный аккаунт. Состояние пишется в БД, поэтому перезапуск
+       * процесса его не сбросит.
+       */
+      setBlockedUntil(user.id, Date.now() + BLOCK_STOP_MS, blockReason);
+      blockedUsers++;
+      logError("autoapply", new Error(blockReason), { userId: user.id });
+      /*
+       * Сообщение сразу, а не в следующем дайджесте.
+       *
+       * При 403 отклики не уходят вообще: человек без уведомления видит только
+       * «их мало» и никаких зацепок. Даже если уведомление не уйдёт, пауза уже
+       * стоит — то есть худший случай здесь тишина, а не удар по аккаунту.
+       */
+      try {
+        await notifyAccountBlocked(user.telegram_chat_id, blockReason, Date.now() + BLOCK_STOP_MS);
+      } catch (err) {
+        logError("autoapply:notify", err, { userId: user.id });
+      }
+      break;
     }
 
     if (appliedSet.size > 0) {
@@ -500,16 +633,17 @@ export async function runAutoApply(opts?: {
       stale: staleTotal,
       pausedFor,
       pausedUsers,
+      blockedUsers,
       withLetter,
       withoutLetter,
     };
   }
-  return { ran: true, searches, applied, failed, skipped, stale: staleTotal, pausedFor, pausedUsers, withLetter, withoutLetter };
+  return { ran: true, searches, applied, failed, skipped, stale: staleTotal, pausedFor, pausedUsers, blockedUsers, withLetter, withoutLetter };
 }
 
 export type ApplyOutcome =
   | { ok: true; resumeId: string; withLetter: boolean }
-  | { ok: false; kind: "closed" | "rate_limit" | "auth" | "network" | "other" | "not_found" | "already" | "paused" | "no_resume" | "stale"; error: string };
+  | { ok: false; kind: "closed" | "rate_limit" | "auth" | "token" | "network" | "other" | "not_found" | "already" | "paused" | "no_resume" | "stale"; error: string };
 
 /**
  * Отклик на одну вакансию по прямому указанию человека.
@@ -591,7 +725,15 @@ export async function applyToVacancy(user: User, vacancy: Vacancy): Promise<Appl
 
   if (!result.ok) {
     const kind = result.kind ?? "other";
-    if (kind !== "closed") pacing.recordFailure(kind === "rate_limit" ? "platform" : "network");
+    if (kind === "closed") {
+      // Вакансию сняли — это не отказ платформы, откат здесь только вредит.
+    } else if (kind === "auth") {
+      // Отклик из чата тоже может упереться в ограничение аккаунта.
+      setBlockedUntil(user.id, Date.now() + BLOCK_STOP_MS, "hh.ru ограничил доступ к аккаунту");
+      pacing.recordFailure("blocked");
+    } else {
+      pacing.recordFailure(toFailureKind(kind));
+    }
     return { ok: false, kind, error: result.error ?? "Платформа отклонила отклик" };
   }
 

@@ -13,7 +13,7 @@ import { getStats } from "./stats";
 import { isPlanActive, planLabel } from "./plans";
 import { getCatalog } from "./vacancies";
 import { matchesSearch, skillsByVacancy } from "./matcher";
-import { applyToVacancy, getUserResumes } from "./autoapply";
+import { applyToVacancy, getUserResumes, blockedUntil, blockedReason } from "./autoapply";
 import { rankVacancies } from "./resume-targeting";
 import type { Vacancy } from "./vacancies/types";
 import {
@@ -591,6 +591,27 @@ async function runApplyFromChat(
 function togglePause(chat: string, paused: boolean): string {
   const user = userByChatId(chat);
   if (!user) return NOT_LINKED;
+
+  /*
+   * Ограничение площадки не снимается кнопкой «Продолжить».
+   *
+   * Если бы возобновление просто разрешили, человек нажал бы кнопку, увидел
+   * «Отправка возобновлена» и стал ждать откликов, которых не будет:
+   * планировщик упрётся в ограничение и промолчит. Сказать правду здесь
+   * важнее, чем выполнить нажатие.
+   */
+  if (!paused) {
+    const stopUntil = blockedUntil(user.id);
+    if (stopUntil > 0) {
+      return [
+        "<b>Пока нельзя возобновить</b>",
+        "",
+        blockedReason(user.id) || "hh.ru ограничил доступ к аккаунту",
+        "",
+        "Отклики пойдут сами, как ограничение снимется — отдельно ничего делать не нужно. Снять его можно только на hh.ru: проверьте, нет ли там ограничений или требования подтвердить аккаунт.",
+      ].join("\n");
+    }
+  }
 
   if (!paused && !isPlanActive(user)) {
     return [

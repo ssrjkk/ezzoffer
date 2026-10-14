@@ -41,6 +41,10 @@ function user(over: Partial<User> = {}): User {
     hh_resume_id: null,
     telegram_chat_id: "1",
     autoapply_paused: 0,
+
+    autoapply_blocked_until: 0,
+
+    autoapply_block_reason: '',
     email_verified: 1,
     email_verification_token: null,
     password_reset_token: null,

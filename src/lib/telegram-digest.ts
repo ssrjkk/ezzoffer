@@ -1,5 +1,6 @@
 import { db } from "./db";
-import { notifyUser } from "./telegram";
+import { notifyUser, sendTelegramMessage, escapeHtml } from "./telegram";
+import { mainKeyboard } from "./telegram-keyboard";
 import type { ApplicationRow } from "./applications";
 
 /**
@@ -211,6 +212,48 @@ export async function sendAlerts(getVacancyTitle: (slug: string) => string | nul
   }
 
   return sent;
+}
+
+/**
+ * Сообщение об ограничении аккаунта площадкой.
+ *
+ * Отправляется один раз — в тот момент, когда блокировка возникла, а не на
+ * каждом тике планировщика. Поэтому отдельная отметка «уже отправлено» не
+ * нужна: вызывающий код знает, что это новое событие.
+ *
+ * Молчать здесь нельзя. При 403 отклики не уходят вообще, и без сообщения
+ * человек видит только то, что их «мало», — то есть не видит ничего. Уведомление
+ * объясняет и что случилось, и что делать, и что делать не надо.
+ */
+export async function notifyAccountBlocked(
+  chatId: string | null,
+  reason: string,
+  until: number,
+): Promise<boolean> {
+  if (!chatId) return false;
+
+  const when = new Date(until).toLocaleString("ru-RU", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
+  return sendTelegramMessage(
+    chatId,
+    [
+      `<b>${escapeHtml(reason)}</b>`,
+      "",
+      "Автоотклики остановлены. Пока ограничение висит, отправка откликов только ухудшает положение аккаунта, поэтому бот ждёт и не повторяет попытки.",
+      "",
+      `Попробуем снова: ${escapeHtml(when)}`,
+      "",
+      "Что делать:",
+      "— зайти на hh.ru и проверить, нет ли ограничений на аккаунт или требования его подтвердить;",
+      "— если после снятия ограничения отклики так и не пошли, переподключите аккаунт в кабинете.",
+    ].join("\n"),
+    { html: true, keyboard: mainKeyboard() },
+  );
 }
 
 /** Сброс для тестов. */

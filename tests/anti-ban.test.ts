@@ -110,7 +110,7 @@ test("pacing соблюдает часовой лимит", () => {
 test("pacing включает backoff после ошибок платформы", () => {
   const clock = makeClock();
   const p = createPacing({ minDelayMs: 0, maxDelayMs: 0 }, clock.now);
-  p.recordFailure("platform");
+  p.recordFailure("rate_limit");
   const d = p.decide();
   assert.equal(d.allowed, false);
   assert.equal(d.reason, "backoff");

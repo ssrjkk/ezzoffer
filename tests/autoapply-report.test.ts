@@ -23,6 +23,8 @@ function run(over: Partial<AutoApplyRun> = {}): AutoApplyRun {
     stale: 0,
     pausedFor: null,
     pausedUsers: 0,
+
+    blockedUsers: 0,
     withLetter: 0,
     withoutLetter: 0,
     ...over,

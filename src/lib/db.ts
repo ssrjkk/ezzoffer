@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS users (
   hh_resume_id TEXT,
   telegram_chat_id TEXT,
   autoapply_paused INTEGER NOT NULL DEFAULT 0,
+  autoapply_blocked_until INTEGER NOT NULL DEFAULT 0,
+  autoapply_block_reason TEXT NOT NULL DEFAULT '',
   email_verified INTEGER NOT NULL DEFAULT 0,
   email_verification_token TEXT,
   password_reset_token TEXT,
@@ -231,6 +233,10 @@ function migrate(instance: Database.Database): void {
   if (!userCols.has("hh_resume_id")) additions.push(["hh_resume_id", "TEXT"]);
   if (!userCols.has("telegram_chat_id")) additions.push(["telegram_chat_id", "TEXT"]);
   if (!userCols.has("autoapply_paused")) additions.push(["autoapply_paused", "INTEGER NOT NULL DEFAULT 0"]);
+  // Блокировка аккаунта площадкой: переживает перезапуск, иначе сервис
+  // снова пошёл бы откликаться в аккаунт, который hh только что отклонил.
+  if (!userCols.has("autoapply_blocked_until")) additions.push(["autoapply_blocked_until", "INTEGER NOT NULL DEFAULT 0"]);
+  if (!userCols.has("autoapply_block_reason")) additions.push(["autoapply_block_reason", "TEXT NOT NULL DEFAULT ''"]);
   if (!userCols.has("email_verified")) additions.push(["email_verified", "INTEGER NOT NULL DEFAULT 0"]);
   if (!userCols.has("email_verification_token")) additions.push(["email_verification_token", "TEXT"]);
   if (!userCols.has("password_reset_token")) additions.push(["password_reset_token", "TEXT"]);
@@ -319,6 +325,9 @@ export type User = {
   hh_resume_id: string | null;
   telegram_chat_id: string | null;
   autoapply_paused: number;
+  /** До какого момента hh ограничил аккаунт (0 — ограничения нет). */
+  autoapply_blocked_until: number;
+  autoapply_block_reason: string;
   email_verified: number;
   email_verification_token: string | null;
   password_reset_token: string | null;
