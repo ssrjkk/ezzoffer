@@ -222,6 +222,16 @@ export const hhProvider: VacancyProvider = {
       method: "POST",
       timeoutMs: FETCH_TIMEOUT,
       attempts: 2,
+      /*
+       * 429 здесь намеренно не повторяется.
+       *
+       * Клиент по умолчанию повторяет и его — для чтения каталога это удобно.
+       * Но площадка сказала «не сейчас», и повтор через паузу делает ровно то,
+       * чего она просила не делать, плюс ещё один запрос в счёт лимита. Срок из
+       * Retry-After и так доезжает до паузера, который остановит отправку
+       * целиком, а не подождёт и не повторит.
+       */
+      shouldRetry: (status) => status >= 500,
       headers: {
         Authorization: `Bearer ${token}`,
         "User-Agent": "EZOffer/1.0",
@@ -244,6 +254,14 @@ export const hhProvider: VacancyProvider = {
     return {
       ok: false,
       ...classifyApplyFailure(res.status, res.body),
+      /*
+       * Срок ожидания доезжает до паузера.
+       *
+       * Без этого hh говорил «не раньше» в заголовке, а автоотклик об этом не
+       * узнавал и ждал рассчитанную паузу — то есть почти наверняка приходил
+       * раньше и получал 429 ещё раз.
+       */
+      retryAfterMs: res.retryAfterMs,
     };
   },
 

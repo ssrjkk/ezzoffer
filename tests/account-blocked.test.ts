@@ -19,6 +19,7 @@ let db: Database;
 let autoapply: typeof import("../src/lib/autoapply");
 let bot: typeof import("../src/lib/telegram-bot");
 let sent: { chatId: string; text: string }[];
+let resetCatalogCache: () => void;
 
 const BLOCK_UNTIL = Date.now() + 6 * 60 * 60 * 1000;
 
@@ -27,6 +28,7 @@ before(async () => {
   process.env.EZOFFER_SILENT = "1";
   process.env.TELEGRAM_BOT_TOKEN = "test-token";
   db = (await import("../src/lib/db")).db;
+  resetCatalogCache = (await import("../src/lib/vacancies")).resetCatalogCache;
   autoapply = await import("../src/lib/autoapply");
   bot = await import("../src/lib/telegram-bot");
 
@@ -50,6 +52,13 @@ beforeEach(() => {
   db.exec(
     "DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies;",
   );
+  /*
+   * getCatalog() кэширует выборку на 30 секунд и сам сбрасывается только
+   * при записи через upsertMany. Прямая вставка в SQL кэш не трогает, и подбор
+   * молча показывает вакансии из предыдущего теста, а не текущего. Из-за
+   * этого тест с двумя вакансиями видел одну и цикл не доходил до паузы.
+   */
+  resetCatalogCache();
   sent = [];
   bot.resetSeenUpdates();
 });
@@ -77,6 +86,26 @@ function blockAccount(until = BLOCK_UNTIL, reason = "hh.ru ограничил д
     "UPDATE users SET autoapply_blocked_until = ?, autoapply_block_reason = ? WHERE id = 1",
   ).run(until, reason);
 }
+
+/**
+ * Паузер без пауз и с круглосуточным рабочим днём.
+ *
+ * `workStartHour`/`workEndHour` закреплены, потому что иначе результат теста
+ * зависит от времени запуска: ночью паузер честно отказывается отправлять, и
+ * прогоны на настоящем 403 или 429 просто не доходили до отправки. Тесты
+ * проходили утром и падали вечером — и выглядели при этом исправными.
+ */
+/** Полдень сегодняшнего дня: любое время суток одинаково годно для прогона. */
+const NOON = (() => {
+  const d = new Date();
+  d.setHours(12, 0, 0, 0);
+  return d.getTime();
+})();
+
+const FAST_PACING = {
+  pacing: { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0 },
+  now: () => NOON,
+};
 
 /** Действует ли ограничение прямо сейчас. */
 function isBlocked(): boolean {
@@ -273,7 +302,7 @@ test("403 от hh во время прогона останавливает ак
   }) as typeof globalThis.fetch;
 
   try {
-    await autoapply.runAutoApply({ pacing: { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0 } });
+    await autoapply.runAutoApply(FAST_PACING);
   } finally {
     globalThis.fetch = saved;
   }
@@ -324,7 +353,7 @@ test("закрытая вакансия не останавливает акка
   }) as typeof globalThis.fetch;
 
   try {
-    await autoapply.runAutoApply({ pacing: { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0 } });
+    await autoapply.runAutoApply(FAST_PACING);
   } finally {
     globalThis.fetch = saved;
   }
@@ -334,6 +363,111 @@ test("закрытая вакансия не останавливает акка
     isBlocked(),
     false,
     "закрытая вакансия остановила аккаунт: это не отказ платформы, ограничение незачем",
+  );
+});
+
+/**
+ * Retry-After доезжает до паузера.
+ *
+ * Отдельный тест, потому что проверять метод паузера бесполезно: так и вышло
+ * в первый раз. `respectRetryAfter` был написан, проверен вызовом напрямую —
+ * и остался мёртвым кодом, потому что из прогона его не звали, а заголовок
+ * терялся в HTTP-клиенте. Тесты были зелёные, функции не существовало.
+ *
+ * Здесь проверяется весь путь: hh отвечает 429 с Retry-After → автоотклик
+ * обязан передать срок паузеру. Раньше проверка обрывалась на методе.
+ */
+test("Retry-After от hh доезжает до паузера", async () => {
+  /*
+   * Проверяется весь путь, а не сам метод.
+   *
+   * С отдельной проверкой `respectRetryAfter` вышло ровно так, как можно было
+   * не заметить: метод был написан, тесты звали его напрямую и были зелёные —
+   * а из прогона его никто не звал, и заголовок терялся в HTTP-клиенте.
+   * Функции не существовало.
+   *
+   * Нужны две вакансии: пауза объявляется на следующем шаге цикла, и с одной
+   * вакансией цикл просто заканчивается, ни разу не спросив паузер.
+   */
+  seedUser();
+  seedVacancy("hh-780", "React-разработчик");
+  seedVacancy("hh-781", "React-инженер");
+
+  const saved = globalThis.fetch;
+  let attempts = 0;
+  globalThis.fetch = (async (url: string | URL) => {
+    const u = String(url);
+    if (u.includes("/token")) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ access_token: "user-token", expires_in: 3600 }),
+      } as unknown as Response;
+    }
+    if (u.includes("/negotiations")) {
+      attempts++;
+      return {
+        ok: false,
+        status: 429,
+        headers: new Headers({ "retry-after": "2" }),
+        text: async () => JSON.stringify({ message: "Too many requests" }),
+      } as unknown as Response;
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ items: [] }) } as unknown as Response;
+  }) as typeof globalThis.fetch;
+
+  let run: Awaited<ReturnType<typeof autoapply.runAutoApply>> | null = null;
+  try {
+    run = await autoapply.runAutoApply(FAST_PACING);
+  } finally {
+    globalThis.fetch = saved;
+  }
+
+  assert.ok(attempts > 0, "прогон не дошёл до отправки — тест проверяет не то");
+  assert.equal(run!.pausedFor, "backoff", "после 429 отправка должна встать на паузу");
+
+  /*
+   * Соблюдение срока — суть проверки.
+   *
+   * Первая версия заканчивалась на «запрос был» и «аккаунт не заблокирован».
+   * Оба проходят и тогда, когда заголовок не читается вовсе: мутация,
+   * обнулявшая чтение заголовка, выживала. Теперь смотрим на причину паузы,
+   * которую видит человек, — если срок доехал, пауза именно такая, какой её
+   * назначили.
+   */
+  assert.match(
+    run!.pausedDetail ?? "",
+    /Retry-After/i,
+    `пауза не объяснена сроком от площадки: «${run!.pausedDetail}»`,
+  );
+
+  /*
+   * 429 — это не ограничение аккаунта, его снимать не нужно: пауза снимется сама.
+   */
+  assert.equal(isBlocked(), false, "429 не должен останавливать аккаунт, как 403");
+
+  /*
+   * Цикл обязан оборваться на сроке площадки, а не отстучать обе вакансии.
+   */
+  assert.equal(attempts, 1, `в ограниченный темп ушло запросов: ${attempts}`);
+});
+
+
+/** Заголовок Retry-After разбирается в обоих видах, которые разрешены. */
+test("Retry-After разбирается и как число, и как дата", async () => {
+  const http = await import("../src/lib/http-client");
+
+  assert.equal(http.parseRetryAfter("30"), 30_000, "число секунд не разобрано");
+  assert.equal(http.parseRetryAfter("0"), 0, "ноль не должен означать ожидание");
+  assert.equal(http.parseRetryAfter(null), 0);
+  assert.equal(http.parseRetryAfter("ерунда"), 0, "мусор не должен превращаться в ожидание");
+
+  const now = Date.UTC(2026, 0, 6, 12, 0, 0);
+  const date = new Date(now + 90_000).toUTCString();
+  assert.equal(
+    http.parseRetryAfter(date, now),
+    90_000,
+    `дата из заголовка не разобрана: ${http.parseRetryAfter(date, now)} вместо 90000`,
   );
 });
 

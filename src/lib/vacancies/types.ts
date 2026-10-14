@@ -6,6 +6,7 @@ export type VacancySource =
   | "hh"
   | "remoteok"
   | "greenhouse"
+  | "ashby"
   | "company" // RSS-фиды компаний
   | "x" // X / Twitter
   | "tg" // Telegram-каналы компаний
@@ -72,6 +73,8 @@ export type VacancyApplyResult = {
    * позволить одной мёртвой записи замедлить все последующие отклики.
    */
   kind?: "closed" | "rate_limit" | "auth" | "token" | "network" | "other";
+  /** Сколько площадка попросила подождать, мс. 0 — не просила. */
+  retryAfterMs?: number;
 };
 
 export interface VacancyProvider {

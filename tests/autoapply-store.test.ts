@@ -30,6 +30,8 @@ function run(over: Partial<AutoApplyRun> = {}): AutoApplyRun {
     skipped: 0,
     stale: 0,
     pausedFor: null,
+
+    pausedDetail: null,
     pausedUsers: 0,
 
     blockedUsers: 0,

@@ -3,6 +3,7 @@ export const SOURCE_LABELS: Record<string, string> = {
   trudvsem: "Работа России",
   hh: "hh.ru",
   remoteok: "RemoteOK",
+  ashby: "Сайты компаний (Ashby)",
   greenhouse: "Сайты компаний",
   company: "Сайты компаний (RSS)",
   x: "X / Twitter",

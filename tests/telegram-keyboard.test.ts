@@ -16,6 +16,7 @@ import assert from "node:assert/strict";
 
 let escapeHtml: (s: string) => string;
 let resetCatalogCache: () => void;
+let resetPacing: () => void;
 
 /**
  * Кнопки и форматирование в боте.
@@ -40,10 +41,23 @@ before(async () => {
   process.env.EZOFFER_DB_PATH = ":memory:";
   process.env.EZOFFER_SILENT = "1";
   process.env.TELEGRAM_BOT_TOKEN = "test-token";
+  /*
+   * Рабочее окно расширено на весь час.
+   *
+   * Бот отправляет отклик через applyToVacancy, и там рабочее окно 9:00–20:00:
+   * ночью отклик не уходит, как и задумано. Через handleUpdate часы не
+   * подменить, поэтому окно раскрывается переменными окружения — это штатная
+   * настройка сервиса, а не обход проверки.
+   */
+  process.env.AUTOAPPLY_WORK_START = "0";
+  // 24, а не 23: workEndHour() допускает 24, а при 23 час 23 всё ещё
+  // считается ночным.
+  process.env.AUTOAPPLY_WORK_END = "24";
   db = (await import("../src/lib/db")).db;
   bot = await import("../src/lib/telegram-bot");
   escapeHtml = (await import("../src/lib/telegram")).escapeHtml;
   resetCatalogCache = (await import("../src/lib/vacancies")).resetCatalogCache;
+  resetPacing = (await import("../src/lib/autoapply")).resetPacing;
 
   globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
     const u = String(url);
@@ -92,6 +106,12 @@ beforeEach(() => {
   // записи через upsertMany. Прямая вставка в SQL кэш не трогает, и каталог
   // молча не показывает вакансии из текущего теста — а из предыдущего.
   resetCatalogCache();
+  /*
+   * Паузер тоже живёт в кэше по пользователю. Без сброса отказ, пойманный
+   * одним тестом, переходил в следующий: backoff и счётчик отказов не обнулялись,
+   * и проверка «нажатие отправляет отклик» падала, хотя код исправен.
+   */
+  resetPacing();
   sent = [];
   edited = [];
   answered = [];

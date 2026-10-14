@@ -65,7 +65,9 @@ before(async () => {
   const dbMod = await import("../src/lib/db");
   db = dbMod.db;
   const aa = await import("../src/lib/autoapply");
-  runAutoApply = aa.runAutoApply;
+  // Часы прогона фиксированы: см. helpers/run-autoapply — иначе ночью
+  // паузер не отправляет, и тесты падали по настенным часам.
+  runAutoApply = (await import("./helpers/run-autoapply")).runAutoApply;
   resetPacing = aa.resetPacing;
   const vacancies = await import("../src/lib/vacancies");
   resetCatalogCache = vacancies.resetCatalogCache;

@@ -49,6 +49,15 @@ export type AutoApplyRun = {
   /** Подходящие вакансии старше порога — отклик на них не отправлен намеренно. */
   stale: number;
   pausedFor: string | null;
+  /**
+   * Чем именно вызвана пауза — своими словами.
+   *
+   * Раньше в отчёте было только `pausedFor: "backoff"`, и панель писала
+   * «платформа отклонила отклики». Это неправда в двух случаях: паузу мог
+   * вызвать Retry-After от hh (то есть площадка сама сказала «не раньше») или
+   * ограничение аккаунта. Человек читал неверную причину.
+   */
+  pausedDetail: string | null;
   pausedUsers: number;
   /** Аккаунты, остановленные ограничением hh. */
   blockedUsers: number;
@@ -290,6 +299,7 @@ export async function runAutoApply(opts?: {
   let staleTotal = 0;
   let ran = false;
   let pausedFor: string | null = null;
+  let pausedDetail: string | null = null;
   let pausedUsers = 0;
   /** Аккаунты, которые hh ограничил: их отклики остановлены до снятия. */
   let blockedUsers = 0;
@@ -481,6 +491,7 @@ export async function runAutoApply(opts?: {
           // выходил из цикла только если причина была не "night", поэтому ночью
           // отказы по часовому/суточному лимиту игнорировались.
           pausedFor = decision.reason;
+          pausedDetail = decision.detail ?? null;
           break;
         }
 
@@ -550,6 +561,16 @@ export async function runAutoApply(opts?: {
             blockReason = "hh.ru ограничил доступ к аккаунту";
           }
           pacing.recordFailure(toFailureKind(kind));
+          /*
+           * Срок от площадки важнее рассчитанной паузы.
+           *
+           * Если hh назвал конкретный срок, ждать меньше — значит прийти раньше
+           * и получить 429 ещё раз. Раньше заголовок терялся в HTTP-клиенте, и
+           * паузер считал паузу сам, то есть почти наверняка неправильно.
+           */
+          if (result.retryAfterMs && result.retryAfterMs > 0) {
+            pacing.respectRetryAfter(result.retryAfterMs);
+          }
           logError("autoapply", new Error(result.error ?? "apply failed"), {
             userId: user.id,
             slug: vacancy.slug,
@@ -631,14 +652,13 @@ export async function runAutoApply(opts?: {
       failed,
       skipped,
       stale: staleTotal,
-      pausedFor,
-      pausedUsers,
+      pausedFor, pausedDetail, pausedUsers,
       blockedUsers,
       withLetter,
       withoutLetter,
     };
   }
-  return { ran: true, searches, applied, failed, skipped, stale: staleTotal, pausedFor, pausedUsers, blockedUsers, withLetter, withoutLetter };
+  return { ran: true, searches, applied, failed, skipped, stale: staleTotal, pausedFor, pausedDetail, pausedUsers, blockedUsers, withLetter, withoutLetter };
 }
 
 export type ApplyOutcome =
@@ -657,7 +677,18 @@ export type ApplyOutcome =
  * второе место, где эти правила могут разойтись с плановым — а они уже разошлись
  * один раз, когда сортировка брала одно резюме, а отправлялось другое.
  */
-export async function applyToVacancy(user: User, vacancy: Vacancy): Promise<ApplyOutcome> {
+/**
+ * Один отклик по прямому указанию: из бота или из кабинета.
+ *
+ * `opts.now` подменяет часы. Рабочее окно 9:00–20:00 — часть защиты
+ * аккаунта, и ночью отклик не уходит; без подмены часов проверки этого пути
+ * зависели от времени запуска и падали вечером при исправном коде.
+ */
+export async function applyToVacancy(
+  user: User,
+  vacancy: Vacancy,
+  opts: { now?: () => number } = {},
+): Promise<ApplyOutcome> {
   if (!isPlanActive(user)) return { ok: false, kind: "auth", error: "Тариф истёк — автоотклики на паузе" };
   if (user.autoapply_paused) return { ok: false, kind: "paused", error: "Автоотклики на паузе" };
 
@@ -701,7 +732,7 @@ export async function applyToVacancy(user: User, vacancy: Vacancy): Promise<Appl
   const pacing = pacingFor(
     user.id,
     { ...base, dailyLimit: Math.min(remaining, base.dailyCap) },
-    () => Date.now(),
+    opts.now ?? (() => Date.now()),
   );
   const decision = pacing.decide();
   if (!decision.allowed) {

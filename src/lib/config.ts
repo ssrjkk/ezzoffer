@@ -4,9 +4,22 @@
  * ниже порогов платформ, снижая риск блокировок.
  */
 
+/**
+ * Число из окружения.
+ *
+ * Ноль — допустимое значение, и раньше он молча заменялся значением по
+ * умолчанию, потому что проверка была `n > 0`. Из-за этого нельзя было задать
+ * `AUTOAPPLY_WORK_START=0` (полночь как начало рабочего дня превращалась в 9) и
+ * `AUTOAPPLY_MIN_INTERVAL_SEC=0` (нулевая пауза превращалась в 45 секунд) —
+ * администратор задавал переменную и получал другое поведение без ошибки.
+ *
+ * «Не задано» и «задано нулём» — разные вещи, поэтому пустая строка и
+ * undefined отделяются от числа, а ноль пропускается.
+ */
 function num(value: string | undefined, fallback: number): number {
+  if (value === undefined || value.trim() === "") return fallback;
   const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
 export function globalDailyCap(): number {

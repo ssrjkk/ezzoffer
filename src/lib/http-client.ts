@@ -43,7 +43,34 @@ export type HttpResult = {
   error?: string;
   /** Сколько попыток реально понадобилось. */
   attempts: number;
+  /**
+   * Сколько площадка попросила подождать, мс. 0 — не просила.
+   *
+   * Раньше этого поля не было, и заголовок Retry-After терялся: клиент читал
+   * его для собственных повторов и выбрасывал. Автоотклик, получив 429, не знал,
+   * что площадка назвала конкретный срок, и ждал свой, рассчитанный.
+   */
+  retryAfterMs: number;
 };
+
+/**
+ * Разбирает Retry-After в миллисекунды.
+ *
+ * По RFC заголовок бывает двух видов: число секунд и дата. Раньше разбиралось
+ * только число, дата давала NaN — то есть «площадка не просила ждать», и
+ * инструкция выполнялась только в теории.
+ */
+export function parseRetryAfter(header: string | null | undefined, now = Date.now()): number {
+  if (!header) return 0;
+
+  const seconds = Number(header.trim());
+  if (Number.isFinite(seconds) && seconds > 0) return Math.round(seconds * 1000);
+
+  const at = Date.parse(header);
+  if (Number.isFinite(at)) return Math.max(0, at - now);
+
+  return 0;
+}
 
 const DEFAULT_TIMEOUT_MS = 25_000;
 const DEFAULT_ATTEMPTS = 3;
@@ -83,6 +110,8 @@ export async function httpFetch(url: string, opts: HttpOptions = {}): Promise<Ht
   const total = Math.max(1, Math.floor(attempts));
   let lastError = "unknown error";
   let lastStatus = 0;
+  /** Срок, который попросила площадка, — доезжает до паузера. */
+  let lastRetryAfterMs = 0;
 
   for (let attempt = 1; attempt <= total; attempt++) {
     const controller = new AbortController();
@@ -91,15 +120,34 @@ export async function httpFetch(url: string, opts: HttpOptions = {}): Promise<Ht
       const res = await fetch(url, { method, headers, body, cache, signal: controller.signal });
       const text = await res.text();
       lastStatus = res.status;
+      /*
+       * Заголовки читаются через опциональную цепочку.
+       *
+       * Здесь встречаются не только настоящие Response, но и частичные заглушки
+       * в тестах, где headers просто нет. Без проверки обращение бросало
+       * исключение, его ловил общий catch и превращал в «сетевую ошибку» — то
+       * есть отклик, который площадка отвергла, считался таймаутом.
+       */
+      lastRetryAfterMs = parseRetryAfter(
+        typeof res.headers?.get === "function" ? res.headers.get("retry-after") : null,
+        Date.now(),
+      );
 
       if (res.ok) {
-        return { ok: true, status: res.status, body: text, attempts: attempt };
+        return { ok: true, status: res.status, body: text, attempts: attempt, retryAfterMs: 0 };
       }
 
       lastError = `HTTP ${res.status}`;
       const retryable = shouldRetry(res.status);
       if (!retryable || attempt === total) {
-        return { ok: false, status: res.status, body: text, error: lastError, attempts: attempt };
+        return {
+          ok: false,
+          status: res.status,
+          body: text,
+          error: lastError,
+          attempts: attempt,
+          retryAfterMs: lastRetryAfterMs,
+        };
       }
 
       // 429 часто приходит с Retry-After — уважаем его, но с потолком,
@@ -114,7 +162,7 @@ export async function httpFetch(url: string, opts: HttpOptions = {}): Promise<Ht
       // Сетевая ошибка или таймаут — всегда имеет смысл повторить.
       lastError = err instanceof Error ? err.message : String(err);
       if (attempt === total) {
-        return { ok: false, status: 0, body: "", error: lastError, attempts: attempt };
+        return { ok: false, status: 0, body: "", error: lastError, attempts: attempt, retryAfterMs: 0 };
       }
       const waitMs = Math.min(retryBaseMs * 2 ** (attempt - 1), retryMaxMs);
       logInfo("http", `повтор после сетевой ошибки`, { url, attempt, error: lastError });
@@ -124,7 +172,14 @@ export async function httpFetch(url: string, opts: HttpOptions = {}): Promise<Ht
     }
   }
 
-  return { ok: false, status: lastStatus, body: "", error: lastError, attempts: total };
+  return {
+    ok: false,
+    status: lastStatus,
+    body: "",
+    error: lastError,
+    attempts: total,
+    retryAfterMs: lastRetryAfterMs,
+  };
 }
 
 /** Разбирает JSON-ответ, не бросая исключений. */

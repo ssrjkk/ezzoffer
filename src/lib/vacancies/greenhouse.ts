@@ -58,11 +58,20 @@ export function mapGreenhouseVacancy(raw: GreenhouseJob, fallbackCompany = "Ко
   const offices = raw.offices?.map((o) => o.name).filter(Boolean).join(", ") ?? "";
   const city = offices || loc || "Remote";
 
+  /*
+   * Заголовок экранируется, а группа проверяется на пустоту.
+   *
+   * Раньше здесь стояло `${header}\s*[:\n]([^\n]{0,1200})`: нулевой диапазон
+   * допускал пустую группу, и `m[1].trim()` падал бы на пустом совпадении.
+   * Ровно это случилось в Ashby, где заголовок содержал «|»: он не
+   * экранировался, первая альтернатива осталась вовсе без группы захвата, и
+   * обход каталога падал на живых данных.
+   */
   function extractSection(contentText: string, header: string): string[] {
-    const re = new RegExp(`${header}\\s*[:\n]([^\\n]{0,1200})`, "i");
-    const m = contentText.match(re);
-    if (!m) return [];
-    return [m[1].trim()];
+    const safe = header.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const re = new RegExp(`${safe}\\s*[:\\n]([^\\n]{1,1200})`, "i");
+    const value = contentText.match(re)?.[1]?.trim();
+    return value ? [value] : [];
   }
 
   const requirementsSection = extractSection(content, "Requirements");
