@@ -102,11 +102,40 @@ test("вопрос о компании называет конкретную к�
   assert.match(company.question, /ООО Дата/, `название компании не подставлено: ${company.question}`);
 });
 
-test("первый вопрос привязан к позиции, а не общий", () => {
+test("есть вопрос о себе, привязанный к позиции", () => {
+  /*
+   * Ищем по категории, а не по индексу. Раньше вопрос о себе был первым
+   * всегда; теперь перед ним идут вопросы о достижениях из резюме — они
+   * важнее, потому что именно на них человек чаще всего спотыкается.
+   * Привязка к позиции проверяется здесь, порядок — отдельно.
+   */
   const prep = prepareInterview(VACANCY, RESUME, "Senior Data Engineer");
-  const first = prep.questions[0]!;
-  assert.equal(first.category, "about-you");
-  assert.match(first.question, /Senior Data Engineer/, `позиция не подставлена: ${first.question}`);
+  const about = prep.questions.find((q) => q.category === "about-you")!;
+  assert.ok(about, "нет вопроса о себе");
+  /*
+   * Вопрос называет либо позицию, либо конкретные пересечения с резюме. Раньше
+   * проверялась только позиция, и после перехода на козыри тест стал проверять
+   * не то свойство: называть пересечения полезнее, чем повторять название
+   * вакансии, которое человек и так видит в шапке.
+   */
+  assert.match(
+    about.question,
+    /Senior Data Engineer|пересекается/i,
+    `вопрос не привязан ни к позиции, ни к пересечениям: ${about.question}`,
+  );
+});
+
+test("вопросы о достижениях идут раньше общего рассказа о себе", () => {
+  // Порядок — часть ценности: разбор своих достижений готовит к вопросу,
+  // который придёт сразу после «расскажите о себе».
+  const prep = prepareInterview(VACANCY, RESUME, "Senior Data Engineer");
+  const aboutIdx = prep.questions.findIndex((q) => q.category === "about-you");
+  const achievementIdx = prep.questions.findIndex((q) => q.category === "achievement");
+  if (achievementIdx === -1) return; // резюме без достижений — порядок не важен
+  assert.ok(
+    achievementIdx < aboutIdx,
+    `вопрос о себе идёт раньше разбора достижений: ${achievementIdx} / ${aboutIdx}`,
+  );
 });
 
 test("подсказка к зарплате говорит, что говорить", () => {
