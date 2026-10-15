@@ -73,6 +73,7 @@ export default async function GigsPage({
         <SectionHead
           center={false}
           eyebrow="Подработка"
+          level="h1"
           title={
             <>
               Работа <span className="text-accent">по часам</span> и заказы

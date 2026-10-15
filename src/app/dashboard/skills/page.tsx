@@ -33,6 +33,7 @@ export default async function SkillsPage() {
         <SectionHead
           center={false}
           eyebrow="Квалификация"
+          level="h1"
           title={
             <>
               Что закрыть <span className="text-accent">в первую очередь</span>

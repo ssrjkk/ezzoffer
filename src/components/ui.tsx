@@ -86,17 +86,28 @@ export function SectionHead({
   title,
   sub,
   center = false,
+  level: Heading = "h2",
 }: {
   eyebrow: string;
   title: ReactNode;
   sub?: string;
   center?: boolean;
+  /**
+   * Уровень заголовка.
+   *
+   * На странице должен быть ровно один `h1` — и им должен быть её собственный
+   * заголовок, а не первый блок на ней. На «Подработке» и «Навыках» его не
+   * было вовсе: первым заголовком шёл `h2` из SectionHead, и страница начиналась
+   * сразу со второго уровня. Для навигации по заголовкам это значит, что
+   * страницы не было в списке вообще.
+   */
+  level?: "h1" | "h2";
 }) {
   if (center) {
     return (
       <div className="mb-12 md:mb-16 mx-auto max-w-3xl text-center">
         <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.16em] text-accent">{eyebrow}</p>
-        <h2 className="display text-3xl text-balance md:text-5xl">{title}</h2>
+        <Heading className="display text-3xl text-balance md:text-5xl">{title}</Heading>
         {sub ? <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted md:text-lg">{sub}</p> : null}
       </div>
     );
@@ -105,7 +116,7 @@ export function SectionHead({
   return (
     <div className="mb-12 md:mb-16 max-w-3xl">
       <Eyebrow>{eyebrow}</Eyebrow>
-      <h2 className="display mt-4 text-3xl text-balance md:text-5xl">{title}</h2>
+      <Heading className="display mt-4 text-3xl text-balance md:text-5xl">{title}</Heading>
       {sub ? <p className="mt-5 max-w-xl text-base leading-relaxed text-muted md:text-lg">{sub}</p> : null}
     </div>
   );
