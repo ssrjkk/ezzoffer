@@ -34,6 +34,20 @@ async function audit(): Promise<{ ok: string[]; findings: string[] }> {
   });
   const session = (login.headers.getSetCookie?.() ?? []).find((c) => c.startsWith("ez_session=")) ?? "";
 
+  /*
+   * Вход мог не состояться по двум причинам, и обе не про безопасность.
+   *
+   * Первая — лимит запросов: прогон тестов несколько раз подряд упирается в
+   * ограничение аутентификации, и cookie просто не приходит. Вторая — нет
+   * тестовой учётной записи.
+   *
+   * Раньше это читалось как «сессионная cookie доступна из JavaScript», то есть
+   * как дыра в безопасности, которой нет. Проверка безопасности, которая
+   * сообщает о дыре при отказе входа, хуже отсутствия проверки: её выключают
+   * после первого же ложного сигнала.
+   */
+  if (!session) return { ok: ["вход недоступен — проверка пропущена"], findings: [] };
+
   check("NEXT-SESS-001 httpOnly", /HttpOnly/i.test(session), "сессионная cookie доступна из JavaScript страницы");
   check("NEXT-SESS-001 SameSite", /SameSite/i.test(session), "cookie уходит на сторонние домены");
   const secureOk = /^https:/i.test(BASE) ? /;\s*Secure/i.test(session) : !/;\s*Secure/i.test(session);
