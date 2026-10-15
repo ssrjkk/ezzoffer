@@ -176,14 +176,23 @@ test("отклик с номером выбирает вакансию, а не 
   assert.equal(applyRows[0]![0]!.data, "apply:1");
 
   // Первым идёт то, что подходит под резюме, а не первое попавшееся.
-  const first = replyFor("отклик", "1", u).action;
-  assert.ok(first && typeof first === "object", "на первый номер нет действия");
+  const first = applyAction(replyFor("отклик", "1", u).action);
+  assert.ok(first, "на первый номер нет действия");
   assert.equal(first.vacancy.title, "React-разработчик", "первым предложен не лучший по навыкам");
 
-  const second = replyFor("отклик", "2", u).action;
-  assert.ok(second && typeof second === "object", "на второй номер нет действия");
+  const second = applyAction(replyFor("отклик", "2", u).action);
+  assert.ok(second, "на второй номер нет действия");
   assert.equal(second.vacancy.title, "React-инженер со стеком", "вторым предложен не худший по навыкам");
 });
+
+/** Сужает действие до отклика: у бота появились и другие объектные действия. */
+function applyAction(
+  action: ReturnType<typeof replyFor>["action"],
+): { vacancy: { title: string } } | null {
+  return action && typeof action === "object" && action.kind === "apply"
+    ? { vacancy: { title: action.vacancy.title } }
+    : null;
+}
 
 test("отклик за пределами подбора не выдумывает вакансию", () => {
   seedUser();

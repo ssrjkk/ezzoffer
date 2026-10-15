@@ -35,6 +35,10 @@ export function mainKeyboard(): InlineKeyboard {
         { text: "Статистика", data: "menu:stats" },
       ],
       [
+        { text: "Собеседование", data: "menu:interview" },
+        { text: "Избранное", data: "menu:bookmarks" },
+      ],
+      [
         { text: "Пауза", data: "menu:pause" },
         { text: "Помощь", data: "menu:help" },
       ],
@@ -49,6 +53,10 @@ export function commandKeyboard(): InlineKeyboard {
       [
         { text: "Подбор вакансий", data: "menu:search" },
         { text: "Статистика", data: "menu:stats" },
+      ],
+      [
+        { text: "Собеседование", data: "menu:interview" },
+        { text: "Избранное", data: "menu:bookmarks" },
       ],
       [
         { text: "Пауза", data: "menu:pause" },
@@ -85,6 +93,26 @@ export function keyboardFor(
 }
 
 /** Все подписи, которые бот способен отправить: для сверки с демонстрацией. */
+/**
+ * Подписи, которые бот собирает не из набора, а по ходу работы.
+ *
+ * Лежат здесь, а не в telegram-bot.ts, потому что демонстрация бота на главной
+ * сверяется с настоящими клавиатурами. Пока подписи жили в telegram-bot,
+ * сверять их было нечем — модуль тянет базу, — и проверка превратилась в «есть
+ * ли эти слова в тексте диалога», то есть проверяла текст, а не кнопки.
+ */
+export const DYNAMIC_LABELS = {
+  /** Ещё страница вопросов на собеседовании. */
+  interviewMore: "Ещё вопросы",
+  /** Ещё страница избранного. */
+  bookmarksMore: "Ещё",
+  /** Откликнуться на отложенную вакансию. */
+  bookmarkApply: (n: number) => `Откликнуться на №${n}`,
+  /** Убрать из избранного. */
+  bookmarkRemove: "Убрать",
+} as const;
+
+/** Все подписи, которые бот способен отправить: для сверки с демонстрацией. */
 export function knownButtonLabels(): Set<string> {
   const labels = new Set<string>();
   const collect = (kb: InlineKeyboard): void => {
@@ -92,7 +120,14 @@ export function knownButtonLabels(): Set<string> {
   };
   collect(mainKeyboard());
   collect(commandKeyboard());
-  // Кнопки отклика: подпись строится из названия вакансии, поэтому конкретных
-// строк здесь нет — сверять их нужно по форме «N. Название — Компания».
+  labels.add(DYNAMIC_LABELS.interviewMore);
+  labels.add(DYNAMIC_LABELS.bookmarksMore);
+  labels.add(DYNAMIC_LABELS.bookmarkRemove);
+  labels.add(DYNAMIC_LABELS.bookmarkApply(1));
+  /*
+   * Кнопки отклика на вакансию из подбора: подпись строится из названия,
+   * поэтому конкретных строк здесь нет — их сверяют по форме
+   * «N. Название — Компания» отдельно.
+   */
   return labels;
 }

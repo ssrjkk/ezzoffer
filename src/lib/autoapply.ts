@@ -68,6 +68,19 @@ export type AutoApplyRun = {
 };
 
 /**
+ * Сколько откликов в день допустимо у одной компании.
+ *
+ * Несколько вакансий в одной компании — нормальный интерес, двадцать — нет.
+ * Значение задаётся переменной окружения, потому что у разных поисков разная
+ * специфика: в крупной компании несколько вакансий одного профиля обычны.
+ */
+function companyDailyCap(): number {
+  const raw = process.env.AUTOAPPLY_PER_COMPANY;
+  const n = raw === undefined || raw.trim() === "" ? 4 : Number(raw);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 4;
+}
+
+/**
  * На сколько останавливаем отклики при 403.
  *
  * Длиннее, чем пауза anti-ban: ограничение держится часами, и короткая пауза
@@ -407,6 +420,9 @@ export async function runAutoApply(opts?: {
     let blockedUser = false;
     let blockReason = "";
     const blockedUntilCol = blockedUntil(user.id);
+    /** Отклики за сегодня — для потолка на компанию. Собирается один раз. */
+    let slugs: { job_slug: string; company: string }[] | null = null;
+    const dayStartMs = new Date().setHours(0, 0, 0, 0);
 
     for (const search of activeSearches) {
       if (appliedSet.size >= remaining) break;
@@ -501,6 +517,39 @@ export async function runAutoApply(opts?: {
         if (already) continue;
 
         if (!hhProvider.apply || !sendableId) break;
+
+        /*
+         * Потолок на одну компанию за день.
+         *
+         * Без него бывает так: у человека активный поиск по фронтенду, у
+         * компании Авито двадцать подходящих вакансий, и двадцать откликов у
+         * неё за день. Работодатель видит это в своей ленте, для площадки это
+         * выглядит как аномалия, и под удар попадает аккаунт человека, а не
+         * абстрактный «бот».
+         *
+         * Лимит небольшой и осмысленный: несколько вакансий в одной компании —
+         * это нормальный интерес, двадцать — нет. Отклик переносится на завтра
+         * сам, вакансия не теряется.
+         */
+        if (!slugs) {
+          slugs = db
+            .prepare(
+              `SELECT a.job_slug AS job_slug, COALESCE(v.company, '') AS company
+               FROM applications a
+               LEFT JOIN vacancies v ON v.slug = a.job_slug
+               WHERE a.user_id = ? AND a.sent_at >= ? AND a.withdrawn = 0
+               ORDER BY a.sent_at DESC LIMIT 500`,
+            )
+            .all(user.id, dayStartMs) as { job_slug: string; company: string }[];
+        }
+        const company = vacancy.company.trim();
+        const cap = companyDailyCap();
+        // cap = 0 отключает потолок — так же, как AUTOAPPLY_DAILY_CAP в этом
+        // же сервисе: ноль означает «ограничения нет», а не «не отправлять».
+        if (company && cap > 0) {
+          const used = slugs.filter((r) => r.company === company).length;
+          if (used >= cap) continue;
+        }
 
         /*
          * Письмо.
@@ -599,6 +648,14 @@ export async function runAutoApply(opts?: {
         );
         appliedSet.add(vacancy.slug);
         applied++;
+        /*
+         * Отклик записан в счёт потолка компании сразу.
+         *
+         * Список за день собирается один раз на прогон, и без этой строки он
+         * оставался бы пустым до следующего тика: девять откликов в одну
+         * компанию проходили как девять в разные.
+         */
+        if (company) slugs.push({ job_slug: vacancy.slug, company });
         if (message) withLetter++;
         else withoutLetter++;
 
