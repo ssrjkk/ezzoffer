@@ -13,7 +13,9 @@ export type VacancySource =
   | "geekjob"
   | "jobicy"
   | "weworkremotely"
-  | "rabota";
+  | "rabota"
+  | "flru"
+  | "kwork";
 
 export type Vacancy = {
   slug: string;

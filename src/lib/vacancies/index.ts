@@ -12,6 +12,7 @@ import { geekjobProvider } from "./geekjob";
 import { jobicyProvider } from "./jobicy";
 import { weworkremotelyProvider } from "./weworkremotely";
 import { rabotaProvider } from "./rabota";
+import { flruProvider, kworkProvider } from "./freelance";
 
 export type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery, VacancySource } from "./types";
 
@@ -29,6 +30,8 @@ export const SOURCE_LABELS: Record<VacancySource, string> = {
   jobicy: "Jobicy (remote)",
   weworkremotely: "We Work Remotely",
   rabota: "Работа.ру",
+  flru: "FL.ru (фриланс)",
+  kwork: "Kwork (фриланс)",
 };
 
 export type SourceStatus = {
@@ -53,6 +56,8 @@ const providers: VacancyProvider[] = [
   jobicyProvider,
   weworkremotelyProvider,
   rabotaProvider,
+  flruProvider,
+  kworkProvider,
 ];
 
 const EXTERNAL_TTL_MS = 7 * 24 * 60 * 60 * 1000;

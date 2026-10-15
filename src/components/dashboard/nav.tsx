@@ -14,6 +14,7 @@ import {LayoutDashboard,
   Settings,
   LogOut,
   GraduationCap,
+  BriefcaseBusiness,
 } from "lucide-react";
 import { Badge } from "@/components/dashboard/ui";
 
@@ -24,6 +25,7 @@ const items = [
   { href: "/dashboard/bookmarks", label: "Избранное", icon: Bookmark },
   { href: "/dashboard/applications", label: "Отклики", icon: Send },
   { href: "/dashboard/letters", label: "Письма", icon: Mail },
+  { href: "/dashboard/gigs", label: "Подработка", icon: BriefcaseBusiness },
   { href: "/dashboard/skills", label: "Навыки", icon: GraduationCap },
   { href: "/dashboard/consultations", label: "Консультации", icon: MessageCircle },
   { href: "/dashboard/settings", label: "Настройки", icon: Settings },

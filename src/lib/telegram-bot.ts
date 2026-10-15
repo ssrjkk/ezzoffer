@@ -31,6 +31,7 @@ import {
 } from "./telegram";
 import { BOT_COMMANDS, BOT_MESSAGES } from "./bot-data";
 import { computeSkillGaps } from "./skill-gaps";
+import { findGigs } from "./gigs";
 import { learningPath } from "./learning-paths";
 
 /**
@@ -398,6 +399,47 @@ function skillsReply(user: User): Reply {
   return { text: lines.join("\n"), keyboard: mainKeyboard() };
 }
 
+/**
+ * Подработка и фриланс.
+ *
+ * Из телефона человек обычно ищет именно это: «подработка», «фриланс», «заказы».
+ * Раздел на сайте фильтрует по направлению и грейду, здесь — два входа:
+ * общий список и подработка. Направление и грейд в боте не спрашиваются, потому
+ * что ввод текста с телефона дороже, чем сама вакансия; список ограничен по
+ * длине сообщения, а полный — на странице.
+ */
+function gigsReply(user: User, mode: "подработка" | "фриланс" | undefined): Reply {
+  const gigs = findGigs({ mode, limit: 8 });
+
+  if (gigs.length === 0) {
+    const what = mode === "фриланс" ? "заказов" : mode === "подработка" ? "подработки" : "подработки и заказов";
+    return {
+      text: [
+        `<b>${escapeHtml(cap(what))}:</b> сейчас пусто`,
+        "",
+        "Это факт, а не сбой: источники конечны, и пустая лента означает, что на площадках сегодня тихо.",
+        "Подработка обычно появляется в течение дня. Полный каталог с фильтрами: /dashboard/gigs",
+      ].join("\n"),
+      keyboard: mainKeyboard(),
+    };
+  }
+
+  const lines = [`<b>${mode === "фриланс" ? "Фриланс и заказы" : mode === "подработка" ? "Подработка" : "Подработка и заказы"}</b>`, ""];
+  for (const [i, g] of gigs.entries()) {
+    lines.push(`${i + 1}. ${escapeHtml(g.title)}`);
+    const meta = [g.company, g.city, g.directionLabel, g.sourceLabel].filter(Boolean);
+    if (meta.length) lines.push(`   ${escapeHtml(meta.join(" · "))}`);
+  }
+  lines.push("", `Ещё ${Math.max(0, findGigs({ mode }).length - gigs.length)} в разделе: /dashboard/gigs`);
+  lines.push("Заказы отправляются на самой площадке — автоматической отправки нет.");
+
+  return { text: lines.join("\n"), keyboard: mainKeyboard() };
+}
+
+function cap(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 /** Ставит и снимает паузу. Возвращает, изменилось ли что-то. */
 function setPaused(user: User, paused: boolean): boolean {
   const result = db
@@ -416,6 +458,7 @@ const HELP = [
   "/избранное — отложенные вакансии",
   "/советы — что сделать прямо сейчас",
   "/навыки — чего не хватает в резюме по вашим откликам",
+  "/подработка — частичная занятость и заказы с фриланс-досок",
   "/связать <код> — привязать аккаунт из кабинета",
   "/выйти — отвязать этот чат",
   "/помощь — эта справка",
@@ -642,6 +685,22 @@ export function replyFor(
     case "учиться":
     case "skills":
       return skillsReply(user);
+    /*
+     * Подработка и заказы.
+     *
+     * Отдельная команда, а не фильтр внутри подбора: подработка и заказ — разные
+     * вещи. Заказ это разовая задача без занятости и графика, и человек, который
+     * пришёл за подработкой на вечер, не должен получать список разовых заказов.
+     */
+    case "подработка":
+    case "подработки":
+      // Обе раздела: справка обещает «частичная занятость и заказы», и команда
+      // с названием «подработка» обязана показывать оба — иначе человек уходит
+      // за подработкой и не видит заказов, а потом считает, что их нет.
+      return gigsReply(user, undefined);
+    case "фриланс":
+    case "заказы":
+      return gigsReply(user, "фриланс");
     /*
      * Подбор и отклик — одна команда.
      *
