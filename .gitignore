@@ -46,3 +46,4 @@ next-env.d.ts
 
 # temp test output
 test_tmp.txt
+.playwright-cli/
