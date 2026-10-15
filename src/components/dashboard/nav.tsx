@@ -4,8 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import {
-  LayoutDashboard,
+import {LayoutDashboard,
   FileText,
   Briefcase,
   Bookmark,
@@ -14,6 +13,7 @@ import {
   MessageCircle,
   Settings,
   LogOut,
+  GraduationCap,
 } from "lucide-react";
 import { Badge } from "@/components/dashboard/ui";
 
@@ -24,6 +24,7 @@ const items = [
   { href: "/dashboard/bookmarks", label: "Избранное", icon: Bookmark },
   { href: "/dashboard/applications", label: "Отклики", icon: Send },
   { href: "/dashboard/letters", label: "Письма", icon: Mail },
+  { href: "/dashboard/skills", label: "Навыки", icon: GraduationCap },
   { href: "/dashboard/consultations", label: "Консультации", icon: MessageCircle },
   { href: "/dashboard/settings", label: "Настройки", icon: Settings },
 ];

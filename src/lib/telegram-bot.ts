@@ -30,6 +30,8 @@ import {
   type InlineKeyboard,
 } from "./telegram";
 import { BOT_COMMANDS, BOT_MESSAGES } from "./bot-data";
+import { computeSkillGaps } from "./skill-gaps";
+import { learningPath } from "./learning-paths";
 
 /**
  * Обработчик апдейтов Telegram.
@@ -343,6 +345,59 @@ function tipsReply(user: User): Reply {
   return { text: lines.join("\n"), keyboard: mainKeyboard() };
 }
 
+/**
+ * Пробелы в навыках.
+ *
+ * Тот же раздел, что на сайте, из тех же данных. В телефоне он полезнее, чем
+ * на странице: человек узнаёт об отказе по пути на собеседование и хочет
+ * понять, чего ему не хватило, не открывая ноутбук.
+ *
+ * Формат ограничен длиной сообщения: четыре первых пункта с объяснением и
+ * одним тем, что делать по каждому. Полный список с планами — на сайте.
+ */
+function skillsReply(user: User): Reply {
+  const report = computeSkillGaps(user.id);
+
+  if (!report.basis.resumeFound) {
+    return {
+      text: [
+        "<b>Что закрыть в первую очередь</b>",
+        "",
+        "Пока нет резюме, список не собрать: неизвестно, чего в нём не хватает.",
+        "Добавьте резюме в кабинете (/dashboard/resumes) — и список соберётся сам.",
+      ].join("\n"),
+      keyboard: mainKeyboard(),
+    };
+  }
+
+  if (report.gaps.length === 0) {
+    return {
+      text: [
+        "<b>Что закрыть в первую очередь</b>",
+        "",
+        report.basis.applications > 0
+          ? `Пробелов не видно: всё, что требуют вакансии из вашего подбора, уже есть в резюме. Откликов разобрано: ${report.basis.applications}.`
+          : "Пробелов не видно, но откликов пока нет — список уточнится, как только они появятся.",
+      ].join("\n"),
+      keyboard: mainKeyboard(),
+    };
+  }
+
+  const lines = ["<b>Что закрыть в первую очередь</b>", ""];
+  for (const gap of report.gaps.slice(0, 4)) {
+    lines.push(`— <b>${escapeHtml(gap.skill)}</b>: ${escapeHtml(gap.reason)}`);
+    const path = learningPath(gap.skill);
+    if (path) lines.push(`  Первым делом: ${escapeHtml(path.topics[0]?.topic ?? path.why)}`);
+  }
+  if (report.gaps.length > 4) {
+    lines.push("", `И ещё ${report.gaps.length - 4} — полный список с планами: /dashboard/skills`);
+  } else {
+    lines.push("", "Полный список с планами: /dashboard/skills");
+  }
+
+  return { text: lines.join("\n"), keyboard: mainKeyboard() };
+}
+
 /** Ставит и снимает паузу. Возвращает, изменилось ли что-то. */
 function setPaused(user: User, paused: boolean): boolean {
   const result = db
@@ -360,6 +415,7 @@ const HELP = [
   "/собеседование — что спросят по вашему резюме на последнюю вакансию",
   "/избранное — отложенные вакансии",
   "/советы — что сделать прямо сейчас",
+  "/навыки — чего не хватает в резюме по вашим откликам",
   "/связать <код> — привязать аккаунт из кабинета",
   "/выйти — отвязать этот чат",
   "/помощь — эта справка",
@@ -574,6 +630,18 @@ export function replyFor(
     case "что делать":
     case "next":
       return tipsReply(user);
+    /*
+     * Пробелы в навыках — тот же раздел, что на сайте.
+     *
+     * Раньше «повышение квалификации» было только на странице, и в боте её не
+     * было вовсе: человек узнавал об отказе и оставался без ответа, что делать
+     * дальше. Теперь список собирается из тех же данных и приходит в чат.
+     */
+    case "навыки":
+    case "пробелы":
+    case "учиться":
+    case "skills":
+      return skillsReply(user);
     /*
      * Подбор и отклик — одна команда.
      *
