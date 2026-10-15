@@ -51,13 +51,13 @@ export function Security() {
   return (
     <Section>
       <SectionHead
-        eyebrow="Никаких блокировок"
+        eyebrow="Честно о рисках"
         title={
           <>
-            Полная <span className="text-accent">безопасность</span> гарантирована
+            Доступ хранится у нас, <span className="text-accent">и это риск</span>
           </>
         }
-        sub="Работаем по правилам job-платформ и повторяем поведение обычного соискателя — только быстрее, точнее и умнее"
+        sub="Работаем по правилам площадок: паузы между откликами, лимиты, откат при отказе площадки. Но гарантировать отсутствие блокировки нельзя, и обещать её было бы враньём, которое человек обнаружит в худший момент"
       />
 
       <div className="grid border-t border-line md:grid-cols-3 md:divide-x md:divide-line">
