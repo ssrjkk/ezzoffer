@@ -181,6 +181,9 @@ function GigCard({ gig }: { gig: Gig }) {
         <span>{gig.level}</span>
         <span>{gig.directionLabel}</span>
         <span>{gig.sourceLabel}</span>
+        {gig.mode === "подработка" && gig.employment ? (
+          <span className="border border-line px-1.5 py-0.5 text-xs">{gig.employment}</span>
+        ) : null}
       </div>
       {gig.sourceUrl ? (
         <a

@@ -23,6 +23,7 @@ export type TrudVacancyRaw = {
   salary_max?: number | string | null;
   vac_url?: string;
   schedule?: string;
+  employment?: string;
   qualification?: string;
   typicalPosition?: string;
   requirement?: { education?: string; experience?: number | null };
@@ -41,6 +42,26 @@ function parseDate(v: string): number | null {
   const d = new Date(v);
   const t = d.getTime();
   return Number.isNaN(t) ? null : t;
+}
+
+/**
+ * Занятость и график в одной строке.
+ *
+ * Площадка отдаёт их раздельно: `employment` — «Полная занятость»,
+ * «Временная работа», «Сезонная работа»; `schedule` — «Неполный рабочий
+ * день/неполная рабочая неделя», «Режим гибкого рабочего времени».
+ *
+ * Склеиваются потому, что подработкой делает любая из двух: «Временная работа»
+ * при полном дне — это подработка, и «Неполный рабочий день» при полной
+ * занятости тоже. Раздельное хранение заставило бы разбирать пару в двух
+ * местах, а места — это разные функции, которые разъезжаются.
+ */
+function joinEmployment(employment?: string, schedule?: string): string | undefined {
+  const parts = [employment, schedule]
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .filter((v) => v.length > 0 && v !== "—");
+  if (parts.length === 0) return undefined;
+  return [...new Set(parts)].join(" · ");
 }
 
 function relativePosted(iso: string): string {
@@ -115,6 +136,11 @@ export function mapTrudVacancy(raw: TrudVacancyRaw): Vacancy | null {
     city: extractCity(raw),
     posted: relativePosted(raw["creation-date"] ?? ""),
     published_at: parsePublishedAt(raw["creation-date"]),
+    //
+    // Площадка отдаёт занятость и график отдельными полями со своими значениями
+    // ("Временная работа", "Неполный рабочий день/неполная рабочая неделя"),
+    // поэтому сохраняются оба: занятость отвечает на «сколько», график — на «когда».
+    employment: joinEmployment(raw.employment, raw.schedule),
     category: raw.category?.specialisation ?? "Работа",
     about: aboutParts.join("\n\n") || "Описание вакансии обновляется на портале «Работа в России».",
     responsibilities: raw.duty ? [raw.duty] : [],

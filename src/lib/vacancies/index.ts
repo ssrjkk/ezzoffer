@@ -85,6 +85,7 @@ type VacancyRow = {
   source_url: string | null;
   contact_email: string | null;
   contact_phone: string | null;
+  employment?: string | null;
   fetched_at: number;
 };
 
@@ -121,6 +122,7 @@ function rowToVacancy(row: VacancyRow): Vacancy {
     source_url: row.source_url,
     contact_email: row.contact_email,
     contact_phone: row.contact_phone,
+    employment: row.employment ?? undefined,
   };
 }
 
@@ -129,12 +131,12 @@ const upsertStmt = db.prepare(
      slug, source, source_id, title, company, salary, salary_min, salary_max,
      level, format, city, posted, category, about,
      responsibilities, requirements, bonus,
-     source_url, contact_email, contact_phone, published_at, fetched_at
+     source_url, contact_email, contact_phone, published_at, employment, fetched_at
    ) VALUES (
      @slug, @source, @source_id, @title, @company, @salary, @salary_min, @salary_max,
      @level, @format, @city, @posted, @category, @about,
      @responsibilities, @requirements, @bonus,
-     @source_url, @contact_email, @contact_phone, @published_at, @fetched_at
+     @source_url, @contact_email, @contact_phone, @published_at, @employment, @fetched_at
    )
    ON CONFLICT(slug) DO UPDATE SET
      source = excluded.source,
@@ -157,6 +159,7 @@ const upsertStmt = db.prepare(
      contact_email = excluded.contact_email,
      contact_phone = excluded.contact_phone,
      published_at = COALESCE(excluded.published_at, vacancies.published_at),
+     employment = excluded.employment,
      fetched_at = excluded.fetched_at`,
 );
 
@@ -186,6 +189,7 @@ function upsertMany(list: Vacancy[], fetchedAt = Date.now()): number {
         contact_email: v.contact_email,
         contact_phone: v.contact_phone,
         published_at: v.published_at,
+        employment: v.employment ?? undefined,
         fetched_at: fetchedAt,
       });
     }

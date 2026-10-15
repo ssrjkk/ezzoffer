@@ -184,6 +184,14 @@ CREATE TABLE IF NOT EXISTS vacancies (
   contact_email TEXT,
   contact_phone TEXT,
   published_at INTEGER,
+  /**
+   * Занятость как её отдала площадка.
+   *
+   * Хранится дословно («Временная работа», «Неполный рабочий день», «part-time»):
+   * переводить её в «подработка» при загрузке нельзя — решение принимается при
+   * показе, и перевод должен быть виден и проверяем.
+   */
+  employment TEXT,
   fetched_at INTEGER NOT NULL
 );
 
@@ -263,8 +271,23 @@ function migrate(instance: Database.Database): void {
    * Дата публикации: без неё невозможно отличить свежую вакансию от недельной
    * давности, а отклик на закрытую тратит слот дневного лимита.
    */
+  /*
+   * Занятость от площадки.
+   *
+   * Без неё режим работы пришлось бы выводить из текста вакансии, хотя у
+   * GeekJob поле `jobFormat.parttime`, а у Работы России — `employment` и
+   * `schedule` уже отдаются готовыми значениями.
+   *
+   * Проверка обязательна: колонка уже есть в CREATE TABLE, и ALTER без неё
+   * падает на «duplicate column name» — то есть на любой свежей базе, а не
+   * только на старой.
+   */
+  if (!vacancyCols.has("employment")) {
+    instance.exec("ALTER TABLE vacancies ADD COLUMN employment TEXT");
+  }
   if (!vacancyCols.has("published_at")) {
     instance.exec("ALTER TABLE vacancies ADD COLUMN published_at INTEGER");
+    instance.exec("ALTER TABLE vacancies ADD COLUMN employment TEXT");
   }
   /*
    * Привязка резюме к резюме на hh.

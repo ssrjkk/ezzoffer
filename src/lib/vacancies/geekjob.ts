@@ -142,6 +142,10 @@ export function mapGeekVacancy(raw: GeekRawVacancy): Vacancy | null {
     city: city || (remote ? "Remote" : "Россия"),
     posted: parseRusDate(raw.log?.modify ?? raw.published),
         published_at: parsePublishedAt(String(raw.log?.modify ?? raw.published ?? "")),
+    //
+    // Занятость при��та�� структурно: jobFormat.parttime. Держать её текстом
+    // было бы жаловаться на отсутствие поля у площадки, которая его отдаёт.
+    employment: raw.jobFormat?.parttime ? "Частичная занятость" : "Полная занятость",
     category: "Работа",
     about:
       desc.slice(0, 2000) ||

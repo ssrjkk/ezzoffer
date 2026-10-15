@@ -40,6 +40,15 @@ export type Vacancy = {
    * лимита, а лимит у человека один.
    */
   published_at: number | null;
+  /**
+   * Занятость от площадки, если она её отдаёт.
+   *
+   * Не у всех источников поля есть, и для hh его проверить не удалось: поиск
+   * требует токена приложения. Зато у GeekJob есть `jobFormat.parttime`, у
+   * Работы России — `employment` и `schedule`. Там, где поле есть, режим
+   * работы определяется по нему, а не разбирается из текста вакансии.
+   */
+  employment?: string;
   category: string;
   about: string;
   responsibilities: string[];
