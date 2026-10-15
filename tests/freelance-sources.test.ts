@@ -312,6 +312,64 @@ test("студенту и стажёру заказ отдаётся как Inte
   assert.equal(direction.inferFreelanceLevel("Разработать интернет-магазин"), "Middle");
 });
 
+test("отдел «Product & Operations» не превращается в продуктовый менеджмент", async () => {
+  /*
+   * Регрессия, найденная пересчётом распределения по живому каталогу, а не
+   * отдельным примером: правило «product|продукт|аналитик|анализ» давало 112
+   * вакансий в направлении «управление продуктом», и к продукту относились
+   * единицы. Ни одна проверка на одном примере это не ловила.
+   *
+   * Строки взяты из живого ответа Jobicy как есть. Отдел не роль: «President -
+   * Business Unit» и «Head of Global Logistics» не становятся продуктовыми
+   * менеджерами оттого, что стоят в отделе Product.
+   */
+  const { detectDirection } = await import("../src/lib/direction");
+  const cases: [string, string][] = [
+    ["Head of Global Logistics", "other"],
+    ["Dispatch Specialist", "other"],
+    ["President - Business Unit", "other"],
+    ["Senior Sales Operations Manager", "other"],
+    ["Senior Product Manager - Growth", "pm"],
+    ["Product Owner", "pm"],
+    // 1С — это разработка, а не анализ данных. Ожидание «data» было догадкой,
+    // и код оказался прав: консультант по 1С настраивает учёт, а не строит
+    // аналитику. Слово «аналитик» в названии не делает вакансию про данные.
+    ["Аналитик-консультант 1С", "backend"],
+    ["Senior Data Analyst", "data"],
+  ];
+  for (const [title, want] of cases) {
+    const got = detectDirection("Product & Operations", title);
+    assert.equal(
+      got,
+      want,
+      `«${title}» в отделе Product & Operations → ожидалось ${want}, получено ${got}`,
+    );
+  }
+});
+
+test("«Работа» не содержит «бот», и водитель не становится бэкендом", async () => {
+  /*
+   * Регрессия из живого каталога. На Работе.ру раздел вакансии — строка
+   * «Работа», а правило на ботов было «бот[а-яё]*» без левой границы, и
+   * «работа» подходила под него. С описанием, где есть слово «поддержка»,
+   * любая вакансия объявлялась бэкендом: «Курьер», «Грузчик-сборщик»,
+   * «Водитель категории Е». В разделе подработки они оказывались как
+   * backend-вакансии, и ни один тест на одном примере это не ловил.
+   */
+  const { detectDirection } = await import("../src/lib/direction");
+  const cases: [string, string][] = [
+    ["Курьер", "other"],
+    ["Водитель-курьер на автомобиле компании", "other"],
+    ["Грузчик-сборщик заказов на склад", "other"],
+    ["Водитель категории Е", "other"],
+    ["Разработчик Telegram-ботов", "backend"],
+  ];
+  for (const [title, want] of cases) {
+    const got = detectDirection("Работа", title);
+    assert.equal(got, want, `«${title}» → ожидалось ${want}, получено ${got}`);
+  }
+});
+
 test("у каждого направления и режима есть человеческая подпись", () => {
   for (const key of Object.keys(direction.DIRECTION_LABELS)) {
     assert.ok(direction.DIRECTION_LABELS[key as keyof typeof direction.DIRECTION_LABELS].length > 0);

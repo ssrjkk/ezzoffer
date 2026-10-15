@@ -112,7 +112,21 @@ const CATEGORY_DIRECTION: [RegExp, Direction][] = [
    */
   [/лидогенерац|лид ?генерац/i, "sales"],
   [/тестирован|qa|автотест/i, "qa"],
-  [/аналитик|анализ|product|продукт|project ?manager|\bpm\b/i, "pm"],
+    /*
+   * Product-менеджмент — только по слову «product manager».
+   *
+   * Правило было «product|продукт|аналитик|анализ», и на живом каталоге оно
+   * давало 112 вакансий в pm, из которых к управлению продуктом относились
+   * единицы. На Jobicy есть отдел «Product & Operations», и любая вакансия из
+   * него — «Head of Global Logistics», «Dispatch Specialist», «President -
+   * Business Unit» — объявлялась продуктовой. Туда же уходил
+   * «Аналитик-консультант 1С».
+   *
+   * Аналитик без уточнения — это данные, а не продукт: «Senior Data Analyst»
+   * и «Staff AI Product Analyst» раньше попадали в pm из-за слова «аналитик».
+   */
+  [/(product ?(manager|owner|lead)|project ?manager|\bpm\b|продукт(овый|овая|менеджер|овое))/i, "pm"],
+  [/(аналитик|analyst|анализ)/i, "data"],
   [/data|данн|ml\b|machine learning|машинн|ai\b|искусственн/i, "data"],
   /*
    * Автоматизация бизнеса через таблицы и Excel.
@@ -135,7 +149,7 @@ const TITLE_DIRECTION: [RegExp, Direction][] = [
   ],
   [/(^|\W)(devops|sre|системный администратор)(\W|$)/i, "devops"],
   [/(^|\W)(qa|тестировщик)(\W|$)/i, "qa"],
-  [/(^|\W)(аналитик|product manager)(\W|$)/i, "pm"],
+  [/(^|\W)(product ?(manager|owner)|project ?manager)(\W|$)/i, "pm"],
   [/(^|\W)(дизайнер|ux|ui)(\W|$)/i, "design"],
   [/(fullstack|full-stack|фулстек)/i, "fullstack"],
   [/(frontend|фронтенд|вёрстальщик|верстальщик)/i, "frontend"],
