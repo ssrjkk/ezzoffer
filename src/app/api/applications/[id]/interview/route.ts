@@ -3,7 +3,7 @@ import { requireUser, unauthorized } from "@/lib/api";
 import { db } from "@/lib/db";
 import { getVacancyBySlug } from "@/lib/vacancies";
 import { prepareInterview, vacancyBrief } from "@/lib/interview";
-import { NO_STORE_HEADERS } from "@/lib/http";
+import { NO_STORE_HEADERS, parseParamId } from "@/lib/http";
 
 /**
  * Подготовка к собеседованию по отклику.
@@ -24,9 +24,17 @@ export async function GET(
   const user = await requireUser();
   if (!user) return unauthorized();
 
-  const { id } = await params;
-  const appId = Number(id);
-  if (!Number.isFinite(appId)) {
+  const { id: rawId } = await params;
+  /*
+   * Разбор через общий помощник, а не через Number.
+   *
+   * Number("") даёт 0 и проходит проверку Number.isFinite, поэтому пустой
+   * идентификатор в адресе приводил к запросу за откликом с id = 0 вместо
+   * отказа. Number("1e5") и " 1 " тоже проходят. В проекте для этого есть
+   * parseParamId, и тридцать шесть роутов из тридцати семи его используют.
+   */
+  const appId = parseParamId(rawId);
+  if (appId === null) {
     return NextResponse.json({ error: "Некорректный идентификатор отклика" }, { status: 400 });
   }
 

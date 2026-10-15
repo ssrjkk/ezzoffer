@@ -1,7 +1,20 @@
+/**
+ * Идентификатор из адреса.
+ *
+ * Проверка идёт по форме, а не через Number: Number разбирает «1e3», «0x10»,
+ * « 1 » и «1.0» и возвращает целое, поэтому проверка «isInteger && > 0» их
+ * принимала. Идентификатор приходит из URL, и «/api/applications/1e3» должен
+ * быть отказом, а не откликом № 1000.
+ *
+ * Всё, что не является обычной десятичной записью без нуля на конце, отклоняется.
+ */
+const PLAIN_POSITIVE_ID = /^[1-9]\d*$/;
+
 export function parseParamId(value: string | undefined): number | null {
-  if (!value) return null;
+  if (typeof value !== "string") return null;
+  if (!PLAIN_POSITIVE_ID.test(value)) return null;
   const n = Number(value);
-  return Number.isInteger(n) && n > 0 ? n : null;
+  return Number.isSafeInteger(n) ? n : null;
 }
 
 export function isUniqueViolation(err: unknown): boolean {
