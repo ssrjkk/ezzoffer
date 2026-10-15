@@ -13,6 +13,7 @@ export default function JobsPage() {
       <Section className="pb-8 pt-16 md:pt-24">
         <SectionHead
           eyebrow="Вакансии"
+          level="h1"
           title={
             <>
               Тысячи вакансий — <span className="text-accent">в одном месте</span>

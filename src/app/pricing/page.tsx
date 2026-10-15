@@ -13,6 +13,7 @@ export default function PricingPage() {
       <Section className="pb-0 pt-16 md:pt-24">
         <SectionHead
           eyebrow="Тарифы"
+          level="h1"
           title={
             <>
               Подходящий тариф <span className="text-accent">найдётся для каждого</span>
