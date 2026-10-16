@@ -145,6 +145,9 @@ export async function POST(request: Request) {
 
   // Реальная отправка на hh.ru: если вакансия с hh.ru и аккаунт подключён —
   // отклик уходит через API, и только при успехе записывается в кабинет.
+  // origin различает их: 'real' — площадка приняла отклик, 'user' — человек
+  // зафиксировал отклик, сделанный на сайте источника вручную.
+  const origin = vacancy.source === "hh" ? "real" : "user";
   if (vacancy.source === "hh") {
     // Актуальное состояние подключения читаем из БД, а не из объекта сессии.
     // Отсутствие строки означает недействительную сессию — отвечаем 401,
@@ -186,8 +189,8 @@ export async function POST(request: Request) {
 
   const result = db
     .prepare(
-      `INSERT INTO applications (user_id, job_slug, search_id, resume_id, letter_id, status, message, external_url, sent_at)
-       VALUES (?, ?, ?, ?, ?, 'sent', ?, ?, ?)`,
+      `INSERT INTO applications (user_id, job_slug, search_id, resume_id, letter_id, status, origin, message, external_url, sent_at)
+       VALUES (?, ?, ?, ?, ?, 'sent', ?, ?, ?, ?)`,
     )
     // Пишется именно selectedLetterId, а не переданный data.letterId.
     // Раньше туда уходил letterId из запроса, который для автоподбора всегда
@@ -200,6 +203,7 @@ export async function POST(request: Request) {
       data?.searchId ?? null,
       resumeIdUsed,
       selectedLetterId,
+      origin,
       message,
       externalUrl,
       now,

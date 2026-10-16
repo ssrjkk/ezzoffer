@@ -1,6 +1,8 @@
 import { db } from "./db";
 import { getVacancyBySlug } from "./vacancies";
 
+export type ApplicationOrigin = "real" | "simulated" | "user" | "ai";
+
 export type ApplicationRow = {
   id: number;
   user_id: number;
@@ -17,6 +19,13 @@ export type ApplicationRow = {
   resume_id: string | null;
   letter_id: number | null;
   status: string;
+  /**
+   * Происхождение отклика (P1: правда о происхождении).
+   *
+   * real — отправлен через API площадки; user — человек зафиксировал вручную;
+   * simulated — демо-симуляция; ai — сгенерировано моделью.
+   */
+  origin: ApplicationOrigin;
   response: string;
   response_note: string;
   message: string;
@@ -58,6 +67,7 @@ function serializeApplicationWith(row: ApplicationRow, vacancy: ReturnType<typeo
     letter_id: row.letter_id,
     status: row.status,
     status_label: STATUS_RU[row.status] ?? row.status,
+    origin: row.origin,
     response: row.response,
     response_note: row.response_note,
     message: row.message,

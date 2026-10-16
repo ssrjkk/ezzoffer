@@ -635,8 +635,8 @@ export async function runAutoApply(opts?: {
            резюме, и понять, почему на вакансию фронтенда ушло «Python», было
            бы невозможно. */
         db.prepare(
-          `INSERT INTO applications (user_id, job_slug, search_id, resume_id, letter_id, message, status, sent_at)
-           VALUES (?, ?, ?, ?, ?, ?, 'sent', ?)`,
+          `INSERT INTO applications (user_id, job_slug, search_id, resume_id, letter_id, message, status, origin, sent_at)
+           VALUES (?, ?, ?, ?, ?, ?, 'sent', 'real', ?)`,
         ).run(
           user.id,
           vacancy.slug,
@@ -827,8 +827,8 @@ export async function applyToVacancy(
 
   pacing.recordSent();
   db.prepare(
-    `INSERT INTO applications (user_id, job_slug, resume_id, letter_id, message, status, sent_at)
-     VALUES (?, ?, ?, ?, ?, 'sent', ?)`,
+    `INSERT INTO applications (user_id, job_slug, resume_id, letter_id, message, status, origin, sent_at)
+     VALUES (?, ?, ?, ?, ?, 'sent', 'real', ?)`,
   ).run(
     user.id,
     vacancy.slug,

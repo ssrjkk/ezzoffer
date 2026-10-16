@@ -25,9 +25,10 @@ test("INSERT в applications существует", () => {
 });
 
 test("letter_id записывается из вычисленного selectedLetterId", () => {
-  // В блоке .run(...) после selectedLetterId должен идти message, а не data.letterId.
+  // В блоке .run(...) после selectedLetterId должен идти origin и message,
+  // а не data.letterId. origin стоит между ними с Фазы 1 (происхождение).
   assert.ok(
-    /selectedLetterId,\s*message,/.test(ROUTE),
+    /selectedLetterId,\s*origin,\s*message,/.test(ROUTE),
     "letter_id должен записываться из selectedLetterId",
   );
   assert.ok(
@@ -68,7 +69,7 @@ test("персонализированное письмо сохраняется
     "в hh.ru уходит то же сообщение, что сохраняется в БД",
   );
   assert.ok(
-    /selectedLetterId,\s*message,/.test(ROUTE),
+    /selectedLetterId,\s*origin,\s*message,/.test(ROUTE),
     "в БД сохраняется то же message, что отправлено в hh.ru",
   );
 });

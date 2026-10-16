@@ -21,6 +21,42 @@ export function addNotifiedAtColumn(instance: Pick<Database.Database, "exec" | "
 }
 
 /**
+ * Колонка происхождения отклика (Фаза 1: правда о происхождении).
+ *
+ * real — отправлен через API площадки; user — человек зафиксировал вручную
+ * (кнопка «На сайте» / «По email»); simulated — демо-симуляция; ai —
+ * сгенерировано моделью. Дефолт 'user': забытый INSERT нигде не соврёт про
+ * внешнюю отправку. Backfill: строки по hh-вакансиям помечаются 'real',
+ * остальные остаются 'user'. Явные значения backfill не трогает, поэтому
+ * повторный запуск ничего не меняет.
+ *
+ * Отдельная миграция, а не правка CREATE TABLE: старые базы уже живут у
+ * людей, и им колонка тоже нужна.
+ */
+export function migrateApplicationsOrigin(
+  instance: Pick<Database.Database, "exec" | "prepare">,
+): void {
+  const cols = instance.prepare("PRAGMA table_info(applications)").all() as {
+    name: string;
+  }[];
+  if (!cols.some((c) => c.name === "origin")) {
+    instance.exec(
+      "ALTER TABLE applications ADD COLUMN origin TEXT NOT NULL DEFAULT 'user' " +
+        "CHECK (origin IN ('real','simulated','user','ai'))",
+    );
+  }
+  /*
+   * Все нынешние писатели без origin — это реальный код отправки через hh
+   * (симуляции в коде нет: sim.ts не существует, планировщик шлёт только
+   * через hhProvider.apply). Поэтому строки по hh-вакансиям — 'real'.
+   * Условие по origin = 'user' защищает явные значения от перезаписи.
+   */
+  instance.exec(`
+    UPDATE applications SET origin = 'real'
+    WHERE origin = 'user' AND job_slug IN (SELECT slug FROM vacancies WHERE source = 'hh')
+  `);
+}
+/**
  * Пересборка applications со сменой типа resume_id: INTEGER → TEXT.
  *
  * В колонке лежит идентификатор резюме на hh, то есть строка, — именно она
@@ -52,6 +88,13 @@ export function migrateApplicationsResumeId(
   const resumeCol = row.find((c) => c.name === "resume_id");
   // Уже TEXT — миграция уже проходила (или база создана с нуля).
   if (!resumeCol || resumeCol.type.toUpperCase() !== "INTEGER") return;
+  /*
+   * origin переживает пересборку. Источник может её не иметь (старая база,
+   * прямой вызов без migrateApplicationsOrigin) — тогда строки получают
+   * безопасный дефолт 'user', а backfill по источнику доберёт 'real' позже.
+   */
+  const hasOrigin = row.some((c) => c.name === "origin");
+  const originSelect = hasOrigin ? "origin" : "'user'";
 
   instance.exec("PRAGMA foreign_keys = OFF");
   instance.exec("BEGIN");
@@ -65,6 +108,7 @@ export function migrateApplicationsResumeId(
         resume_id TEXT,
         letter_id INTEGER,
         status TEXT NOT NULL DEFAULT 'sent',
+        origin TEXT NOT NULL DEFAULT 'user' CHECK (origin IN ('real','simulated','user','ai')),
         response TEXT NOT NULL DEFAULT '',
         response_note TEXT NOT NULL DEFAULT '',
         message TEXT NOT NULL DEFAULT '',
@@ -87,10 +131,10 @@ export function migrateApplicationsResumeId(
      */
     instance.exec(`
       INSERT INTO applications_migrated
-        (id, user_id, job_slug, search_id, resume_id, letter_id, status, response,
+        (id, user_id, job_slug, search_id, resume_id, letter_id, status, origin, response,
          response_note, message, external_url, sent_at, viewed_at, responded_at, withdrawn, notified_at)
       SELECT
-        id, user_id, job_slug, search_id, CAST(resume_id AS TEXT), letter_id, status, response,
+        id, user_id, job_slug, search_id, CAST(resume_id AS TEXT), letter_id, status, ${originSelect}, response,
         response_note, message, external_url, sent_at, viewed_at, responded_at, withdrawn, notified_at
       FROM applications;
     `);

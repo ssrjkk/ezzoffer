@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { logInfo } from "./logger";
-import { migrateApplicationsResumeId, addNotifiedAtColumn } from "./db-migrations";
+import { migrateApplicationsResumeId, addNotifiedAtColumn, migrateApplicationsOrigin } from "./db-migrations";
 import { envStr } from "./env";
 
 /**
@@ -131,6 +131,7 @@ CREATE TABLE IF NOT EXISTS applications (
   resume_id INTEGER,
   letter_id INTEGER,
   status TEXT NOT NULL DEFAULT 'sent',
+  origin TEXT NOT NULL DEFAULT 'user' CHECK (origin IN ('real','simulated','user','ai')),
   response TEXT NOT NULL DEFAULT '',
   response_note TEXT NOT NULL DEFAULT '',
   message TEXT NOT NULL DEFAULT '',
@@ -140,6 +141,21 @@ CREATE TABLE IF NOT EXISTS applications (
   responded_at INTEGER,
   withdrawn INTEGER NOT NULL DEFAULT 0,
   notified_at INTEGER
+);
+
+-- События воронки (Фаза 3 пользуется этой таблицей как журналом только для
+-- добавления; писателей пока нет — таблица создаётся заранее, чтобы не
+-- пересобирать её ради колонки origin позже).
+CREATE TABLE IF NOT EXISTS events (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  kind TEXT NOT NULL,
+  origin TEXT NOT NULL CHECK (origin IN ('real','simulated','user')),
+  entity_type TEXT,
+  entity_id INTEGER,
+  payload TEXT NOT NULL,
+  dedupe_key TEXT UNIQUE,
+  created_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS bookmarks (
@@ -320,6 +336,7 @@ function migrate(instance: Database.Database): void {
  * нет, а перенос уже читает.
  */
 addNotifiedAtColumn(instance);
+migrateApplicationsOrigin(instance);
 migrateApplicationsResumeId(instance);
   // Избранное: уникальность по (пользователь, вакансия) выражена в самой
   // таблице — иначе повторное нажатие «в избранное» плодило бы дубли, и в
