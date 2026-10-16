@@ -77,6 +77,36 @@ export function migrateUserMode(
 }
 
 /**
+ * Группировка A/B-вариантов одного резюме (Фаза 7).
+ *
+ * `variant_group` — идентификатор группы вариантов; NULL у обычного резюме,
+ * которое никто не вариантировал. `variant_label` — метка внутри группы (A, B,
+ * C): она и есть то, что человек видит и что потом сравнивает.
+ *
+ * Отдельные колонки, а не JSON: по variant_group нужен SELECT с группировкой,
+ * а по applications.resume_id — JOIN. JSON здесь означил бы разбор внутри SQLite
+ * на каждом сравнении.
+ *
+ * NULL, а не '' и не 0: «это резюме не вариант» и «группа ещё не назначена» —
+ * разные вещи, и пустая строка слила бы их.
+ *
+ * Отдельная функция, а не правка CREATE TABLE: старые базы у людей живут.
+ */
+export function migrateResumeVariants(
+  instance: Pick<Database.Database, "exec" | "prepare">,
+): void {
+  const cols = instance.prepare("PRAGMA table_info(resumes)").all() as {
+    name: string;
+  }[];
+  if (!cols.some((c) => c.name === "variant_group")) {
+    instance.exec("ALTER TABLE resumes ADD COLUMN variant_group TEXT");
+  }
+  if (!cols.some((c) => c.name === "variant_label")) {
+    instance.exec("ALTER TABLE resumes ADD COLUMN variant_label TEXT");
+  }
+}
+
+/**
  * Пересборка applications со сменой типа resume_id: INTEGER → TEXT.
  *
  * В колонке лежит идентификатор резюме на hh, то есть строка, — именно она

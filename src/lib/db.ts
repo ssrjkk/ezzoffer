@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { logInfo } from "./logger";
-import { migrateApplicationsResumeId, addNotifiedAtColumn, migrateApplicationsOrigin, migrateUserMode } from "./db-migrations";
+import { migrateApplicationsResumeId, addNotifiedAtColumn, migrateApplicationsOrigin, migrateUserMode, migrateResumeVariants } from "./db-migrations";
 import { envStr } from "./env";
 
 /**
@@ -95,6 +95,9 @@ CREATE TABLE IF NOT EXISTS resumes (
   years_label TEXT NOT NULL DEFAULT '',
   ai_improved INTEGER NOT NULL DEFAULT 0,
   hh_id TEXT,
+  -- Группа A/B-вариантов; NULL — обычное резюме (migrateResumeVariants).
+  variant_group TEXT,
+  variant_label TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -279,6 +282,7 @@ function migrate(instance: Database.Database): void {
     instance.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
   }
   migrateUserMode(instance);
+  migrateResumeVariants(instance);
   const appCols = columnNames(instance, "applications");
   const vacancyCols = columnNames(instance, "vacancies");
   const resumeCols = columnNames(instance, "resumes");
