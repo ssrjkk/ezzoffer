@@ -1,35 +1,5 @@
 import { jobs } from "./data";
-
-const KEYWORDS: { label: string; aliases: string[] }[] = [
-  { label: "JavaScript", aliases: ["javascript", "js"] },
-  { label: "TypeScript", aliases: ["typescript", "ts"] },
-  { label: "React", aliases: ["react"] },
-  { label: "Next.js", aliases: ["next.js", "nextjs"] },
-  { label: "Node.js", aliases: ["node.js", "nodejs"] },
-  { label: "Python", aliases: ["python"] },
-  { label: "Django", aliases: ["django"] },
-  { label: "FastAPI", aliases: ["fastapi"] },
-  { label: "SQL", aliases: ["sql", "postgresql", "postgres", "mysql"] },
-  { label: "PostgreSQL", aliases: ["postgresql", "postgres"] },
-  { label: "Docker", aliases: ["docker"] },
-  { label: "Kubernetes", aliases: ["kubernetes", "k8s"] },
-  { label: "Terraform", aliases: ["terraform"] },
-  { label: "CI/CD", aliases: ["ci/cd", "cicd"] },
-  { label: "Linux", aliases: ["linux"] },
-  { label: "Git", aliases: ["git"] },
-  { label: "Figma", aliases: ["figma"] },
-  { label: "Python/Аналитика", aliases: ["pandas", "numpy"] },
-  { label: "SQL-аналитика", aliases: ["databases", "базы данных"] },
-  { label: "Продуктовые метрики", aliases: ["метрик", "metrics", "metric"] },
-  { label: "Исследования", aliases: ["исследовани", "research"] },
-  { label: "Исследования пользователей", aliases: ["интервью", "юзабилити"] },
-  { label: "SAAS", aliases: ["saas", "b2b"] },
-  { label: "Agile/Scrum", aliases: ["agile", "scrum", "kanban"] },
-  { label: "UI-дизайн", aliases: ["ui", "prototype", "прототип"] },
-  { label: "Performance-маркетинг", aliases: ["performance", "таргет", "контекст"] },
-  { label: "SEO", aliases: ["seo"] },
-  { label: "Команда разработки", aliases: ["команда", "team lead"] },
-];
+import { KEYWORDS } from "./resume-enhance-keys";
 
 /**
  * Детект ключевых навыков.
@@ -103,8 +73,21 @@ export function enhanceResume(content: string) {
 
   const hasNumbers = /\d/.test(content);
   if (!hasNumbers) {
-    notes.push("Добавлены шаблоны метрик — подставьте свои цифры");
-    tips.push("Каждое достижение усильте цифрой: «сократил на 30%», «ускорил в 2 раза»");
+    /*
+     * Здесь раньше предлагалось «подставьте свои цифры» с шаблоном
+     * «сократил на 30%». Это прямое противоречие принципу P1 карты и Фазе 5:
+     * продукт советовал выдумать метрику, которой у человека нет, и человек
+     * писал её в резюме, не задумываясь.
+     *
+     * Пустая цифра в резюме — это не дефект оформления, это отсутствие
+     * результата. Честный совет здесь один: написать, что именно изменилось,
+     * без процентов; если цифры нет, значит результат пока не измерялся, и
+     * придумывать его нельзя.
+     */
+    notes.push("Не найдено достижений с измеримым результатом");
+    tips.push(
+      "Опишите, что именно изменилось после вашей работы: что стало быстрее, дешевле или надёжнее. Цифру ставьте только настоящую — выдуманная метрика вскрывается на собеседовании вопросом «как считали?» и стоит дороже, чем её отсутствие.",
+    );
   }
 
   if (!/\n{2}/.test(content)) {
