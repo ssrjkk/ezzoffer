@@ -57,6 +57,26 @@ export function migrateApplicationsOrigin(
   `);
 }
 /**
+ * Режим пользователя demo|live (Фаза 1: правда о происхождении).
+ *
+ * live означает «hh подключён и человек явно согласился на реальные
+ * автоотклики». Дефолт demo: никто не становится «живым» молча, миграцией
+ * в том числе. Backfill не нужен — безопасное значение и есть дефолт.
+ */
+export function migrateUserMode(
+  instance: Pick<Database.Database, "exec" | "prepare">,
+): void {
+  const cols = instance.prepare("PRAGMA table_info(users)").all() as {
+    name: string;
+  }[];
+  if (cols.some((c) => c.name === "mode")) return;
+  instance.exec(
+    "ALTER TABLE users ADD COLUMN mode TEXT NOT NULL DEFAULT 'demo' " +
+      "CHECK (mode IN ('demo','live'))",
+  );
+}
+
+/**
  * Пересборка applications со сменой типа resume_id: INTEGER → TEXT.
  *
  * В колонке лежит идентификатор резюме на hh, то есть строка, — именно она

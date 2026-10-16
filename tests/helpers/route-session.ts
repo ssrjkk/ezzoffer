@@ -42,6 +42,7 @@ export function fakeUser(over: Partial<User> = {}): User {
     autoapply_blocked_until: 0,
     autoapply_block_reason: "",
     email_verified: 1,
+    mode: "demo",
     email_verification_token: null,
     password_reset_token: null,
     password_reset_expires: null,

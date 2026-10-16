@@ -2,7 +2,7 @@ import Database from "better-sqlite3";
 import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { logInfo } from "./logger";
-import { migrateApplicationsResumeId, addNotifiedAtColumn, migrateApplicationsOrigin } from "./db-migrations";
+import { migrateApplicationsResumeId, addNotifiedAtColumn, migrateApplicationsOrigin, migrateUserMode } from "./db-migrations";
 import { envStr } from "./env";
 
 /**
@@ -53,7 +53,8 @@ CREATE TABLE IF NOT EXISTS users (
   email_verified INTEGER NOT NULL DEFAULT 0,
   email_verification_token TEXT,
   password_reset_token TEXT,
-  password_reset_expires INTEGER
+  password_reset_expires INTEGER,
+  mode TEXT NOT NULL DEFAULT 'demo' CHECK (mode IN ('demo','live'))
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -277,6 +278,7 @@ function migrate(instance: Database.Database): void {
   for (const [name, type] of additions) {
     instance.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
   }
+  migrateUserMode(instance);
   const appCols = columnNames(instance, "applications");
   const vacancyCols = columnNames(instance, "vacancies");
   const resumeCols = columnNames(instance, "resumes");
@@ -376,6 +378,8 @@ export type User = {
   salary_expectation: number | null;
   /** Предпочтительный город; пустая строка — не задан. */
   city_preference: string;
+  /** demo — обычный режим, live — hh подключён и человек явно согласился. */
+  mode: "demo" | "live";
 };
 
 export function getUserById(id: number): User | undefined {

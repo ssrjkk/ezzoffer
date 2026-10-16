@@ -1,6 +1,6 @@
 import { requireUser, unauthorized } from "@/lib/api";
 import { db, type User } from "@/lib/db";
-import { hhConfigured } from "@/lib/hh-oauth";
+import { hhConfigured, isHhConnected } from "@/lib/hh-oauth";
 import { NO_STORE_HEADERS } from "@/lib/http";
 
 export async function GET() {
@@ -18,7 +18,7 @@ export async function GET() {
   // обновить его по refresh_token, и автоотклики продолжат работать. Раньше
   // UI в этом случае предлагал подключиться заново, хотя всё работало.
   const canRefresh = Boolean(fresh.hh_refresh_token) && hhConfigured();
-  const connected = (tokenValid || canRefresh) && Boolean(fresh.hh_resume_id);
+  const connected = isHhConnected(fresh);
   const resumeId = fresh.hh_resume_id;
 
   return Response.json(

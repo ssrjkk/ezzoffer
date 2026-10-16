@@ -51,6 +51,7 @@ function user(over: Partial<User> = {}): User {
     password_reset_expires: null,
     salary_expectation: null,
     city_preference: "",
+    mode: "demo",
     ...over,
   };
 }

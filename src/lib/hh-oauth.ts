@@ -104,9 +104,31 @@ export function saveHhConnection(
 }
 
 export function clearHhConnection(userId: number): void {
+  /*
+   * Отключение hh гасит live обратно в demo: без площадки «живого» режима
+   * быть не может. Отдельный UPDATE не нужен — условие то же самое.
+   */
   db.prepare(
-    "UPDATE users SET hh_token = NULL, hh_token_expires_at = NULL, hh_refresh_token = NULL, hh_resume_id = NULL WHERE id = ?",
+    "UPDATE users SET hh_token = NULL, hh_token_expires_at = NULL, hh_refresh_token = NULL, hh_resume_id = NULL, mode = 'demo' WHERE id = ?",
   ).run(userId);
+}
+
+/**
+ * Подключён ли hh в смысле «можно отправлять и синхронизировать».
+ *
+ * Протухший access-токен — ещё не «отключено»: getValidHhToken обновит его
+ * по refresh_token. Единое место проверки: те же условия смотрят
+ * /api/hh/status и /api/mode, иначе они разойдутся и кабинет скажет
+ * «подключено», а переключение в live — «не подключено».
+ */
+export function isHhConnected(
+  fresh: Pick<User, "hh_token" | "hh_token_expires_at" | "hh_refresh_token" | "hh_resume_id">,
+): boolean {
+  const tokenValid = Boolean(
+    fresh.hh_token && fresh.hh_token_expires_at && fresh.hh_token_expires_at > Date.now(),
+  );
+  const canRefresh = Boolean(fresh.hh_refresh_token) && hhConfigured();
+  return (tokenValid || canRefresh) && Boolean(fresh.hh_resume_id);
 }
 
 export function generateOauthState(): string {
