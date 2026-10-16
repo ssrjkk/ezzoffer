@@ -5,8 +5,10 @@ import { isPlanActive, planDailyLimit, planLabel, daysLeft } from "@/lib/plans";
 import { PlanSettings } from "@/components/dashboard/plan-settings";
 import { ProfileForm } from "@/components/dashboard/profile-form";
 import { HhConnect } from "@/components/dashboard/hh-connect";
+import { ModeSwitch } from "@/components/dashboard/mode-switch";
 import { AutoApplyPause } from "@/components/dashboard/autoapply-pause";
 import { TelegramConnect } from "@/components/dashboard/telegram-connect";
+import { isHhConnected } from "@/lib/hh-oauth";
 
 export const metadata: Metadata = { title: "Настройки" };
 export const dynamic = "force-dynamic";
@@ -25,6 +27,8 @@ export default async function SettingsPage() {
       </div>
 
       <HhConnect />
+
+      <ModeSwitch initialMode={user.mode} hhConnected={isHhConnected(user)} />
 
       <TelegramConnect />
 

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { isPlanActive, planDailyLimit, planLabel, daysLeft } from "@/lib/plans";
 import { DashboardNav } from "@/components/dashboard/nav";
+import { DemoBanner } from "@/components/dashboard/demo-banner";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
@@ -37,6 +38,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
       <div className="min-w-0 flex-1">
         <main className="px-4 py-8 sm:px-6 lg:px-10 lg:py-10">
           <div className="mx-auto max-w-6xl">
+            {/*
+              Баннер стоит в раскладке, а не на каждой странице: пометка
+              «здесь демо» обязана быть на каждом экране, где показываются
+              цифры. На странице без чисел он лишний, но счёт страниц кабинета
+              мал, а риск пропустить пометку на одной из них — обман.
+            */}
+            <DemoBanner mode={user.mode} />
             <div className="mb-8 lg:hidden">
               <DashboardNav {...nav} onMobile />
             </div>
