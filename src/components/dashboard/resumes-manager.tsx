@@ -6,6 +6,7 @@ import { Badge, EmptyState, Field, btnPrimary, btnGhost, btnDanger, inputCls, St
 import { Dialog, ConfirmDialog } from "@/components/dialog";
 import { RESUME_TEMPLATES } from "@/lib/data";
 import { HhImportButton } from "./hh-import";
+import { ResumeMatchPanel } from "./resume-match-panel";
 import { FileDown, Sparkles } from "lucide-react";
 
 type Resume = {
@@ -30,6 +31,8 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
   const [error, setError] = useState<string | null>(null);
   const [improvingId, setImprovingId] = useState<number | null>(null);
   const [removingId, setRemovingId] = useState<number | null>(null);
+  /** id резюме, у которого раскрыта сверка с вакансией; null — всё закрыто. */
+  const [openMatch, setOpenMatch] = useState<number | null>(null);
   /** id резюме, удаление которого сейчас подтверждается; null — окно закрыто. */
   const [confirmId, setConfirmId] = useState<number | null>(null);
   const [improveResult, setImproveResult] = useState<{
@@ -240,6 +243,26 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
                   {r.years_label ? `${r.years_label} · ` : ""}
                   Обновлено {new Date(r.updated_at).toLocaleDateString("ru-RU")}
                 </p>
+                {openMatch === r.id ? (
+                  <div className="mt-3">
+                    <ResumeMatchPanel resumeId={r.id} />
+                    <button
+                      type="button"
+                      className="mt-2 text-xs text-muted underline"
+                      onClick={() => setOpenMatch(null)}
+                    >
+                      Свернуть
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="mt-2 text-xs text-muted underline"
+                    onClick={() => setOpenMatch(r.id)}
+                  >
+                    Сверить с вакансией
+                  </button>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button

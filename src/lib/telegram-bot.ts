@@ -621,6 +621,31 @@ export function parseCommand(text: string): { command: string; args: string } | 
   return { command, args: rest.join(" ") };
 }
 
+/**
+ * Пометка демо-режима (Фаза 1, задача 3: «та же пометка в боте»).
+ *
+ * В кабинете баннер появился, а бот молчал. Человек читает в мессенджере
+ * «3 отклика, 1 приглашение» и не знает, что это демо-симуляция, а не
+ * площадка. Принцип P1 требует, чтобы происхождение цифр было видно и там.
+ *
+ * Пометка идёт ПЕРВОЙ строкой, а не в конце: человек читает цифры раньше,
+ * чем допишет до конца. Помечены текстом «демо», а не «beta» — «демо-версия»
+ * читается как ограниченная функциональность и снимается как маркетинг.
+ *
+ * Неизвестный режим (старый пользователь без колонки mode, миграция не
+ * прошла) считается НЕ live: молчать о происхождении цифр опаснее, чем
+ * показать лишнюю плашку.
+ */
+export function withModeNotice(text: string, mode: "demo" | "live" | undefined): string {
+  if (mode === "live") return text;
+  if (!text.trim()) return text;
+  return (
+    "<b>Демо-режим</b>\n" +
+    "Цифры ниже демонстрационные: они не отражают ответы площадок.\n\n" +
+    text
+  );
+}
+
 /** Чистый расчёт ответа: без БД и сети — удобно тестировать. */
 export function replyFor(
   command: string,
@@ -916,7 +941,8 @@ export async function handleUpdate(update: TelegramUpdate): Promise<boolean | nu
     return sendTelegramMessage(chat, `Пришлите команду, например /start.\n\n${HELP}`);
   }
 
-  const reply = replyFor(parsed.command, parsed.args, userByChatId(chat) ?? null);
+  const replyingUser = userByChatId(chat) ?? null;
+  const reply = replyFor(parsed.command, parsed.args, replyingUser);
 
   if (reply.action === "link") {
     const linked = linkChatByCode(chat, parsed.args);
@@ -973,7 +999,14 @@ export async function handleUpdate(update: TelegramUpdate): Promise<boolean | nu
     return runApplyFromChat(chat, reply.action.vacancy);
   }
 
-  return sendTelegramMessage(chat, reply.text, { keyboard: reply.keyboard, html: true });
+  /*
+   * Пометка демо-режима ставится здесь, а не в каждом обработчике команды:
+   * это единственная точка, через которую уходят ответы на /статистику,
+   * /отклики, /собеседование и остальные. Пропустить её в одном из
+   * десяти обработчиков легко и незаметно — здесь не пропустить.
+   */
+  const outgoing = withModeNotice(reply.text, replyingUser?.mode);
+  return sendTelegramMessage(chat, outgoing, { keyboard: reply.keyboard, html: true });
 }
 
 /**
