@@ -41,6 +41,17 @@ walk("src/app/api");
  */
 const KNOWN_OPEN = [
   /auth\/(login|register|logout|forgot-password|reset-password)\//,
+  /*
+   * Внешний вход. Исключение НЕ из-за отсутствия проверки, а из-за природы
+   * параметра: `[provider]` — это строка из белого списка auth-methods, а не
+   * числовой идентификатор. parseParamId здесь не просто не нужен, а вреден:
+   * он отверг бы «github» как некорректный id, и вход перестал бы работать.
+   * Проверка допустимости идёт через authMethod(), и она проверяется
+   * поведением в tests/oauth.test.ts (произвольный провайдер → null).
+   *
+   * Требование к requireUser выполняется: вход доступен только залогиненным.
+   */
+  /auth\/oauth\//,
   /hh\/callback\//,
   /health\//,
   /webhook/,

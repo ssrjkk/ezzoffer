@@ -2,7 +2,7 @@
 import path from "node:path";
 import { mkdirSync } from "node:fs";
 import { logInfo } from "./logger";
-import { migrateApplicationsResumeId, addNotifiedAtColumn, migrateApplicationsOrigin, migrateUserMode, migrateResumeVariants, migratePayments } from "./db-migrations";
+import { migrateApplicationsResumeId, addNotifiedAtColumn, migrateApplicationsOrigin, migrateUserMode, migrateResumeVariants, migratePayments, migrateOauthAccounts } from "./db-migrations";
 import { envStr } from "./env";
 
 /**
@@ -284,6 +284,7 @@ function migrate(instance: Database.Database): void {
   migrateUserMode(instance);
   migrateResumeVariants(instance);
   migratePayments(instance);
+  migrateOauthAccounts(instance);
   const appCols = columnNames(instance, "applications");
   const vacancyCols = columnNames(instance, "vacancies");
   const resumeCols = columnNames(instance, "resumes");

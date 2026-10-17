@@ -157,6 +157,36 @@ export function migratePayments(
 }
 
 /**
+ * Привязанные внешние аккаунты.
+ *
+ * UNIQUE (provider, provider_id) — не из паранойи, а из необходимости: без
+ * него повторный возврат от провайдера создал бы человеку две привязки, и
+ * «отвязать» потом стало бы невозможно понять, какую именно удалять.
+ *
+ * provider_id, а не email: адрес у человека меняется, идентификатор в
+ * системе провайдера — нет. Привязка должна переживать смену почты.
+ */
+export function migrateOauthAccounts(
+  instance: Pick<Database.Database, "exec" | "prepare">,
+): void {
+  const tables = instance
+    .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+    .all() as { name: string }[];
+  if (tables.some((r) => r.name === "oauth_accounts")) return;
+  instance.exec(`
+    CREATE TABLE oauth_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      provider TEXT NOT NULL,
+      provider_id TEXT NOT NULL,
+      email TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE (provider, provider_id)
+    )
+  `);
+}
+
+/**
  * Пересборка applications со сменой типа resume_id: INTEGER → TEXT.
  *
  * В колонке лежит идентификатор резюме на hh, то есть строка, — именно она
