@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { chromium, type Browser, type BrowserContext } from "playwright";
+import { retryOn429, gotoRetry } from "./helpers/rate-limit-retry";
 
 /**
  * Баннер демо-режима виден настоящему человеку (Фаза 1, задача 3).
@@ -25,10 +26,14 @@ const EMAIL = process.env.QA_EMAIL ?? "qa2@example.com";
 const PASSWORD = process.env.QA_PASSWORD ?? "testpass123";
 
 async function login(ctx: BrowserContext): Promise<boolean> {
-  const res = await ctx.request.post(`${BASE}/api/auth/login`, {
-    headers: { "content-type": "application/json", origin: BASE, referer: `${BASE}/login` },
-    data: { email: EMAIL, password: PASSWORD },
-  });
+  // Через context.request, а не fetch: он делит cookie-jar с браузером, и
+  // иначе вход прошёл бы, а кабинет открылся гостю.
+  const res = await retryOn429(() =>
+    ctx.request.post(`${BASE}/api/auth/login`, {
+      headers: { "content-type": "application/json", origin: BASE, referer: `${BASE}/login` },
+      data: { email: EMAIL, password: PASSWORD },
+    }),
+  );
   return res.ok();
 }
 
@@ -56,7 +61,10 @@ test("баннер демо-режима виден в кабинете на к�
     const missing: string[] = [];
 
     for (const path of PAGES) {
-      await page.goto(`${BASE}${path}`, { waitUntil: "domcontentloaded" });
+      if (!(await gotoRetry(page, `${BASE}${path}`))) {
+        missing.push(`${path} (лимит запросов не отпустил за 4 попытки)`);
+        continue;
+      }
       const banner = page.locator("[data-demo-banner]");
       if ((await banner.count()) === 0) {
         missing.push(path);

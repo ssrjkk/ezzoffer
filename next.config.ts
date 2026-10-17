@@ -1,6 +1,17 @@
 import type { NextConfig } from "next";
 
+/*
+ * Префикс путей для публикации на странице проекта GitHub Pages.
+ *
+ * Сайт проекта живёт по адресу /<имя-репозитория>, поэтому ассеты вида
+ * /_next/static/... без префикса уедут на корень домена и вернут 404 — страница
+ * откроется голой. Значение приходит из окружения: обычная сборка для VPS и
+ * Docker префикса не получает и ведёт себя как раньше.
+ */
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+
 const nextConfig: NextConfig = {
+  ...(basePath ? { basePath, assetPrefix: basePath } : {}),
   // Автономная сборка для простого деплоя (VPS/Docker): .next/standalone
   output: "standalone",
   // Не отдавать наружу версию фреймворка: заголовок X-Powered-By упрощает

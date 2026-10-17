@@ -7,6 +7,7 @@ import { Dialog, ConfirmDialog } from "@/components/dialog";
 import { RESUME_TEMPLATES } from "@/lib/data";
 import { HhImportButton } from "./hh-import";
 import { ResumeMatchPanel } from "./resume-match-panel";
+import { VariantPanel } from "./variant-panel";
 import { FileDown, Sparkles } from "lucide-react";
 
 type Resume = {
@@ -263,6 +264,7 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
                     Сверить с вакансией
                   </button>
                 )}
+                <VariantPanel resumeId={r.id} />
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <button

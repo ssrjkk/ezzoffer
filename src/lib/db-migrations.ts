@@ -107,6 +107,56 @@ export function migrateResumeVariants(
 }
 
 /**
+ * Оплата: платежи и выданные права.
+ *
+ * Две таблицы, а не одна, потому что это разные вещи. `payments` — журнал
+ * пришедших подтверждений, он пополняется и никогда не переписывается, и по
+ * нему работает идемпотентность (одна и та же external_id — один платёж).
+ * `entitlements` — что человек имеет прямо сейчас; срок там nullable, потому
+ * что постоянный тариф («навсегда, пока в бете») срока не имеет вовсе.
+ *
+ * Отдельная функция: старые базы у людей живут, а платежей в них не бывало.
+ */
+export function migratePayments(
+  instance: Pick<Database.Database, "exec" | "prepare">,
+): void {
+  const tables = instance
+    .prepare("SELECT name FROM sqlite_master WHERE type='table'")
+    .all() as { name: string }[];
+  const has = (t: string) => tables.some((r) => r.name === t);
+
+  if (!has("payments")) {
+    instance.exec(`
+      CREATE TABLE payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        external_id TEXT NOT NULL UNIQUE,
+        provider TEXT NOT NULL,
+        plan_id TEXT NOT NULL,
+        amount_rub INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL
+      )
+    `);
+  }
+
+  if (!has("entitlements")) {
+    instance.exec(`
+      CREATE TABLE entitlements (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        plan_id TEXT NOT NULL,
+        source_payment_id INTEGER REFERENCES payments(id),
+        expires_at INTEGER,
+        created_at INTEGER NOT NULL
+      )
+    `);
+    instance.exec(
+      "CREATE INDEX IF NOT EXISTS ix_entitlements_user ON entitlements(user_id, expires_at)",
+    );
+  }
+}
+
+/**
  * Пересборка applications со сменой типа resume_id: INTEGER → TEXT.
  *
  * В колонке лежит идентификатор резюме на hh, то есть строка, — именно она
