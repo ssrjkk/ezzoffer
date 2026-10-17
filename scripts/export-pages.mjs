@@ -46,7 +46,7 @@ const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 let pages = 0;
 
 /** index.html → out/index.html; blog/x.html → out/blog/x/index.html */
-function writePage(route: string, file: string): void {
+function writePage(route, file) {
   const dir = route ? path.join(outDir, route) : outDir;
   mkdirSync(dir, { recursive: true });
   cpSync(file, path.join(dir, "index.html"));
@@ -54,18 +54,24 @@ function writePage(route: string, file: string): void {
 }
 
 /** Обход пререндеренных HTML. */
-function walk(dir: string, route: string): void {
+function walk(dir, route) {
   for (const entry of readdirSync(dir)) {
     const full = path.join(dir, entry);
     if (entry.startsWith("_") || entry.startsWith(".")) continue; // служебное: _app, _not-found-скелет
-    const nextRoute = route ? `${route}/${entry}` : entry;
-    const name = entry.replace(/\.html$/, "");
 
     if (statSync(full).isDirectory()) {
-      walk(full, nextRoute);
-    } else if (entry.endsWith(".html") && !EXCLUDE.has(name)) {
-      writePage(name, full);
+      walk(full, route ? `${route}/${entry}` : entry);
+      continue;
     }
+
+    // Имя маршрута — БЕЗ .html. С ним в пути получался каталог «статья.html»,
+    // и blog/kak-nastroit-autootkliki и blog/skolko-otklikov разъезжались.
+    const clean = entry.replace(/\.html$/, "");
+    if (!entry.endsWith(".html") || EXCLUDE.has(clean)) continue;
+    // Корневой index.html кладём в корень, а не в каталог index/ — иначе
+    // главная страница сайта просто не находится.
+    const target = route ? `${route}/${clean}` : clean === "index" ? "" : clean;
+    writePage(target, full);
   }
 }
 
