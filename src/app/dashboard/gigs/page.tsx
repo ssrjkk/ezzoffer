@@ -1,7 +1,7 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { redirect } from 'next/navigation';
+import { getCurrentUser } from '@/lib/auth';
 import {
   DIRECTION_LABELS,
   WORK_MODE_LABELS,
@@ -9,17 +9,17 @@ import {
   findGigs,
   gigCounts,
   type Gig,
-} from "@/lib/gigs";
-import type { Direction, WorkMode } from "@/lib/direction";
-import type { Level } from "@/lib/data";
-import { Panel } from "@/components/dashboard/ui";
-import { Section, SectionHead } from "@/components/ui";
+} from '@/lib/gigs';
+import type { Direction, WorkMode } from '@/lib/direction';
+import type { Level } from '@/lib/data';
+import { Panel } from '@/components/dashboard/ui';
+import { Section, SectionHead } from '@/components/ui';
 
-export const metadata: Metadata = { title: "Подработка и фриланс" };
-export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: 'Подработка и фриланс' };
+export const dynamic = 'force-dynamic';
 
-const MODES: WorkMode[] = ["подработка", "фриланс"];
-const LEVELS: Level[] = ["Intern", "Junior", "Middle", "Senior"];
+const MODES: WorkMode[] = ['подработка', 'фриланс'];
+const LEVELS: Level[] = ['Intern', 'Junior', 'Middle', 'Senior'];
 
 type Search = {
   mode?: WorkMode;
@@ -41,17 +41,14 @@ type Search = {
  * результат показывается как пустой результат, а не списывается на «обновите
  * позже».
  */
-export default async function GigsPage({
-  searchParams,
-}: {
-  searchParams: Promise<Search>;
-}) {
+export default async function GigsPage({ searchParams }: { searchParams: Promise<Search> }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect('/login');
 
   const sp = await searchParams;
   const mode = MODES.includes(sp.mode as WorkMode) ? (sp.mode as WorkMode) : undefined;
-  const direction = sp.dir && DIRECTION_LABELS[sp.dir as Direction] ? (sp.dir as Direction) : undefined;
+  const direction =
+    sp.dir && DIRECTION_LABELS[sp.dir as Direction] ? (sp.dir as Direction) : undefined;
   const level = LEVELS.includes(sp.level as Level) ? (sp.level as Level) : undefined;
 
   const gigs = findGigs({ mode, direction, level });
@@ -61,9 +58,9 @@ export default async function GigsPage({
   const qs = (next: { mode?: WorkMode; direction?: Direction; level?: Level }): string => {
     const p = new URLSearchParams();
     const merged = { mode, direction, level, ...next };
-    if (merged.mode) p.set("mode", merged.mode);
-    if (merged.direction) p.set("dir", merged.direction);
-    if (merged.level) p.set("level", merged.level);
+    if (merged.mode) p.set('mode', merged.mode);
+    if (merged.direction) p.set('dir', merged.direction);
+    if (merged.level) p.set('level', merged.level);
     return p.toString();
   };
 
@@ -83,23 +80,25 @@ export default async function GigsPage({
         />
 
         <div className="mt-6 flex flex-wrap gap-2">
-          <FilterChip href={`/dashboard/gigs?${qs({ mode: undefined, direction: undefined, level: undefined })}`} active={!mode}>
+          <FilterChip
+            href={`/dashboard/gigs?${qs({ mode: undefined, direction: undefined, level: undefined })}`}
+            active={!mode}
+          >
             Всё ({counts.всего})
           </FilterChip>
           {MODES.map((m) => (
-            <FilterChip
-              key={m}
-              href={`/dashboard/gigs?${qs({ mode: m })}`}
-              active={mode === m}
-            >
-              {WORK_MODE_LABELS[m]} ({m === "подработка" ? counts.подработка : counts.фриланс})
+            <FilterChip key={m} href={`/dashboard/gigs?${qs({ mode: m })}`} active={mode === m}>
+              {WORK_MODE_LABELS[m]} ({m === 'подработка' ? counts.подработка : counts.фриланс})
             </FilterChip>
           ))}
         </div>
 
         {directions.length > 0 ? (
           <div className="mt-3 flex flex-wrap gap-2">
-            <FilterChip href={`/dashboard/gigs?${qs({ direction: undefined })}`} active={!direction}>
+            <FilterChip
+              href={`/dashboard/gigs?${qs({ direction: undefined })}`}
+              active={!direction}
+            >
               Любое направление
             </FilterChip>
             {directions.map((d) => (
@@ -157,11 +156,11 @@ function FilterChip({
   return (
     <Link
       href={href}
-      aria-current={active ? "page" : undefined}
+      aria-current={active ? 'page' : undefined}
       className={
         active
-          ? "border border-ink bg-ink px-3.5 py-1.5 text-sm text-paper transition-colors"
-          : "border border-line bg-surface px-3.5 py-1.5 text-sm text-muted transition-colors hover:border-accent-2/40 hover:text-ink"
+          ? 'border border-ink bg-ink px-3.5 py-1.5 text-sm text-paper transition-colors'
+          : 'border border-line bg-surface px-3.5 py-1.5 text-sm text-muted transition-colors hover:border-accent-2/40 hover:text-ink'
       }
     >
       {children}
@@ -182,7 +181,7 @@ function GigCard({ gig }: { gig: Gig }) {
         <span>{gig.level}</span>
         <span>{gig.directionLabel}</span>
         <span>{gig.sourceLabel}</span>
-        {gig.mode === "подработка" && gig.employment ? (
+        {gig.mode === 'подработка' && gig.employment ? (
           <span className="border border-line px-1.5 py-0.5 text-xs">{gig.employment}</span>
         ) : null}
       </div>
@@ -196,7 +195,9 @@ function GigCard({ gig }: { gig: Gig }) {
           Открыть на площадке →
         </a>
       ) : (
-        <p className="mt-3 text-sm text-muted">Ссылка на площадку недоступна — заказ виден в разделе подбора.</p>
+        <p className="mt-3 text-sm text-muted">
+          Ссылка на площадку недоступна — заказ виден в разделе подбора.
+        </p>
       )}
     </Panel>
   );
@@ -216,11 +217,11 @@ function EmptyGigs({
     <Panel>
       <p className="text-sm leading-relaxed text-muted">
         {narrow
-          ? "Под выбранный фильтр ничего не подошло."
-          : "Подработки и заказов в каталоге сейчас нет."}{" "}
+          ? 'Под выбранный фильтр ничего не подошло.'
+          : 'Подработки и заказов в каталоге сейчас нет.'}{' '}
         {narrow
-          ? "Снимите часть фильтров — так бывает, когда направление выбрано точнее, чем то, что площадки публикуют."
-          : "Источники конечны, и пустой список — это факт, а не сбой: подработка публикуется на hh и собирается из текста вакансий, а заказы — с фриланс-досок, где сегодня может быть тихо."}
+          ? 'Снимите часть фильтров — так бывает, когда направление выбрано точнее, чем то, что площадки публикуют.'
+          : 'Источники конечны, и пустой список — это факт, а не сбой: подработка публикуется на hh и собирается из текста вакансий, а заказы — с фриланс-досок, где сегодня может быть тихо.'}
       </p>
       {narrow ? (
         <Link
@@ -229,11 +230,11 @@ function EmptyGigs({
         >
           Снять фильтры →
         </Link>
-      ) : mode === "фриланс" ? (
+      ) : mode === 'фриланс' ? (
         <p className="mt-3 text-sm leading-relaxed text-muted">
-          Заказы появляются волнами и могут закончиться за день: несколько десятков заказов удерживают
-          ленту, потом она пустеет. Обновление — раз в сутки. На заказы отклик отправляется на самой
-          площадке, автоматической отправки нет.
+          Заказы появляются волнами и могут закончиться за день: несколько десятков заказов
+          удерживают ленту, потом она пустеет. Обновление — раз в сутки. На заказы отклик
+          отправляется на самой площадке, автоматической отправки нет.
         </p>
       ) : (
         <p className="mt-3 text-sm leading-relaxed text-muted">

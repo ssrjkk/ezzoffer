@@ -1,4 +1,4 @@
-import { randomBytes, scrypt, timingSafeEqual } from "node:crypto";
+import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 
 /**
  * Обёртка над callback-API scrypt.
@@ -95,21 +95,21 @@ function derive(
  * изменится. Это осознанный компромисс в пользу совместимости.
  */
 export function normalizePassword(password: string): string {
-  return password.normalize("NFKC");
+  return password.normalize('NFKC');
 }
 
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(SALT_LENGTH);
   const hash = await derive(password, salt, CURRENT_PARAMS);
-  return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${salt.toString("hex")}$${hash.toString("hex")}`;
+  return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${salt.toString('hex')}$${hash.toString('hex')}`;
 }
 
 /** Разбор сохранённого хеша в параметры, соль и ожидаемый дайджест. */
 function parseStored(
   stored: string,
 ): { params: ScryptParams; salt: string | Buffer; hash: Buffer } | null {
-  if (stored.startsWith("scrypt$")) {
-    const parts = stored.split("$");
+  if (stored.startsWith('scrypt$')) {
+    const parts = stored.split('$');
     if (parts.length !== 6) return null;
     const N = Number(parts[1]);
     const r = Number(parts[2]);
@@ -119,18 +119,18 @@ function parseStored(
     // заставили бы процесс выделить гигабайты памяти на каждой проверке.
     if (N > 1_048_576 || r > 32 || p > 16) return null;
     if (N < 2 || r < 1 || p < 1) return null;
-    const salt = Buffer.from(parts[4]!, "hex");
+    const salt = Buffer.from(parts[4]!, 'hex');
     if (salt.length !== SALT_LENGTH) return null;
-    return { params: { N, r, p }, salt, hash: Buffer.from(parts[5]!, "hex") };
+    return { params: { N, r, p }, salt, hash: Buffer.from(parts[5]!, 'hex') };
   }
 
   // Legacy: `salt:hash`. Соль здесь — именно hex-строка, а не декодированные
   // байты: старый код делал scryptSync(password, salt, 64), где salt уже был
   // строкой. Декодирование здесь дало бы другую соль и сломало бы проверку
   // всех паролей, созданных до перехода на версионированный формат.
-  const [salt, hash] = stored.split(":");
+  const [salt, hash] = stored.split(':');
   if (!salt || !hash) return null;
-  return { params: LEGACY_PARAMS, salt, hash: Buffer.from(hash, "hex") };
+  return { params: LEGACY_PARAMS, salt, hash: Buffer.from(hash, 'hex') };
 }
 
 /**

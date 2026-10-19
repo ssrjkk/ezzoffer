@@ -1,11 +1,11 @@
-"use client";
+'use client';
 
-import { useState, type FormEvent } from "react";
-import { AuthPanel, Field, FormError, PanelLink, SubmitButton } from "@/components/auth-shell";
-import { Eyebrow } from "@/components/ui";
+import { useState, type FormEvent } from 'react';
+import { AuthPanel, Field, FormError, PanelLink, SubmitButton } from '@/components/auth-shell';
+import { Eyebrow } from '@/components/ui';
 
 export function ForgotPasswordForm() {
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -15,14 +15,14 @@ export function ForgotPasswordForm() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/auth/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Что-то пошло не так. Попробуйте ещё раз.");
+        setError(data.error ?? 'Что-то пошло не так. Попробуйте ещё раз.');
         return;
       }
       setSent(true);
@@ -37,8 +37,8 @@ export function ForgotPasswordForm() {
         title="Проверьте почту"
         lead={
           <>
-            Если аккаунт с адресом <span className="font-mono text-ink">{email}</span> существует, мы
-            отправили на него письмо со ссылкой для смены пароля. Ссылка действует 1 час.
+            Если аккаунт с адресом <span className="font-mono text-ink">{email}</span> существует,
+            мы отправили на него письмо со ссылкой для смены пароля. Ссылка действует 1 час.
           </>
         }
       >
@@ -54,7 +54,10 @@ export function ForgotPasswordForm() {
   }
 
   return (
-    <AuthPanel title="Восстановление пароля" lead="Укажите email — отправим на него ссылку для смены пароля">
+    <AuthPanel
+      title="Восстановление пароля"
+      lead="Укажите email — отправим на него ссылку для смены пароля"
+    >
       <form onSubmit={onSubmit} className="space-y-5">
         <Eyebrow>Пароль</Eyebrow>
 

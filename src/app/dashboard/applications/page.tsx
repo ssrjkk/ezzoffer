@@ -1,15 +1,15 @@
-import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
-import { listApplications } from "@/lib/applications";
-import { ApplicationsView } from "@/components/dashboard/applications-view";
+import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
+import { getCurrentUser } from '@/lib/auth';
+import { listApplications } from '@/lib/applications';
+import { ApplicationsView } from '@/components/dashboard/applications-view';
 
-export const metadata: Metadata = { title: "Отклики" };
-export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: 'Отклики' };
+export const dynamic = 'force-dynamic';
 
 export default async function ApplicationsPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect('/login');
   const initial = listApplications(user.id);
   return (
     <div>

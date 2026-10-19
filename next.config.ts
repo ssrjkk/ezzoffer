@@ -1,4 +1,4 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
 
 /*
  * Префикс путей для публикации на странице проекта GitHub Pages.
@@ -8,12 +8,12 @@ import type { NextConfig } from "next";
  * откроется голой. Значение приходит из окружения: обычная сборка для VPS и
  * Docker префикса не получает и ведёт себя как раньше.
  */
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 
 const nextConfig: NextConfig = {
   ...(basePath ? { basePath, assetPrefix: basePath } : {}),
   // Автономная сборка для простого деплоя (VPS/Docker): .next/standalone
-  output: "standalone",
+  output: 'standalone',
   // Не отдавать наружу версию фреймворка: заголовок X-Powered-By упрощает
   // подбор известных эксплойтов и не даёт посетителю никакой пользы.
   // Через headers() это не убирается — Next добавляет его сам, поэтому
@@ -30,27 +30,27 @@ const nextConfig: NextConfig = {
   // (хэши паролей, OAuth-токены) и бэкапами. Каталог создаётся при старте,
   // поэтому в образе ему не место: данные приходят из volume.
   outputFileTracingExcludes: {
-    "/*": ["data/**/*"],
-    "instrumentation": ["data/**/*"],
-    "middleware": ["data/**/*"],
+    '/*': ['data/**/*'],
+    instrumentation: ['data/**/*'],
+    middleware: ['data/**/*'],
   },
   async headers() {
     // Заголовки безопасности. Раньше отсутствовали CSP и HSTS — при этом
     // набор остальных (X-Frame-Options, nosniff, Referrer-Policy) уже был.
     const securityHeaders = [
-      { key: "X-Frame-Options", value: "SAMEORIGIN" },
-      { key: "X-Content-Type-Options", value: "nosniff" },
-      { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-      { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-      { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+      { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
+      { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+      { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+      { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
       // HSTS: браузер запоминает, что на этот домен нужно ходить только по HTTPS.
       // Включается всегда — для локальной разработки по http://localhost это
       // безвредно (браузеры не применяют HSTS к localhost).
-      { key: "Strict-Transport-Security", value: "max-age=31536000; includeSubDomains" },
+      { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },
       // Запрет обращений к API из чужих источников (нужен для fetch с credentials).
-      { key: "X-DNS-Prefetch-Control", value: "off" },
+      { key: 'X-DNS-Prefetch-Control', value: 'off' },
       // Не отдавать версию движка наружу: облегчает подбор эксплойтов.
-      { key: "X-Powered-By", value: "" },
+      { key: 'X-Powered-By', value: '' },
     ];
 
     /**
@@ -76,21 +76,18 @@ const nextConfig: NextConfig = {
       "base-uri 'self'",
       "form-action 'self'",
       "object-src 'none'",
-    ].join("; ");
+    ].join('; ');
 
     return [
       {
-        source: "/:path*",
-        headers: [
-          ...securityHeaders,
-          { key: "Content-Security-Policy", value: csp },
-        ],
+        source: '/:path*',
+        headers: [...securityHeaders, { key: 'Content-Security-Policy', value: csp }],
       },
       // API-ответы не должны кэшироваться прокси: они содержат персональные
       // данные пользователя (профиль, статистика, резюме).
       {
-        source: "/api/:path*",
-        headers: [...securityHeaders, { key: "Cache-Control", value: "private, no-store" }],
+        source: '/api/:path*',
+        headers: [...securityHeaders, { key: 'Cache-Control', value: 'private, no-store' }],
       },
     ];
   },

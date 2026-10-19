@@ -18,26 +18,26 @@
 
 /** IPv4-подсети, которые не должны быть достижимы извне. */
 const BLOCKED_IPV4: { cidr: string; base: number; bits: number }[] = [
-  { cidr: "0.0.0.0/8", base: 0x00000000, bits: 8 },
-  { cidr: "10.0.0.0/8", base: 0x0a000000, bits: 8 },
-  { cidr: "100.64.0.0/10", base: 0x64400000, bits: 10 },
-  { cidr: "127.0.0.0/8", base: 0x7f000000, bits: 8 },
-  { cidr: "169.254.0.0/16", base: 0xa9fe0000, bits: 16 },
-  { cidr: "172.16.0.0/12", base: 0xac100000, bits: 12 },
-  { cidr: "192.0.0.0/24", base: 0xc0000000, bits: 24 },
-  { cidr: "192.168.0.0/16", base: 0xc0a80000, bits: 16 },
-  { cidr: "198.18.0.0/15", base: 0xc6120000, bits: 15 },
-  { cidr: "224.0.0.0/4", base: 0xe0000000, bits: 4 },
-  { cidr: "240.0.0.0/4", base: 0xf0000000, bits: 4 },
+  { cidr: '0.0.0.0/8', base: 0x00000000, bits: 8 },
+  { cidr: '10.0.0.0/8', base: 0x0a000000, bits: 8 },
+  { cidr: '100.64.0.0/10', base: 0x64400000, bits: 10 },
+  { cidr: '127.0.0.0/8', base: 0x7f000000, bits: 8 },
+  { cidr: '169.254.0.0/16', base: 0xa9fe0000, bits: 16 },
+  { cidr: '172.16.0.0/12', base: 0xac100000, bits: 12 },
+  { cidr: '192.0.0.0/24', base: 0xc0000000, bits: 24 },
+  { cidr: '192.168.0.0/16', base: 0xc0a80000, bits: 16 },
+  { cidr: '198.18.0.0/15', base: 0xc6120000, bits: 15 },
+  { cidr: '224.0.0.0/4', base: 0xe0000000, bits: 4 },
+  { cidr: '240.0.0.0/4', base: 0xf0000000, bits: 4 },
 ];
 
 const BLOCKED_HOSTNAMES = new Set([
-  "localhost",
-  "localhost.localdomain",
-  "ip6-localhost",
-  "ip6-loopback",
-  "metadata",
-  "metadata.google.internal",
+  'localhost',
+  'localhost.localdomain',
+  'ip6-localhost',
+  'ip6-loopback',
+  'metadata',
+  'metadata.google.internal',
 ]);
 
 function parseIpv4(host: string): number | null {
@@ -87,10 +87,10 @@ const IPV4_MAPPED_MARKER = 0x0000ffff;
  */
 function parseIpv6(host: string): number[] | null {
   let h = host;
-  if (h.startsWith("[") && h.endsWith("]")) h = h.slice(1, -1);
+  if (h.startsWith('[') && h.endsWith(']')) h = h.slice(1, -1);
   // zone-id (fe80::1%eth0) не влияет на маршрутизацию для наших целей.
-  h = h.split("%")[0]!;
-  if (!h.includes(":")) return null;
+  h = h.split('%')[0]!;
+  if (!h.includes(':')) return null;
 
   // Embedded IPv4 в конце («::ffff:127.0.0.1»).
   const v4 = /(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(h);
@@ -105,7 +105,7 @@ function parseIpv6(host: string): number[] | null {
   const parseSide = (s: string): number[] | null => {
     if (!s) return [];
     const out: number[] = [];
-    for (const part of s.split(":").filter((p) => p !== "")) {
+    for (const part of s.split(':').filter((p) => p !== '')) {
       const n = parseInt(part, 16);
       if (!Number.isInteger(n) || n < 0 || n > 0xffff) return null;
       out.push(n);
@@ -113,8 +113,8 @@ function parseIpv6(host: string): number[] | null {
     return out;
   };
 
-  const hasDoubleColon = h.includes("::");
-  const [leftPart, rightPart] = hasDoubleColon ? h.split("::") : [h, ""];
+  const hasDoubleColon = h.includes('::');
+  const [leftPart, rightPart] = hasDoubleColon ? h.split('::') : [h, ''];
   const left = parseSide(leftPart);
   const right = rightPart ? parseSide(rightPart) : [];
   if (left === null || right === null) return null;
@@ -142,7 +142,7 @@ function matchesPrefix(words: number[], prefix: number[], bits: number): boolean
     const take = Math.min(32, remaining);
     // take===32 сдвигает на 0, что корректно; охраняем только take===0.
     const mask = take === 0 ? 0 : (0xffffffff << (32 - take)) >>> 0;
-    if (((words[i]! & mask) >>> 0) !== ((prefix[i]! & mask) >>> 0)) return false;
+    if ((words[i]! & mask) >>> 0 !== (prefix[i]! & mask) >>> 0) return false;
     remaining -= take;
   }
   return true;
@@ -181,22 +181,22 @@ export function assertOutboundUrlAllowed(raw: string): string | null {
   try {
     url = new URL(raw);
   } catch {
-    return "некорректный URL";
+    return 'некорректный URL';
   }
 
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     return `схема ${url.protocol} запрещена (нужна http или https)`;
   }
 
   const host = url.hostname.toLowerCase();
-  if (!host) return "пустой хост";
+  if (!host) return 'пустой хост';
   if (BLOCKED_HOSTNAMES.has(host)) return `хост ${host} запрещён`;
   // Служебные домены внутренней сети и одноточечные имена.
-  if (host.endsWith(".local") || host.endsWith(".internal") || host.endsWith(".localhost")) {
+  if (host.endsWith('.local') || host.endsWith('.internal') || host.endsWith('.localhost')) {
     return `домен ${host} запрещён`;
   }
   // Без точки — одиночный label обычно означает внутреннее имя в поиске домена.
-  if (!host.includes(".") && !host.includes(":")) {
+  if (!host.includes('.') && !host.includes(':')) {
     return `одноточечное имя ${host} запрещено`;
   }
 

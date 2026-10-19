@@ -11,7 +11,7 @@
 const PLAIN_POSITIVE_ID = /^[1-9]\d*$/;
 
 export function parseParamId(value: string | undefined): number | null {
-  if (typeof value !== "string") return null;
+  if (typeof value !== 'string') return null;
   if (!PLAIN_POSITIVE_ID.test(value)) return null;
   const n = Number(value);
   return Number.isSafeInteger(n) ? n : null;
@@ -19,25 +19,22 @@ export function parseParamId(value: string | undefined): number | null {
 
 export function isUniqueViolation(err: unknown): boolean {
   return (
-    typeof err === "object" &&
+    typeof err === 'object' &&
     err !== null &&
-    "code" in err &&
-    (err as { code?: unknown }).code === "SQLITE_CONSTRAINT_UNIQUE"
+    'code' in err &&
+    (err as { code?: unknown }).code === 'SQLITE_CONSTRAINT_UNIQUE'
   );
 }
 
 export function toPositiveNumber(v: unknown): number | null {
-  if (v === null || v === undefined || v === "") return null;
+  if (v === null || v === undefined || v === '') return null;
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-export function validateSalaryRange(
-  min: number | null,
-  max: number | null,
-): string | null {
+export function validateSalaryRange(min: number | null, max: number | null): string | null {
   if (min !== null && max !== null && min > max) {
-    return "Минимальная зарплата не может быть больше максимальной";
+    return 'Минимальная зарплата не может быть больше максимальной';
   }
   return null;
 }

@@ -1,7 +1,7 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import Database from "better-sqlite3";
-import { migrateApplicationsResumeId } from "../src/lib/db-migrations";
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import Database from 'better-sqlite3';
+import { migrateApplicationsResumeId } from '../src/lib/db-migrations';
 
 /**
  * Пересборка applications при смене типа resume_id.
@@ -39,7 +39,7 @@ const SCHEMA = `
 `;
 
 function makeDb(): Database.Database {
-  const db = new Database(":memory:");
+  const db = new Database(':memory:');
   db.exec(SCHEMA);
   db.prepare("INSERT INTO users (id, email) VALUES (1, 'a@b.test')").run();
   return db;
@@ -57,38 +57,41 @@ function addApp(db: Database.Database, resumeId: string | null): number {
   );
 }
 
-test("числовой hh-id перестаёт превращаться в число", () => {
+test('числовой hh-id перестаёт превращаться в число', () => {
   /*
    * Именно это и ломало поиск резюме. Колонка INTEGER заставляла SQLite
    * привести «7» к 7, а сравнение `hh_id = 7` по строке «7» уже не находило
    * ничего — молча, без ошибки.
    */
   const db = makeDb();
-  addApp(db, "7");
+  addApp(db, '7');
   migrateApplicationsResumeId(db);
-  const row = db.prepare("SELECT resume_id, typeof(resume_id) AS ty FROM applications").get() as {
+  const row = db.prepare('SELECT resume_id, typeof(resume_id) AS ty FROM applications').get() as {
     resume_id: unknown;
     ty: string;
   };
-  assert.equal(row.ty, "text", `после миграции тип всё ещё ${row.ty}`);
-  assert.equal(String(row.resume_id), "7", "значение id изменилось");
+  assert.equal(row.ty, 'text', `после миграции тип всё ещё ${row.ty}`);
+  assert.equal(String(row.resume_id), '7', 'значение id изменилось');
 
   // И главное: теперь оно находится так же, как в резюме.
-  db.exec("CREATE TABLE resumes (id INTEGER PRIMARY KEY, hh_id TEXT)");
+  db.exec('CREATE TABLE resumes (id INTEGER PRIMARY KEY, hh_id TEXT)');
   db.prepare("INSERT INTO resumes (id, hh_id) VALUES (1, '7')").run();
-  const found = db.prepare("SELECT id FROM resumes WHERE hh_id = ?").get(row.resume_id);
-  assert.ok(found, "id из applications не находится в resumes.hh_id после миграции");
+  const found = db.prepare('SELECT id FROM resumes WHERE hh_id = ?').get(row.resume_id);
+  assert.ok(found, 'id из applications не находится в resumes.hh_id после миграции');
   db.close();
 });
 
-test("остальные поля и строки переживают пересборку", () => {
+test('остальные поля и строки переживают пересборку', () => {
   const db = makeDb();
-  const a = addApp(db, "7");
-  const b = addApp(db, "abc123");
+  const a = addApp(db, '7');
+  const b = addApp(db, 'abc123');
   const c = addApp(db, null);
   migrateApplicationsResumeId(db);
 
-  const rows = db.prepare("SELECT * FROM applications ORDER BY id").all() as Record<string, unknown>[];
+  const rows = db.prepare('SELECT * FROM applications ORDER BY id').all() as Record<
+    string,
+    unknown
+  >[];
   assert.equal(rows.length, 3, `после миграции ${rows.length} строк вместо трёх`);
   /*
    * NULL остаётся NULL, а не превращается в строку "null".
@@ -96,26 +99,34 @@ test("остальные поля и строки переживают пере�
    * тест ругался бы на совершенно правильные данные.
    */
   assert.deepEqual(
-    rows.map((r) => (r.resume_id === null ? "<null>" : String(r.resume_id))),
-    ["7", "abc123", "<null>"],
-    "resume_id искажены",
+    rows.map((r) => (r.resume_id === null ? '<null>' : String(r.resume_id))),
+    ['7', 'abc123', '<null>'],
+    'resume_id искажены',
   );
   const typed = db
-    .prepare("SELECT typeof(resume_id) AS ty FROM applications ORDER BY id")
+    .prepare('SELECT typeof(resume_id) AS ty FROM applications ORDER BY id')
     .all() as { ty: string }[];
-  assert.deepEqual(typed.map((t) => t.ty), ["text", "text", "null"], "типы значений неверны");
-  assert.deepEqual(rows.map((r) => r.id), [a, b, c], "идентификаторы поехали");
+  assert.deepEqual(
+    typed.map((t) => t.ty),
+    ['text', 'text', 'null'],
+    'типы значений неверны',
+  );
+  assert.deepEqual(
+    rows.map((r) => r.id),
+    [a, b, c],
+    'идентификаторы поехали',
+  );
 
   const first = rows[0]!;
   assert.equal(first.user_id, 1);
-  assert.equal(first.job_slug, "hh-x");
+  assert.equal(first.job_slug, 'hh-x');
   assert.equal(first.search_id, 5);
   assert.equal(first.letter_id, 9);
-  assert.equal(first.status, "sent");
-  assert.equal(first.response, "отказ");
-  assert.equal(first.response_note, "не подошёл опыт");
-  assert.equal(first.message, "письмо");
-  assert.equal(first.external_url, "https://x.test");
+  assert.equal(first.status, 'sent');
+  assert.equal(first.response, 'отказ');
+  assert.equal(first.response_note, 'не подошёл опыт');
+  assert.equal(first.message, 'письмо');
+  assert.equal(first.external_url, 'https://x.test');
   assert.equal(first.sent_at, 100);
   assert.equal(first.viewed_at, 200);
   assert.equal(first.responded_at, 300);
@@ -123,20 +134,21 @@ test("остальные поля и строки переживают пере�
   db.close();
 });
 
-test("миграция не срабатывает повторно", () => {
+test('миграция не срабатывает повторно', () => {
   const db = makeDb();
-  addApp(db, "7");
+  addApp(db, '7');
   migrateApplicationsResumeId(db);
-  const first = db.prepare("SELECT * FROM applications").all();
+  const first = db.prepare('SELECT * FROM applications').all();
 
   migrateApplicationsResumeId(db);
   migrateApplicationsResumeId(db);
 
-  const after = db.prepare("SELECT * FROM applications").all();
-  assert.deepEqual(after, first, "повторный запуск миграции изменил данные");
-  const type = (db.prepare("PRAGMA table_info(applications)").all() as { name: string; type: string }[])
-    .find((c) => c.name === "resume_id");
-  assert.equal(type?.type.toUpperCase(), "TEXT", `тип снова ${type?.type}`);
+  const after = db.prepare('SELECT * FROM applications').all();
+  assert.deepEqual(after, first, 'повторный запуск миграции изменил данные');
+  const type = (
+    db.prepare('PRAGMA table_info(applications)').all() as { name: string; type: string }[]
+  ).find((c) => c.name === 'resume_id');
+  assert.equal(type?.type.toUpperCase(), 'TEXT', `тип снова ${type?.type}`);
   db.close();
 });
 
@@ -148,10 +160,10 @@ test("миграция не срабатывает повторно", () => {
  * столкнулся бы с существующей строкой, либо затёр её при последующем INSERT.
  * Тихая потеря истории откликов — самый дорогой вид поломки здесь.
  */
-test("после пересборки новые отклики не начинают нумерацию заново", () => {
+test('после пересборки новые отклики не начинают нумерацию заново', () => {
   const db = makeDb();
-  const first = addApp(db, "7");
-  const second = addApp(db, "abc");
+  const first = addApp(db, '7');
+  const second = addApp(db, 'abc');
   migrateApplicationsResumeId(db);
 
   const nextId = Number(
@@ -167,37 +179,39 @@ test("после пересборки новые отклики не начин�
     `нумерация началась заново: было ${second}, стало ${nextId} — возможна перезапись истории`,
   );
   assert.notEqual(nextId, first);
-  assert.equal((db.prepare("SELECT COUNT(*) AS c FROM applications").get() as { c: number }).c, 3);
+  assert.equal((db.prepare('SELECT COUNT(*) AS c FROM applications').get() as { c: number }).c, 3);
   db.close();
 });
 
-test("после миграции остаются все индексы", () => {
+test('после миграции остаются все индексы', () => {
   /*
    * Индексы не переживают DROP/CREATE таблицы. Без них выборка откликов
    * пользователя сканировала бы таблицу целиком — и на реальных объёмах
    * кабинет стал бы открываться заметно медленнее, без единой ошибки.
    */
   const db = makeDb();
-  addApp(db, "7");
+  addApp(db, '7');
   migrateApplicationsResumeId(db);
 
-  const names = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as {
-    name: string;
-  }[]).map((r) => r.name);
+  const names = (
+    db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all() as {
+      name: string;
+    }[]
+  ).map((r) => r.name);
   for (const expected of [
-    "idx_applications_user",
-    "idx_applications_job",
-    "idx_applications_user_sent",
-    "idx_applications_user_job",
+    'idx_applications_user',
+    'idx_applications_job',
+    'idx_applications_user_sent',
+    'idx_applications_user_job',
   ]) {
     assert.ok(names.includes(expected), `индекс ${expected} не восстановлен после пересборки`);
   }
   db.close();
 });
 
-test("пустая таблица переезжает без ошибок", () => {
+test('пустая таблица переезжает без ошибок', () => {
   const db = makeDb();
   migrateApplicationsResumeId(db);
-  assert.equal((db.prepare("SELECT COUNT(*) AS c FROM applications").get() as { c: number }).c, 0);
+  assert.equal((db.prepare('SELECT COUNT(*) AS c FROM applications').get() as { c: number }).c, 0);
   db.close();
 });

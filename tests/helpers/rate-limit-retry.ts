@@ -36,10 +36,12 @@ export async function retryOn429<T extends { status(): number; headers?: unknown
     // Своё окно лучше заголованного: попытка вслепую сожжёт время прогона.
     if (i < attempts - 1) {
       const header = (res as { headers?: { get(n: string): string | null } }).headers?.get?.(
-        "retry-after",
+        'retry-after',
       );
       const seconds = Number(header);
-      await sleep(Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds * 1000, 60_000) : 2_000);
+      await sleep(
+        Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds * 1000, 60_000) : 2_000,
+      );
     }
   }
   return last as T;
@@ -56,7 +58,7 @@ export async function gotoRetry(
   page: {
     goto: (
       u: string,
-      o?: { waitUntil?: "load" | "domcontentloaded" | "networkidle" | "commit" },
+      o?: { waitUntil?: 'load' | 'domcontentloaded' | 'networkidle' | 'commit' },
     ) => Promise<{ status(): number } | null>;
   },
   url: string,
@@ -65,7 +67,7 @@ export async function gotoRetry(
   for (let i = 0; i < attempts; i++) {
     let status = 0;
     try {
-      const res = await page.goto(url, { waitUntil: "domcontentloaded" });
+      const res = await page.goto(url, { waitUntil: 'domcontentloaded' });
       status = res ? res.status() : 0;
     } catch {
       status = 0;

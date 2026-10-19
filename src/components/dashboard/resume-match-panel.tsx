@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { btnGhost } from "@/components/dashboard/ui";
+import { useState } from 'react';
+import { btnGhost } from '@/components/dashboard/ui';
 
 /**
  * Проверка резюме по тексту вакансии.
@@ -25,7 +25,7 @@ type Match = {
 };
 
 export function ResumeMatchPanel({ resumeId }: { resumeId: number }) {
-  const [vacancy, setVacancy] = useState("");
+  const [vacancy, setVacancy] = useState('');
   const [match, setMatch] = useState<Match | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -35,18 +35,18 @@ export function ResumeMatchPanel({ resumeId }: { resumeId: number }) {
     setError(null);
     try {
       const res = await fetch(`/api/resumes/${resumeId}/match`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ vacancy }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error ?? "Не удалось проверить резюме");
+        setError(data.error ?? 'Не удалось проверить резюме');
         return;
       }
       setMatch(data.match as Match);
     } catch {
-      setError("Не удалось проверить резюме: нет связи с сервером");
+      setError('Не удалось проверить резюме: нет связи с сервером');
     } finally {
       setBusy(false);
     }
@@ -58,8 +58,8 @@ export function ResumeMatchPanel({ resumeId }: { resumeId: number }) {
     <div className="mt-4 border-t border-line pt-4">
       <h3 className="font-serif text-base leading-snug text-ink">Сверить с вакансией</h3>
       <p className="mt-1 text-sm text-muted">
-        Вставьте текст вакансии — покажем, какие требования в резюме уже
-        закрыты своими словами и каких не хватает.
+        Вставьте текст вакансии — покажем, какие требования в резюме уже закрыты своими словами и
+        каких не хватает.
       </p>
 
       <textarea
@@ -70,24 +70,22 @@ export function ResumeMatchPanel({ resumeId }: { resumeId: number }) {
         className="mt-3 w-full rounded-sm border border-line bg-surface-2 p-3 text-sm text-ink"
       />
 
-      <div className="mt-3 flex items-center gap-3">
+      <div className="mt-3 flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={() => void run()}
           disabled={busy || vacancy.trim().length === 0}
           className={btnGhost}
         >
-          {busy ? "Сверяем…" : "Сверить"}
+          {busy ? 'Сверяем…' : 'Сверить'}
         </button>
         {percent !== null && (
-          <span className="font-mono text-xs text-muted">
-            Совпадение по словам: {percent}%
-          </span>
+          <span className="font-mono text-xs text-muted">Совпадение по словам: {percent}%</span>
         )}
       </div>
 
-      <p role="alert" className={error ? "mt-3 text-sm text-danger" : "sr-only"}>
-        {error ?? ""}
+      <p role="alert" className={error ? 'mt-3 text-sm text-danger' : 'sr-only'}>
+        {error ?? ''}
       </p>
 
       {match && (
@@ -119,12 +117,10 @@ export function ResumeMatchPanel({ resumeId }: { resumeId: number }) {
 
           {match.missing.length > 0 && (
             <div>
-              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-warn">
-                Пробелы
-              </p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-warn">Пробелы</p>
               <p className="mt-1 text-xs text-muted">
-                Это требования вакансии, которых в резюме нет. Если опыт есть —
-                опишите его своими словами. Если нет — это честный пробел.
+                Это требования вакансии, которых в резюме нет. Если опыт есть — опишите его своими
+                словами. Если нет — это честный пробел.
               </p>
               <ul className="mt-2 space-y-1">
                 {match.missing.map((m) => (

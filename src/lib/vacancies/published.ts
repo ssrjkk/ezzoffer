@@ -16,7 +16,7 @@
 export function parsePublishedAt(value: string | number | null | undefined): number | null {
   if (value == null) return null;
 
-  if (typeof value === "number") {
+  if (typeof value === 'number') {
     // Секунды или миллисекунды — определяем по величине.
     if (!Number.isFinite(value) || value <= 0) return null;
     return value > 1e11 ? Math.round(value) : Math.round(value * 1000);
@@ -43,12 +43,16 @@ export function parsePublishedAt(value: string | number | null | undefined): num
  */
 export function relativePosted(iso: string | number | null | undefined): string {
   const ms = parsePublishedAt(iso);
-  if (ms === null) return "дата неизвестна";
+  if (ms === null) return 'дата неизвестна';
 
   const days = Math.floor((Date.now() - ms) / 86_400_000);
-  if (days <= 0) return "сегодня";
-  if (days === 1) return "вчера";
+  if (days <= 0) return 'сегодня';
+  if (days === 1) return 'вчера';
   if (days < 7) return `${days} дн. назад`;
   if (days < 30) return `${Math.floor(days / 7)} нед. назад`;
-  return new Date(ms).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return new Date(ms).toLocaleDateString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
 }

@@ -1,6 +1,6 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { chromium } from "playwright";
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { chromium } from 'playwright';
 
 /**
  * Страницы в настоящем браузере.
@@ -15,21 +15,21 @@ import { chromium } from "playwright";
  * месте и без скриптов. Проверка остаётся, чтобы это не разъехалось позже.
  */
 
-const BASE = process.env.BASE ?? "http://localhost:3121";
+const BASE = process.env.BASE ?? 'http://localhost:3121';
 
 const PAGES = [
-  "/",
-  "/about",
-  "/blog",
-  "/faq",
-  "/platform-rules",
-  "/pricing",
-  "/reviews",
-  "/internships",
-  "/jobs",
-  "/resume-examples",
-  "/login",
-  "/signup",
+  '/',
+  '/about',
+  '/blog',
+  '/faq',
+  '/platform-rules',
+  '/pricing',
+  '/reviews',
+  '/internships',
+  '/jobs',
+  '/resume-examples',
+  '/login',
+  '/signup',
 ];
 
 async function sweep(): Promise<string[]> {
@@ -41,40 +41,41 @@ async function sweep(): Promise<string[]> {
     const page = await ctx.newPage();
     const failed: string[] = [];
 
-    page.on("console", (m) => {
-      if (m.type() === "error") failed.push(`ошибка в консоли: ${m.text().slice(0, 120)}`);
+    page.on('console', (m) => {
+      if (m.type() === 'error') failed.push(`ошибка в консоли: ${m.text().slice(0, 120)}`);
     });
-    page.on("requestfailed", (r) => {
+    page.on('requestfailed', (r) => {
       // Префетч Next.js отменяется при уходе со страницы — это норма, а не поломка.
-      const err = r.failure()?.errorText ?? "";
-      if (r.url().includes("_rsc=") || err.includes("ERR_ABORTED")) return;
+      const err = r.failure()?.errorText ?? '';
+      if (r.url().includes('_rsc=') || err.includes('ERR_ABORTED')) return;
       failed.push(`запрос не прошёл: ${r.url().slice(0, 80)}`);
     });
-    page.on("response", (r) => {
+    page.on('response', (r) => {
       if (r.status() >= 400) failed.push(`${r.url().slice(0, 80)} -> ${r.status()}`);
     });
 
     // Страница у человека без JavaScript.
     const noJs = await ctx.newPage();
-    await noJs.route("**/*", (route) =>
-      route.request().resourceType() === "script" ? route.abort() : route.continue(),
+    await noJs.route('**/*', (route) =>
+      route.request().resourceType() === 'script' ? route.abort() : route.continue(),
     );
-    await noJs.goto(`${BASE}${path}`, { waitUntil: "domcontentloaded" });
+    await noJs.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
     const blankNoJs = await noJs.evaluate(() => document.body.innerText.trim().length);
     await noJs.close();
 
-    const res = await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
+    const res = await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' });
     const status = res?.status() ?? 0;
 
     const info = await page.evaluate(() => {
-      const imgs = [...document.querySelectorAll("img")];
+      const imgs = [...document.querySelectorAll('img')];
       return {
-        h1: document.querySelectorAll("h1").length,
+        h1: document.querySelectorAll('h1').length,
         title: document.title.trim(),
-        lang: document.documentElement.getAttribute("lang"),
+        lang: document.documentElement.getAttribute('lang'),
         brokenImgs: imgs.filter((img) => img.complete && img.naturalWidth === 0).length,
-        emptyLinks: [...document.querySelectorAll("a")].filter(
-          (a) => !a.textContent?.trim() && !a.getAttribute("aria-label") && !a.querySelector("img,svg"),
+        emptyLinks: [...document.querySelectorAll('a')].filter(
+          (a) =>
+            !a.textContent?.trim() && !a.getAttribute('aria-label') && !a.querySelector('img,svg'),
         ).length,
       };
     });
@@ -96,7 +97,7 @@ async function sweep(): Promise<string[]> {
   return problems;
 }
 
-test("страницы открываются в настоящем браузере без изъянов", async (t) => {
+test('страницы открываются в настоящем браузере без изъянов', async (t) => {
   let problems: string[];
   try {
     problems = await sweep();
@@ -104,5 +105,5 @@ test("страницы открываются в настоящем браузе
     t.skip(`браузер недоступен: ${(e as Error).message.slice(0, 90)}`);
     return;
   }
-  assert.deepEqual(problems, [], `замечания по страницам:\n      ${problems.join("\n      ")}`);
+  assert.deepEqual(problems, [], `замечания по страницам:\n      ${problems.join('\n      ')}`);
 });

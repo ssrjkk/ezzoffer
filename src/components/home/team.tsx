@@ -1,6 +1,6 @@
-import { Section, SectionHead, PrimaryButton } from "@/components/ui";
-import { Reveal } from "@/components/reveal";
-import { team } from "@/lib/data";
+import { Section, SectionHead, PrimaryButton } from '@/components/ui';
+import { Reveal } from '@/components/reveal';
+import { team } from '@/lib/data';
 
 export function Team() {
   return (

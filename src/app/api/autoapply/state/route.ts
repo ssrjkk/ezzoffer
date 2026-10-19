@@ -1,14 +1,14 @@
-import { requireUser, unauthorized } from "@/lib/api";
-import { db } from "@/lib/db";
-import { NO_STORE_HEADERS } from "@/lib/http";
-import { loadLastRun } from "@/lib/autoapply-store";
+import { requireUser, unauthorized } from '@/lib/api';
+import { db } from '@/lib/db';
+import { NO_STORE_HEADERS } from '@/lib/http';
+import { loadLastRun } from '@/lib/autoapply-store';
 
 export async function GET() {
   const user = await requireUser();
   if (!user) return unauthorized();
   const row = db
     .prepare(
-      "SELECT autoapply_paused, autoapply_blocked_until, autoapply_block_reason FROM users WHERE id = ?",
+      'SELECT autoapply_paused, autoapply_blocked_until, autoapply_block_reason FROM users WHERE id = ?',
     )
     .get(user.id) as {
     autoapply_paused: number;
@@ -32,7 +32,7 @@ export async function GET() {
       paused: Boolean(row.autoapply_paused),
       blocked,
       blockedUntil: blocked ? until : 0,
-      blockedReason: blocked ? (row.autoapply_block_reason ?? "") : "",
+      blockedReason: blocked ? (row.autoapply_block_reason ?? '') : '',
       lastRun: loadLastRun(),
     },
     { headers: NO_STORE_HEADERS },

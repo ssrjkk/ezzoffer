@@ -1,13 +1,13 @@
-import type { Metadata } from "next";
-import { ResetPasswordForm } from "@/components/reset-password-form";
+import type { Metadata } from 'next';
+import { ResetPasswordForm } from '@/components/reset-password-form';
 
 export const metadata: Metadata = {
-  title: "Новый пароль",
-  description: "Задайте новый пароль для аккаунта EZOffer.",
+  title: 'Новый пароль',
+  description: 'Задайте новый пароль для аккаунта EZOffer.',
   robots: { index: false, follow: false },
 };
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 
 export default function ResetPasswordPage() {
   return (

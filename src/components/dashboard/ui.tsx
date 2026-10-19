@@ -1,30 +1,32 @@
-import type { JSX } from "react";
+import type { JSX } from 'react';
 
 // Живая область для сообщений живёт в общем модуле: она нужна и кабинету,
 // и публичным страницам (тарифы, формы входа). Здесь — реэкспорт, чтобы
 // существующие импорты кабинетных компонентов не ломались.
-export { StatusMessage } from "@/components/ui";
+export { StatusMessage } from '@/components/ui';
 
 export function Badge({
   children,
-  tone = "neutral",
+  tone = 'neutral',
 }: {
   children: React.ReactNode;
-  tone?: "neutral" | "accent" | "accent-2" | "cyan" | "success" | "warn" | "danger";
+  tone?: 'neutral' | 'accent' | 'accent-2' | 'cyan' | 'success' | 'warn' | 'danger';
 }) {
   const cls = {
-    neutral: "border-line bg-surface-2 text-muted",
+    neutral: 'border-line bg-surface-2 text-muted',
     // text-accent-2, а не text-accent: accent настроен как ФОН под белый текст
     // (5.22:1), но как цвет текста на своей подложке даёт 3.28:1.
-    accent: "border-accent/20 bg-accent/10 text-accent-2",
-    "accent-2": "border-accent-2/20 bg-accent-2/10 text-accent-2",
-    cyan: "border-cyan/20 bg-cyan/10 text-cyan",
-    success: "border-success/20 bg-success/10 text-success",
-    warn: "border-warn/20 bg-warn/10 text-warn",
-    danger: "border-danger/20 bg-danger/10 text-danger",
+    accent: 'border-accent/20 bg-accent/10 text-accent-2',
+    'accent-2': 'border-accent-2/20 bg-accent-2/10 text-accent-2',
+    cyan: 'border-cyan/20 bg-cyan/10 text-cyan',
+    success: 'border-success/20 bg-success/10 text-success',
+    warn: 'border-warn/20 bg-warn/10 text-warn',
+    danger: 'border-danger/20 bg-danger/10 text-danger',
   }[tone];
   return (
-    <span className={`inline-flex items-center gap-1 rounded-sm border px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-[0.12em] ${cls}`}>
+    <span
+      className={`inline-flex items-center gap-1 rounded-sm border px-2.5 py-0.5 font-mono text-[11px] uppercase tracking-[0.12em] ${cls}`}
+    >
       {children}
     </span>
   );
@@ -53,7 +55,9 @@ export function SectionHead({
   if (center) {
     return (
       <div className="mx-auto mb-12 max-w-3xl text-center md:mb-16">
-        <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.16em] text-accent">{eyebrow}</p>
+        <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.16em] text-accent">
+          {eyebrow}
+        </p>
         <h2 className="display text-balance text-3xl text-ink md:text-5xl">{title}</h2>
         {sub ? (
           <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted md:text-lg">
@@ -80,7 +84,7 @@ export function SectionHead({
 
 export function Panel({
   children,
-  className = "",
+  className = '',
 }: {
   children: React.ReactNode;
   className?: string;
@@ -101,20 +105,20 @@ export function StatCard({
   value,
   sub,
   icon,
-  accent = "accent",
+  accent = 'accent',
 }: {
   label: string;
   value: string | number;
   sub?: string;
   icon?: JSX.Element;
-  accent?: "accent" | "accent-2" | "cyan" | "success" | "warn";
+  accent?: 'accent' | 'accent-2' | 'cyan' | 'success' | 'warn';
 }) {
   const color = {
-    accent: "text-accent",
-    "accent-2": "text-accent-2",
-    cyan: "text-cyan",
-    success: "text-success",
-    warn: "text-warn",
+    accent: 'text-accent',
+    'accent-2': 'text-accent-2',
+    cyan: 'text-cyan',
+    success: 'text-success',
+    warn: 'text-warn',
   }[accent];
 
   return (
@@ -177,14 +181,38 @@ export function EmptyState({
   );
 }
 
+/**
+ * Общий вид поля ввода. ШИРИНЫ ЗДЕСЬ НЕТ.
+ *
+ * Раньше строка заканчивалась на `w-full`, и это молча ломало всё, что её
+ * использовало: в jobs-explorer к `${inputCls}` дописывались `w-44`, `w-36`,
+ * `w-32`, `w-56` для фильтров, и они не работали.
+ *
+ * Причина в том, как Tailwind собирает CSS: порядок правил в табличении
+ * решает каскад, а НЕ порядок классов в атрибуте. Проверено на той же
+ * сборке проекта (tailwindcss 4.3.3):
+ *
+ *     623:  .w-32
+ *     626:  .w-36
+ *     632:  .w-44
+ *     638:  .w-56
+ *     653:  .w-full      ← позже всех, поэтому побеждает
+ *
+ * То есть шесть полей фильтра рисовались во всю ширину контейнера, а их
+ * `w-*` были мёртвым кодом: панель фильтров выглядела пятью полноширинными
+ * строками вместо компактного кластера. Ни ошибки, ни предупреждения.
+ *
+ * Ширина теперь задаётся на месте использования: `w-full sm:w-44` и так
+ * далее. Так она работает всегда и читается сразу.
+ */
 export const inputCls =
-  "w-full rounded-sm border border-line-strong bg-surface-2 px-3.5 py-2.5 text-sm text-ink outline-none transition placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/25";
+  'min-w-0 rounded-sm border border-line-strong bg-surface-2 px-3.5 py-2.5 text-sm text-ink outline-none transition placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/25';
 
 export const btnPrimary =
-  "inline-flex items-center justify-center gap-2 rounded-sm bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60";
+  'inline-flex items-center justify-center gap-2 rounded-sm bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60';
 
 export const btnGhost =
-  "inline-flex items-center justify-center gap-2 rounded-sm border border-line-strong bg-surface px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-60";
+  'inline-flex items-center justify-center gap-2 rounded-sm border border-line-strong bg-surface px-5 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-60';
 
 export const btnDanger =
-  "inline-flex items-center justify-center gap-2 rounded-sm border border-danger/40 bg-danger/10 px-4 py-2 text-xs font-semibold text-danger transition-colors hover:bg-danger hover:text-white disabled:cursor-not-allowed disabled:opacity-60";
+  'inline-flex items-center justify-center gap-2 rounded-sm border border-danger/40 bg-danger/10 px-4 py-2 text-xs font-semibold text-danger transition-colors hover:bg-danger hover:text-white disabled:cursor-not-allowed disabled:opacity-60';

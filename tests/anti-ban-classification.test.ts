@@ -1,7 +1,7 @@
-import test from "node:test";
-import assert from "node:assert/strict";
+import test from 'node:test';
+import assert from 'node:assert/strict';
 
-import { createPacing, zeroPacing } from "../src/lib/anti-ban";
+import { createPacing, zeroPacing } from '../src/lib/anti-ban';
 
 /**
  * Классификация отказов площадки.
@@ -67,15 +67,15 @@ function pacingFor(clock: ReturnType<typeof makeClock>) {
 
 // ------------------------------------------------------- аккаунт ограничен
 
-test("403 останавливает аккаунт надолго, а не на минуты", () => {
+test('403 останавливает аккаунт надолго, а не на минуты', () => {
   const clock = makeClock();
   const p = pacingFor(clock);
 
-  p.recordFailure("blocked");
+  p.recordFailure('blocked');
   const d = p.decide();
 
-  assert.equal(d.allowed, false, "после 403 отправлять нельзя");
-  assert.equal(d.reason, "backoff");
+  assert.equal(d.allowed, false, 'после 403 отправлять нельзя');
+  assert.equal(d.reason, 'backoff');
   /*
    * Главная проверка. Пятиминутная пауза при ограниченном аккаунке означала бы,
    * что сервис через пять минут снова стучится в hh — и делает это снова и
@@ -87,33 +87,33 @@ test("403 останавливает аккаунт надолго, а не на
   );
 });
 
-test("ограничение аккаунта переживает паузу в несколько минут", () => {
+test('ограничение аккаунта переживает паузу в несколько минут', () => {
   const clock = makeClock();
   const p = pacingFor(clock);
-  p.recordFailure("blocked");
+  p.recordFailure('blocked');
 
   // Раньше пауза была 5 минут: спустя 10 минут сервис уже пробовал снова.
   clock.advance(10 * MINUTE);
   assert.equal(
     p.decide().allowed,
     false,
-    "через 10 минут после 403 отправлять нельзя — ограничение ещё висит",
+    'через 10 минут после 403 отправлять нельзя — ограничение ещё висит',
   );
 });
 
-test("после снятия ограничения отправка возобновляется", () => {
+test('после снятия ограничения отправка возобновляется', () => {
   const clock = makeClock();
   const p = pacingFor(clock);
-  p.recordFailure("blocked");
+  p.recordFailure('blocked');
 
   clock.hours(7); // 09:00 -> 16:00, внутри рабочего окна
   clock.assertWorkHour();
   const d = p.decide();
-  assert.equal(d.allowed, true, "спустя семь часов ограничение должно сняться само");
-  assert.equal(p.blockedUntil(clock.now()), 0, "блокировка должна обнулиться");
+  assert.equal(d.allowed, true, 'спустя семь часов ограничение должно сняться само');
+  assert.equal(p.blockedUntil(clock.now()), 0, 'блокировка должна обнулиться');
 });
 
-test("успешная отправка обнуляет серию отказов", () => {
+test('успешная отправка обнуляет серию отказов', () => {
   /*
    * Без обнуления счётчик копился весь срок жизни процесса: у кого-то был один
    * плохой вечер, и с тех пор каждая сетевая мелочь ждала бы дольше предыдущей —
@@ -130,7 +130,7 @@ test("успешная отправка обнуляет серию отказо
   const p = pacingFor(clock);
 
   for (let i = 0; i < 3; i++) {
-    p.recordFailure("rate_limit");
+    p.recordFailure('rate_limit');
     clock.hours(2); // 09 -> 11 -> 13 -> 15, внутри окна
     clock.assertWorkHour();
   }
@@ -143,17 +143,17 @@ test("успешная отправка обнуляет серию отказо
    * раз». Из-за этого две первые версии теста проходили и со сломанным
    * обнулением счётчика.
    */
-  p.recordFailure("rate_limit");
+  p.recordFailure('rate_limit');
   p.recordSent();
 
   assert.equal(
     p.decide().allowed,
     true,
-    "успешная отправка означает, что площадка больше не отказывает — паузы быть не должно",
+    'успешная отправка означает, что площадка больше не отказывает — паузы быть не должно',
   );
 
   // Теперь единственный сетевой сбой ждёт короткое время, а не час.
-  p.recordFailure("network");
+  p.recordFailure('network');
   const after = p.decide();
   assert.equal(after.allowed, false);
   assert.ok(
@@ -162,13 +162,13 @@ test("успешная отправка обнуляет серию отказо
   );
 });
 
-test("сетевой сбой не растёт как отказ площадки", () => {
+test('сетевой сбой не растёт как отказ площадки', () => {
   const clock = makeClock();
   const p = pacingFor(clock);
 
   const waits: number[] = [];
   for (let i = 0; i < 4; i++) {
-    p.recordFailure("network");
+    p.recordFailure('network');
     const d = p.decide();
     assert.equal(d.allowed, false);
     waits.push(d.retryAfterMs);
@@ -180,11 +180,11 @@ test("сетевой сбой не растёт как отказ площадк
   // и почти не растёт. Порог — 15 минут: старый алгоритм доходил до двух часов.
   assert.ok(
     waits.every((w) => w <= 15 * MINUTE),
-    `сетевые паузы выросли: ${waits.map((w) => Math.round(w / MINUTE)).join(", ")} мин`,
+    `сетевые паузы выросли: ${waits.map((w) => Math.round(w / MINUTE)).join(', ')} мин`,
   );
 });
 
-test("разные виды отказа не складываются в одну серию", () => {
+test('разные виды отказа не складываются в одну серию', () => {
   /*
    * Два сетевых таймаута, а затем отказ площадки — это не «три отказа», и пауза
    * не должна расти от факта количества. Значение имеет вид, а не счёт.
@@ -192,11 +192,11 @@ test("разные виды отказа не складываются в одн
   const clock = makeClock();
   const p = pacingFor(clock);
 
-  p.recordFailure("network");
+  p.recordFailure('network');
   clock.advance(20 * MINUTE);
-  p.recordFailure("network");
+  p.recordFailure('network');
   clock.advance(20 * MINUTE);
-  p.recordFailure("rate_limit");
+  p.recordFailure('rate_limit');
 
   const d = p.decide();
   assert.equal(d.allowed, false);
@@ -208,22 +208,22 @@ test("разные виды отказа не складываются в одн
 
 // ------------------------------------------------------------- Retry-After
 
-test("Retry-After площадки выполняется дословно", () => {
+test('Retry-After площадки выполняется дословно', () => {
   const clock = makeClock();
   const p = pacingFor(clock);
 
   p.respectRetryAfter(90 * 1000);
   const d = p.decide();
 
-  assert.equal(d.allowed, false, "площадка сказала «не раньше» — отправка запрещена");
+  assert.equal(d.allowed, false, 'площадка сказала «не раньше» — отправка запрещена');
   assert.ok(
     Math.abs(d.retryAfterMs - 90 * 1000) < 1000,
     `пауза ${Math.round(d.retryAfterMs / 1000)} с вместо 90 — Retry-After не выполнен`,
   );
-  assert.match(d.detail ?? "", /Retry-After/, "причина паузы не объяснена человеку");
+  assert.match(d.detail ?? '', /Retry-After/, 'причина паузы не объяснена человеку');
 });
 
-test("Retry-After имеет потолок, иначе один 429 встал бы колом", () => {
+test('Retry-After имеет потолок, иначе один 429 встал бы колом', () => {
   const clock = makeClock();
   const p = pacingFor(clock);
 
@@ -231,7 +231,7 @@ test("Retry-After имеет потолок, иначе один 429 встал 
   p.respectRetryAfter(24 * HOUR);
 
   const d = p.decide();
-  assert.equal(d.allowed, false, "площадка попросила прийти через сутки — ждать придётся");
+  assert.equal(d.allowed, false, 'площадка попросила прийти через сутки — ждать придётся');
   if (d.allowed) return;
   assert.ok(
     d.retryAfterMs <= 2 * HOUR,
@@ -239,7 +239,7 @@ test("Retry-After имеет потолок, иначе один 429 встал 
   );
 });
 
-test("бессмысленный Retry-After игнорируется", () => {
+test('бессмысленный Retry-After игнорируется', () => {
   const clock = makeClock();
   const p = pacingFor(clock);
 
@@ -250,7 +250,7 @@ test("бессмысленный Retry-After игнорируется", () => {
   }
 });
 
-test("успешная отправка снимает инструкцию Retry-After", () => {
+test('успешная отправка снимает инструкцию Retry-After', () => {
   const clock = makeClock();
   const p = pacingFor(clock);
 
@@ -261,13 +261,13 @@ test("успешная отправка снимает инструкцию Retr
   assert.equal(
     p.decide().allowed,
     true,
-    "отклик прошёл — значит площадка больше не просит ждать, иначе лимит тратится впустую",
+    'отклик прошёл — значит площадка больше не просит ждать, иначе лимит тратится впустую',
   );
 });
 
 // --------------------------------------------------------------- приоритеты
 
-test("ограничение аккаунта сильнее лимитов", () => {
+test('ограничение аккаунта сильнее лимитов', () => {
   /*
    * Порядок проверок: если аккаунт ограничен, причина должна называться этой,
    * а не «ночь» или «суточный лимит» — иначе человек чинит несуществующую
@@ -276,16 +276,16 @@ test("ограничение аккаунта сильнее лимитов", ()
   const clock = makeClock(23); // 23:00 — ночь по умолчанию
   const p = pacingFor(clock);
 
-  p.recordFailure("blocked");
+  p.recordFailure('blocked');
   const d = p.decide();
 
   assert.equal(d.allowed, false);
-  assert.match(d.detail ?? "", /ограничил/, "причина ограничения не названа — её видно как «ночь»");
+  assert.match(d.detail ?? '', /ограничил/, 'причина ограничения не названа — её видно как «ночь»');
 });
 
-test("zeroPacing не блокируется ничем — им пользуются тесты", () => {
+test('zeroPacing не блокируется ничем — им пользуются тесты', () => {
   const z = zeroPacing();
-  z.recordFailure("blocked");
+  z.recordFailure('blocked');
   z.respectRetryAfter(10 * HOUR);
   assert.deepEqual(z.decide(), { allowed: true, delayMs: 0 });
   assert.equal(z.blockedUntil(), 0);

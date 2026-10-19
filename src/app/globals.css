@@ -1,4 +1,4 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
   /*
@@ -67,9 +67,9 @@
    * Mono. Кириллица у всех троих проверена отдельно: у Newsreader и
    * Fraunces её нет, и для русскоязычного продукта они бы не подошли.
    */
-  --font-serif: var(--font-playfair), Georgia, "Times New Roman", serif;
+  --font-serif: var(--font-playfair), Georgia, 'Times New Roman', serif;
   --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-plex-mono), ui-monospace, "SF Mono", monospace;
+  --font-mono: var(--font-plex-mono), ui-monospace, 'SF Mono', monospace;
 
   --animate-marquee: marquee 42s linear infinite;
   --animate-marquee-slow: marquee 70s linear infinite;

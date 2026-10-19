@@ -1,7 +1,7 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { articleDateIso, articleMonthIso } from "../src/lib/article-date";
-import { articles, jobs, internships, plans } from "../src/lib/data";
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { articleDateIso, articleMonthIso } from '../src/lib/article-date';
+import { articles, jobs, internships, plans } from '../src/lib/data';
 
 /**
  * Даты статей и целостность контента.
@@ -14,32 +14,36 @@ import { articles, jobs, internships, plans } from "../src/lib/data";
  * русскоязычного формата, который используется в data.ts.
  */
 
-test("дата статьи разбирается в ISO", () => {
-  assert.equal(articleDateIso("12 сентября 2026"), "2026-09-12");
-  assert.equal(articleDateIso("1 января 2026"), "2026-01-01");
-  assert.equal(articleDateIso("31 декабря 2025"), "2025-12-31");
+test('дата статьи разбирается в ISO', () => {
+  assert.equal(articleDateIso('12 сентября 2026'), '2026-09-12');
+  assert.equal(articleDateIso('1 января 2026'), '2026-01-01');
+  assert.equal(articleDateIso('31 декабря 2025'), '2025-12-31');
 });
 
-test("сокращённый месяц тоже распознаётся", () => {
-  assert.equal(articleDateIso("3 сен 2026"), "2026-09-03");
-  assert.equal(articleDateIso("3 сент. 2026"), "2026-09-03");
+test('сокращённый месяц тоже распознаётся', () => {
+  assert.equal(articleDateIso('3 сен 2026'), '2026-09-03');
+  assert.equal(articleDateIso('3 сент. 2026'), '2026-09-03');
 });
 
-test("неизвестный формат даёт null, а не выдуманную дату", () => {
-  assert.equal(articleDateIso("когда-то"), null);
-  assert.equal(articleDateIso("2026-09-12"), null, "ISO не в этом формате не ожидается, но не должно ломаться");
-  assert.equal(articleDateIso(""), null);
-  assert.equal(articleDateIso("32 сентября 2026"), null, "несуществующий день отвергается");
-  assert.equal(articleDateIso("12 бартваря 2026"), null, "неизвестный месяц отвергается");
+test('неизвестный формат даёт null, а не выдуманную дату', () => {
+  assert.equal(articleDateIso('когда-то'), null);
+  assert.equal(
+    articleDateIso('2026-09-12'),
+    null,
+    'ISO не в этом формате не ожидается, но не должно ломаться',
+  );
+  assert.equal(articleDateIso(''), null);
+  assert.equal(articleDateIso('32 сентября 2026'), null, 'несуществующий день отвергается');
+  assert.equal(articleDateIso('12 бартваря 2026'), null, 'неизвестный месяц отвергается');
 });
 
-test("месяц без дня разбирается для группировки", () => {
-  assert.equal(articleMonthIso("12 сентября 2026"), "2026-09");
-  assert.equal(articleMonthIso("сентябрь 2026"), "2026-09");
-  assert.equal(articleMonthIso("мусор"), null);
+test('месяц без дня разбирается для группировки', () => {
+  assert.equal(articleMonthIso('12 сентября 2026'), '2026-09');
+  assert.equal(articleMonthIso('сентябрь 2026'), '2026-09');
+  assert.equal(articleMonthIso('мусор'), null);
 });
 
-test("все даты статей реально разбираются", () => {
+test('все даты статей реально разбираются', () => {
   for (const article of articles) {
     const iso = articleDateIso(article.date);
     assert.ok(
@@ -78,10 +82,13 @@ test("все slug'ы — kebab-case латиницей", () => {
   }
 });
 
-test("цены тарифов заданы для всех периодов и возрастают", () => {
+test('цены тарифов заданы для всех периодов и возрастают', () => {
   for (const plan of plans) {
     const values = [plan.prices[7], plan.prices[14], plan.prices[30]];
-    assert.ok(values.every((v) => Number.isFinite(v) && v > 0), `цены тарифа ${plan.name} некорректны`);
+    assert.ok(
+      values.every((v) => Number.isFinite(v) && v > 0),
+      `цены тарифа ${plan.name} некорректны`,
+    );
     assert.ok(values[1] >= values[0] && values[2] >= values[1], `цены ${plan.name} не монотонны`);
   }
 });
@@ -97,16 +104,16 @@ test("цены тарифов заданы для всех периодов и �
  * Теперь проверяется обратное: данных нет, и в текстах страниц не появилось
  * утверждений об опыте пользователей. Возвращать такой блок нельзя.
  */
-test("в исходниках нет выдуманных отзывов", async () => {
-  const data = await import("../src/lib/data");
+test('в исходниках нет выдуманных отзывов', async () => {
+  const data = await import('../src/lib/data');
   assert.equal(
     (data as Record<string, unknown>).reviews,
     undefined,
-    "массив отзывов снова в данных — вернитесь к выдуманным историям успеха",
+    'массив отзывов снова в данных — вернитесь к выдуманным историям успеха',
   );
 
-  const { readFileSync, readdirSync } = await import("node:fs");
-  const { join } = await import("node:path");
+  const { readFileSync, readdirSync } = await import('node:fs');
+  const { join } = await import('node:path');
   const offenders: string[] = [];
   const stripped: string[] = [];
 
@@ -118,31 +125,33 @@ test("в исходниках нет выдуманных отзывов", async
         continue;
       }
       if (!/\.(ts|tsx)$/.test(entry.name)) continue;
-      const raw = readFileSync(full, "utf8");
+      const raw = readFileSync(full, 'utf8');
       /*
        * Комментарии вырезаются. Они цитируют удалённые формулировки, чтобы
        * объяснить, что было убрано, — и без этого проверка находила бы сама
        * себя. Проверяются только строки, которые видит человек.
        */
-      const text = raw
-        .replace(/\/\*[\s\S]*?\*\//g, " ")
-        .replace(/(^|[^:])\/\/[^\n]*/g, "$1 ");
+      const text = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
       stripped.push(text);
       for (const claim of [
-        "Нам доверяют",
-        "сотни клиентов",
-        "средняя оценка",
-        "средний рейтинг",
-        "офферов получено",
-        "получают оффер за",
+        'Нам доверяют',
+        'сотни клиентов',
+        'средняя оценка',
+        'средний рейтинг',
+        'офферов получено',
+        'получают оффер за',
       ]) {
         if (text.includes(claim)) offenders.push(`${full}: ${claim}`);
       }
     }
   };
-  walk(join(process.cwd(), "src"));
+  walk(join(process.cwd(), 'src'));
 
-  assert.deepEqual(offenders, [], `в текстах остались утверждения об опыте пользователей:\n${offenders.join("\n")}`);
+  assert.deepEqual(
+    offenders,
+    [],
+    `в текстах остались утверждения об опыте пользователей:\n${offenders.join('\n')}`,
+  );
 
   /*
    * Обещания результата в шагах воронки.
@@ -158,11 +167,11 @@ test("в исходниках нет выдуманных отзывов", async
    * было преувеличением, которое FAQ уже не поддерживает.
    */
   const promises = [
-    "В 4 раза больше",
-    "Экономия до 27",
-    "Оффер за 3",
-    "AI-агент",
-    "оффер через 2 недели",
+    'В 4 раза больше',
+    'Экономия до 27',
+    'Оффер за 3',
+    'AI-агент',
+    'оффер через 2 недели',
   ];
   const promiseOffenders: string[] = [];
   for (const [i, text] of stripped.entries()) {
@@ -173,7 +182,7 @@ test("в исходниках нет выдуманных отзывов", async
   assert.deepEqual(
     promiseOffenders,
     [],
-    `в текстах остались обещания результата, которых сервис не измеряет:\n${promiseOffenders.join("\n")}`,
+    `в текстах остались обещания результата, которых сервис не измеряет:\n${promiseOffenders.join('\n')}`,
   );
 
   /*
@@ -190,13 +199,11 @@ test("в исходниках нет выдуманных отзывов", async
    * не с одной константой: любое обещанное число должно совпадать с одним из
    * реальных.
    */
-  const plansSource = readFileSync(join(process.cwd(), "src/lib/plans.ts"), "utf8");
+  const plansSource = readFileSync(join(process.cwd(), 'src/lib/plans.ts'), 'utf8');
   const fn =
-    /function planDailyLimit[\s\S]*?switch[\s\S]*?default:[\s\S]*?\}/.exec(plansSource)?.[0] ?? "";
-  const limits = [...fn.matchAll(/return\s+(\d+);/g)]
-    .map((m) => Number(m[1]))
-    .filter((n) => n > 0);
-  assert.ok(limits.length > 0, "не удалось прочитать лимиты откликов из plans.ts");
+    /function planDailyLimit[\s\S]*?switch[\s\S]*?default:[\s\S]*?\}/.exec(plansSource)?.[0] ?? '';
+  const limits = [...fn.matchAll(/return\s+(\d+);/g)].map((m) => Number(m[1])).filter((n) => n > 0);
+  assert.ok(limits.length > 0, 'не удалось прочитать лимиты откликов из plans.ts');
 
   const promised = JSON.stringify([data.stats, data.steps, data.plans]);
 
@@ -212,18 +219,18 @@ test("в исходниках нет выдуманных отзывов", async
   const mismatches = found
     .map((m) => Number(m[1]))
     .filter((claimed) => !limits.includes(claimed))
-    .map((claimed) => `обещано ${claimed}, в plans.ts: ${limits.join(" / ")}`);
+    .map((claimed) => `обещано ${claimed}, в plans.ts: ${limits.join(' / ')}`);
 
   assert.deepEqual(
     mismatches,
     [],
-    `обещанный лимит откликов не совпадает с кодом:\n${mismatches.join("\n")}`,
+    `обещанный лимит откликов не совпадает с кодом:\n${mismatches.join('\n')}`,
   );
 
   // Регулярка обязана что-то находить, иначе она проверяет пустоту.
   assert.ok(
     found.length > 0,
-    "в плашках, шагах и тарифах нет ни одного упоминания лимита — проверка перестала видеть текст",
+    'в плашках, шагах и тарифах нет ни одного упоминания лимита — проверка перестала видеть текст',
   );
 
   /*
@@ -240,9 +247,9 @@ test("в исходниках нет выдуманных отзывов", async
    */
   const tariffStrings: string[] = [];
   const collect = (node: unknown): void => {
-    if (typeof node === "string") tariffStrings.push(node);
+    if (typeof node === 'string') tariffStrings.push(node);
     else if (Array.isArray(node)) node.forEach(collect);
-    else if (node && typeof node === "object") Object.values(node).forEach(collect);
+    else if (node && typeof node === 'object') Object.values(node).forEach(collect);
   };
   collect([data.stats, data.steps, data.plans]);
 
@@ -257,11 +264,11 @@ test("в исходниках нет выдуманных отзывов", async
   assert.deepEqual(
     loose,
     [],
-    `крупные числа о тарифах не совпадают с лимитами (${limits.join(" / ")}):\n${loose.join("\n")}`,
+    `крупные числа о тарифах не совпадают с лимитами (${limits.join(' / ')}):\n${loose.join('\n')}`,
   );
 });
 
-test("у вакансий заполнены обязательные поля", () => {
+test('у вакансий заполнены обязательные поля', () => {
   for (const job of jobs) {
     assert.ok(job.title.trim(), `вакансия ${job.slug}: пустое название`);
     assert.ok(job.company.trim(), `вакансия ${job.slug}: пустая компания`);

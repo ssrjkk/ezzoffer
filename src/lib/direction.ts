@@ -1,5 +1,5 @@
-import type { Level } from "./data";
-import { extractSkills } from "./skills";
+import type { Level } from './data';
+import { extractSkills } from './skills';
 
 /**
  * Направление и режим работы.
@@ -22,30 +22,30 @@ import { extractSkills } from "./skills";
  */
 
 export type Direction =
-  | "frontend"
-  | "backend"
-  | "fullstack"
-  | "mobile"
-  | "data"
-  | "devops"
-  | "design"
-  | "qa"
-  | "pm"
-  | "sales"
-  | "other";
+  | 'frontend'
+  | 'backend'
+  | 'fullstack'
+  | 'mobile'
+  | 'data'
+  | 'devops'
+  | 'design'
+  | 'qa'
+  | 'pm'
+  | 'sales'
+  | 'other';
 
 export const DIRECTION_LABELS: Record<Direction, string> = {
-  frontend: "Фронтенд",
-  backend: "Бэкенд",
-  fullstack: "Фулстек",
-  mobile: "Мобильная разработка",
-  data: "Данные и аналитика",
-  devops: "DevOps и инфраструктура",
-  design: "Дизайн",
-  qa: "Тестирование",
-  pm: "Управление и аналитика",
-  sales: "Продажи и маркетинг",
-  other: "Другое",
+  frontend: 'Фронтенд',
+  backend: 'Бэкенд',
+  fullstack: 'Фулстек',
+  mobile: 'Мобильная разработка',
+  data: 'Данные и аналитика',
+  devops: 'DevOps и инфраструктура',
+  design: 'Дизайн',
+  qa: 'Тестирование',
+  pm: 'Управление и аналитика',
+  sales: 'Продажи и маркетинг',
+  other: 'Другое',
 };
 
 /**
@@ -56,18 +56,18 @@ export const DIRECTION_LABELS: Record<Direction, string> = {
  * фриланс — заказы по одной. Смешивать их в один список значит отвечать не на
  * тот вопрос, который задали.
  */
-export type WorkMode = "подработка" | "фриланс" | "основная";
+export type WorkMode = 'подработка' | 'фриланс' | 'основная';
 
 export const WORK_MODE_LABELS: Record<WorkMode, string> = {
-  подработка: "Подработка",
-  фриланс: "Фриланс и заказы",
-  основная: "Основная работа",
+  подработка: 'Подработка',
+  фриланс: 'Фриланс и заказы',
+  основная: 'Основная работа',
 };
 
 /** Разделы площадок. Проверяются по вхождению, порядок — от точного к общему. */
 const CATEGORY_DIRECTION: [RegExp, Direction][] = [
-  [/1с/i, "backend"],
-  [/битрикс|bitrix|crm|erp/i, "backend"],
+  [/1с/i, 'backend'],
+  [/битрикс|bitrix|crm|erp/i, 'backend'],
   /*
    * Язык в разделе площадки.
    *
@@ -77,7 +77,7 @@ const CATEGORY_DIRECTION: [RegExp, Direction][] = [
    * в бэкенд. Теперь общий раздел понижен, а конкретный подраздел разбирается
    * здесь.
    */
-  [/(\bpython|php|golang|\bgo\b|java|c#|\.net|node\.?js|ruby|perl|scala|kotlin)/i, "backend"],
+  [/(\bpython|php|golang|\bgo\b|java|c#|\.net|node\.?js|ruby|perl|scala|kotlin)/i, 'backend'],
   /*
    * Веб-разработка и боты отделены от «программирования».
    *
@@ -93,8 +93,8 @@ const CATEGORY_DIRECTION: [RegExp, Direction][] = [
    * «Водитель категории Е» попадали в раздел подработки как backend-вакансии.
    * На живом каталоге таких оказалось семь из первых же восьми не-IT.
    */
-  [/(?<![а-яёa-z])бот[а-яё]*|телеграм ?бот|telegram ?bot|микро ?сервис/i, "backend"],
-  [/веб-программирован|веб-программир|мини ?апп|mini ?app|лендинг|landing/i, "frontend"],
+  [/(?<![а-яёa-z])бот[а-яё]*|телеграм ?бот|telegram ?bot|микро ?сервис/i, 'backend'],
+  [/веб-программирован|веб-программир|мини ?апп|mini ?app|лендинг|landing/i, 'frontend'],
   /*
    * Фулстек в разделе площадки.
    *
@@ -103,13 +103,13 @@ const CATEGORY_DIRECTION: [RegExp, Direction][] = [
    * оставался без направления: в заголовке ничего, в описании навыков нет.
    * Раздел площадки отвечает на вопрос точнее, чем пустое описание.
    */
-  [/full[- ]?stack|фулстек/i, "fullstack"],
-  [/разработка (?:мобильных |приложений |игр |игровых )?(?:на )?(?:ios|android)/i, "mobile"],
-  [/ios|android|мобильн|flutter|react ?native/i, "mobile"],
-  [/сайт|лендинг|веб-разработ|frontend|фронтенд|вёрстк/i, "frontend"],
-  [/wordpress|битрикс24/i, "frontend"],
-  [/3d|график|дизайн|дизайнер|иллюстра|баннер|логотип/i, "design"],
-  [/seo|продвижен|маркетинг|реклам|таргет|перфоманс|социальн[а-яё]+ сет|smm/i, "sales"],
+  [/full[- ]?stack|фулстек/i, 'fullstack'],
+  [/разработка (?:мобильных |приложений |игр |игровых )?(?:на )?(?:ios|android)/i, 'mobile'],
+  [/ios|android|мобильн|flutter|react ?native/i, 'mobile'],
+  [/сайт|лендинг|веб-разработ|frontend|фронтенд|вёрстк/i, 'frontend'],
+  [/wordpress|битрикс24/i, 'frontend'],
+  [/3d|график|дизайн|дизайнер|иллюстра|баннер|логотип/i, 'design'],
+  [/seo|продвижен|маркетинг|реклам|таргет|перфоманс|социальн[а-яё]+ сет|smm/i, 'sales'],
   /*
    * Розничная торговля сюда не относится.
    *
@@ -119,9 +119,9 @@ const CATEGORY_DIRECTION: [RegExp, Direction][] = [
    * раздел называется «Реклама и Маркетинг» и ловится выше по «маркетингу»,
    * поэтому широкое правило было избыточным вдвойне.
    */
-  [/лидогенерац|лид ?генерац/i, "sales"],
-  [/тестирован|qa|автотест/i, "qa"],
-    /*
+  [/лидогенерац|лид ?генерац/i, 'sales'],
+  [/тестирован|qa|автотест/i, 'qa'],
+  /*
    * Product-менеджмент — только по слову «product manager».
    *
    * Правило было «product|продукт|аналитик|анализ», и на живом каталоге оно
@@ -134,9 +134,12 @@ const CATEGORY_DIRECTION: [RegExp, Direction][] = [
    * Аналитик без уточнения — это данные, а не продукт: «Senior Data Analyst»
    * и «Staff AI Product Analyst» раньше попадали в pm из-за слова «аналитик».
    */
-  [/(product ?(manager|owner|lead)|project ?manager|\bpm\b|продукт(овый|овая|менеджер|овое))/i, "pm"],
-  [/(аналитик|analyst|анализ)/i, "data"],
-  [/data|данн|ml\b|machine learning|машинн|ai\b|искусственн/i, "data"],
+  [
+    /(product ?(manager|owner|lead)|project ?manager|\bpm\b|продукт(овый|овая|менеджер|овое))/i,
+    'pm',
+  ],
+  [/(аналитик|analyst|анализ)/i, 'data'],
+  [/data|данн|ml\b|machine learning|машинн|ai\b|искусственн/i, 'data'],
   /*
    * Автоматизация бизнеса через таблицы и Excel.
    *
@@ -146,30 +149,33 @@ const CATEGORY_DIRECTION: [RegExp, Direction][] = [
    * в «Инжиниринг / Слаботочные сети/Автоматизация» — это электрика, а не
    * таблицы, и ловить её общим словом нельзя.
    */
-  [/таблиц|excel|автоматизаци[яи] бизнеса/i, "data"],
-  [/devops|системн|администр|инфраструктур|linux|сервер|ci\/cd|docker|kubernetes/i, "devops"],
+  [/таблиц|excel|автоматизаци[яи] бизнеса/i, 'data'],
+  [/devops|системн|администр|инфраструктур|linux|сервер|ci\/cd|docker|kubernetes/i, 'devops'],
 ];
 
 /** Заголовок: тот же принцип, но короче — только явные признаки. */
 const TITLE_DIRECTION: [RegExp, Direction][] = [
   [
     /(^|\W)(ios|android|flutter|react ?native)(\W|$)|мобильн|сотовых телефон|под android|под ios/i,
-    "mobile",
+    'mobile',
   ],
-  [/(^|\W)(devops|sre|системный администратор)(\W|$)/i, "devops"],
-  [/(^|\W)(qa|тестировщик)(\W|$)/i, "qa"],
-  [/(^|\W)(product ?(manager|owner)|project ?manager)(\W|$)/i, "pm"],
-  [/(^|\W)(дизайнер|ux|ui)(\W|$)/i, "design"],
-  [/(fullstack|full-stack|фулстек)/i, "fullstack"],
-  [/(frontend|фронтенд|вёрстальщик|верстальщик)/i, "frontend"],
-  [/(backend|бэкенд|бэк-end)/i, "backend"],
+  [/(^|\W)(devops|sre|системный администратор)(\W|$)/i, 'devops'],
+  [/(^|\W)(qa|тестировщик)(\W|$)/i, 'qa'],
+  [/(^|\W)(product ?(manager|owner)|project ?manager)(\W|$)/i, 'pm'],
+  [/(^|\W)(дизайнер|ux|ui)(\W|$)/i, 'design'],
+  [/(fullstack|full-stack|фулстек)/i, 'fullstack'],
+  [/(frontend|фронтенд|вёрстальщик|верстальщик)/i, 'frontend'],
+  [/(backend|бэкенд|бэк-end)/i, 'backend'],
   /*
    * Язык в заголовке — тоже направление, и довольно точное: «Python-разработчик»
    * с React в требованиях это бэкенд. Без этого правила заголовок не давал
    * ничего, и вакансия уходила в «fullstack» по навыкам из описания.
    */
-  [/(?<![а-яёa-z0-9])(python|golang|go|java|php|1c|1с|node\.?js|системный администратор|сетевой)(?![а-яёa-z0-9])/i, "backend"],
-  [/(?<![а-яёa-z0-9])(data|данн)/i, "data"],
+  [
+    /(?<![а-яёa-z0-9])(python|golang|go|java|php|1c|1с|node\.?js|системный администратор|сетевой)(?![а-яёa-z0-9])/i,
+    'backend',
+  ],
+  [/(?<![а-яёa-z0-9])(data|данн)/i, 'data'],
 ];
 
 /**
@@ -181,27 +187,27 @@ const TITLE_DIRECTION: [RegExp, Direction][] = [
  * того, что хотел.
  */
 const SKILL_DIRECTION: [string, Direction][] = [
-  ["Kubernetes", "devops"],
-  ["Docker", "devops"],
-  ["PostgreSQL", "backend"],
-  ["Kafka", "data"],
-  ["Redis", "backend"],
-  ["Python", "backend"],
-  ["Go", "backend"],
-  ["Java", "backend"],
-  ["PHP", "backend"],
-  ["React", "frontend"],
-  ["Vue", "frontend"],
-  ["Angular", "frontend"],
-  ["TypeScript", "frontend"],
-  ["JavaScript", "frontend"],
-  ["Figma", "design"],
-  ["CSS", "frontend"],
-  ["ReactNative", "mobile"],
-  ["Swift", "mobile"],
-  ["Kotlin", "mobile"],
-  ["SQL", "data"],
-  ["Git", "devops"],
+  ['Kubernetes', 'devops'],
+  ['Docker', 'devops'],
+  ['PostgreSQL', 'backend'],
+  ['Kafka', 'data'],
+  ['Redis', 'backend'],
+  ['Python', 'backend'],
+  ['Go', 'backend'],
+  ['Java', 'backend'],
+  ['PHP', 'backend'],
+  ['React', 'frontend'],
+  ['Vue', 'frontend'],
+  ['Angular', 'frontend'],
+  ['TypeScript', 'frontend'],
+  ['JavaScript', 'frontend'],
+  ['Figma', 'design'],
+  ['CSS', 'frontend'],
+  ['ReactNative', 'mobile'],
+  ['Swift', 'mobile'],
+  ['Kotlin', 'mobile'],
+  ['SQL', 'data'],
+  ['Git', 'devops'],
 ];
 
 /**
@@ -218,25 +224,25 @@ const SKILL_DIRECTION: [string, Direction][] = [
  */
 const SIDEGIG_WORDS = new RegExp(
   [
-    "подработк",
-    "частичн[а-яё]* занят",
-    "частичная занятость",
-    "неполный (?:день|рабочий день)",
-    "проектн[а-яё]+ (?:работ|занят)",
-    "работа по проекту",
-    "фриланс",
-    "part[- ]?time",
-    "freelance",
-    "совместительств",
-    "гибкий график",
-    "удалёнк[а-яё]* на (?:вечер|нескольк[а-яё]+ часов)",
-    "не более \\d+ ?ч",
-    "занятость.{0,12}\\d+ ?ч",
+    'подработк',
+    'частичн[а-яё]* занят',
+    'частичная занятость',
+    'неполный (?:день|рабочий день)',
+    'проектн[а-яё]+ (?:работ|занят)',
+    'работа по проекту',
+    'фриланс',
+    'part[- ]?time',
+    'freelance',
+    'совместительств',
+    'гибкий график',
+    'удалёнк[а-яё]* на (?:вечер|нескольк[а-яё]+ часов)',
+    'не более \\d+ ?ч',
+    'занятость.{0,12}\\d+ ?ч',
     // «проект» без слова «работа» — самое частое написание в заголовках:
     // «Проект под ключ», «Проект на 3 месяца».
-    "заказчик ищет",
-  ].join("|"),
-  "iu",
+    'заказчик ищет',
+  ].join('|'),
+  'iu',
 );
 
 /** Признаки основной работы, важнее отсутствия подработки. */
@@ -264,11 +270,11 @@ const GENERIC_CATEGORIES = /^\s*(программирование|разрабо
 export function detectDirection(
   category: string | null | undefined,
   title: string,
-  text = "",
+  text = '',
 ): Direction {
-  const cat = (category ?? "").trim();
-  const head = title ?? "";
-  const body = text ?? "";
+  const cat = (category ?? '').trim();
+  const head = title ?? '';
+  const body = text ?? '';
 
   for (const [re, dir] of CATEGORY_DIRECTION) if (re.test(cat)) return dir;
 
@@ -288,9 +294,9 @@ export function detectDirection(
    * требованиях — это бэкенд с фронтенд-частью, и фулстеком называть его нельзя.
    * Фулстек означает, что в вакансии нет ведущей стороны.
    */
-  const front = ["React", "Vue", "Angular", "CSS", "TypeScript"].some((s) => set.has(s));
-  const back = ["Python", "Go", "Java", "PHP", "PostgreSQL", "Redis"].some((s) => set.has(s));
-  if (front && back) return "fullstack";
+  const front = ['React', 'Vue', 'Angular', 'CSS', 'TypeScript'].some((s) => set.has(s));
+  const back = ['Python', 'Go', 'Java', 'PHP', 'PostgreSQL', 'Redis'].some((s) => set.has(s));
+  if (front && back) return 'fullstack';
 
   for (const [skill, dir] of SKILL_DIRECTION) if (set.has(skill)) return dir;
 
@@ -309,9 +315,9 @@ export function detectDirection(
    * объявлялся бэкендом, хотя обе стороны равноправны. Здесь он уже не мешает,
    * потому что всё более точное уже проверено.
    */
-  if (/(^|\W)разработчик(а|ик|ики|ев|ам|ах)?(\W|$)/i.test(head)) return "backend";
+  if (/(^|\W)разработчик(а|ик|ики|ев|ам|ах)?(\W|$)/i.test(head)) return 'backend';
 
-  return "other";
+  return 'other';
 }
 
 /**
@@ -334,17 +340,17 @@ const STRUCTURED_SIDEGIG = [
    * но пропускает половину реальных значений — и выглядит при этом
    * исчерпывающим, что опаснее.
    */
-  "частичн",
-  "неполн",
-  "гибк",
-  "подработк",
-  "временная работа",
-  "сезонная работа",
-  "по договору",
-  "контрактн",
-  "сдельн",
-  "part-time",
-  "part time",
+  'частичн',
+  'неполн',
+  'гибк',
+  'подработк',
+  'временная работа',
+  'сезонная работа',
+  'по договору',
+  'контрактн',
+  'сдельн',
+  'part-time',
+  'part time',
 ];
 
 /**
@@ -366,21 +372,21 @@ export function detectWorkMode(
   sourceIsFreelance = false,
   employment?: string | null,
 ): WorkMode {
-  if (sourceIsFreelance) return "фриланс";
+  if (sourceIsFreelance) return 'фриланс';
 
-  const structured = (employment ?? "").toLowerCase();
+  const structured = (employment ?? '').toLowerCase();
   if (structured) {
     for (const marker of STRUCTURED_SIDEGIG) {
-      if (structured.includes(marker)) return "подработка";
+      if (structured.includes(marker)) return 'подработка';
     }
     // Поле есть и подработки в нём нет: это ответ, а не отсутствие ответа.
-    if (FULLTIME_WORDS.test(structured)) return "основная";
+    if (FULLTIME_WORDS.test(structured)) return 'основная';
   }
 
-  const s = text ?? "";
-  if (FULLTIME_WORDS.test(s)) return "основная";
-  if (SIDEGIG_WORDS.test(s)) return "подработка";
-  return "основная";
+  const s = text ?? '';
+  if (FULLTIME_WORDS.test(s)) return 'основная';
+  if (SIDEGIG_WORDS.test(s)) return 'подработка';
+  return 'основная';
 }
 
 /**
@@ -393,5 +399,5 @@ export function detectWorkMode(
  * площадка написала.
  */
 export function inferFreelanceLevel(title: string): Level {
-  return /(студент|стаж[её]р|junior|джуниор|intern|начинающ)/i.test(title) ? "Intern" : "Middle";
+  return /(студент|стаж[её]р|junior|джуниор|intern|начинающ)/i.test(title) ? 'Intern' : 'Middle';
 }

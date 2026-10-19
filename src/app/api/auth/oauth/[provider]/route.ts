@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
-import { requireUser, unauthorized } from "@/lib/api";
-import { authMethod, authMethodReady } from "@/lib/auth-methods";
-import { authorizeUrl, createState } from "@/lib/auth/oauth";
-import { NO_STORE_HEADERS } from "@/lib/http";
+import { NextResponse } from 'next/server';
+import { requireUser, unauthorized } from '@/lib/api';
+import { authMethod, authMethodReady } from '@/lib/auth-methods';
+import { authorizeUrl, createState } from '@/lib/auth/oauth';
+import { NO_STORE_HEADERS } from '@/lib/http';
 
 /**
  * GET /api/auth/oauth/[provider] — увести человека к провайдеру.
@@ -27,11 +27,11 @@ export async function GET(_request: Request, ctx: { params: Promise<{ provider: 
   const { provider } = await ctx.params;
 
   if (!authMethod(provider)) {
-    return NextResponse.json({ error: "Способ входа неизвестен" }, { status: 404 });
+    return NextResponse.json({ error: 'Способ входа неизвестен' }, { status: 404 });
   }
   if (!authMethodReady(provider)) {
     return NextResponse.json(
-      { error: "Этот способ входа не настроен на сервере" },
+      { error: 'Этот способ входа не настроен на сервере' },
       { status: 503 },
     );
   }
@@ -39,11 +39,8 @@ export async function GET(_request: Request, ctx: { params: Promise<{ provider: 
   const state = createState(user.id);
   const url = authorizeUrl(provider, state);
   if (!url) {
-    return NextResponse.json({ error: "Не удалось построить ссылку входа" }, { status: 502 });
+    return NextResponse.json({ error: 'Не удалось построить ссылку входа' }, { status: 502 });
   }
 
-  return Response.json(
-    { url },
-    { headers: { ...NO_STORE_HEADERS, Location: url } },
-  );
+  return Response.json({ url }, { headers: { ...NO_STORE_HEADERS, Location: url } });
 }

@@ -1,13 +1,22 @@
-"use client";
+'use client';
 
-import { useState, type FormEvent } from "react";
-import { Badge, EmptyState, Field, btnPrimary, btnGhost, btnDanger, inputCls, StatusMessage } from "@/components/dashboard/ui";
-import { Dialog, ConfirmDialog } from "@/components/dialog";
+import { useState, type FormEvent } from 'react';
+import {
+  Badge,
+  EmptyState,
+  Field,
+  btnPrimary,
+  btnGhost,
+  btnDanger,
+  inputCls,
+  StatusMessage,
+} from '@/components/dashboard/ui';
+import { Dialog, ConfirmDialog } from '@/components/dialog';
 
 type Letter = { id: number; title: string; content: string; updated_at: number };
 type Draft = { id: number | null; title: string; content: string };
 
-const emptyDraft: Draft = { id: null, title: "", content: "" };
+const emptyDraft: Draft = { id: null, title: '', content: '' };
 
 export function LettersManager({ initial }: { initial: Letter[] }) {
   const [letters, setLetters] = useState<Letter[]>(initial);
@@ -24,21 +33,23 @@ export function LettersManager({ initial }: { initial: Letter[] }) {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch(draft.id ? `/api/letters/${draft.id}` : "/api/letters", {
-        method: draft.id ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch(draft.id ? `/api/letters/${draft.id}` : '/api/letters', {
+        method: draft.id ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: draft.title, content: draft.content }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Не удалось сохранить письмо");
+        setError(data.error ?? 'Не удалось сохранить письмо');
         return;
       }
       const saved = data.letter as Letter;
-      setLetters((prev) => (draft.id ? prev.map((l) => (l.id === saved.id ? saved : l)) : [saved, ...prev]));
+      setLetters((prev) =>
+        draft.id ? prev.map((l) => (l.id === saved.id ? saved : l)) : [saved, ...prev],
+      );
       setDraft(null);
     } catch {
-      setError("Сеть недоступна — письмо не сохранено");
+      setError('Сеть недоступна — письмо не сохранено');
     } finally {
       setSaving(false);
     }
@@ -51,16 +62,16 @@ export function LettersManager({ initial }: { initial: Letter[] }) {
     setRemovingId(id);
     setError(null);
     try {
-      const res = await fetch(`/api/letters/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/letters/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "Не удалось удалить письмо");
+        setError(data.error ?? 'Не удалось удалить письмо');
         return;
       }
       setLetters((prev) => prev.filter((l) => l.id !== id));
       setConfirmId(null);
     } catch {
-      setError("Сеть недоступна — письмо не удалено");
+      setError('Сеть недоступна — письмо не удалено');
     } finally {
       setRemovingId(null);
     }
@@ -72,7 +83,7 @@ export function LettersManager({ initial }: { initial: Letter[] }) {
         ? {
             ...d,
             content:
-              "Здравствуйте!\n\nМеня заинтересовала вакансия {вакансия} в компании {компания}. Мой опыт полностью соответствует требованиям: {ключевые навыки}. В последней роли я {достижение с цифрой}.\n\nБуду рад обсудить детали на собеседовании. Резюме прикрепляю.\n\nС уважением, {имя}",
+              'Здравствуйте!\n\nМеня заинтересовала вакансия {вакансия} в компании {компания}. Мой опыт полностью соответствует требованиям: {ключевые навыки}. В последней роли я {достижение с цифрой}.\n\nБуду рад обсудить детали на собеседовании. Резюме прикрепляю.\n\nС уважением, {имя}',
           }
         : d,
     );
@@ -81,9 +92,20 @@ export function LettersManager({ initial }: { initial: Letter[] }) {
   return (
     <div className="space-y-5">
       <div className="flex justify-end">
-        <button type="button" className={btnPrimary} onClick={() => { setDraft(emptyDraft); }}>
+        <button
+          type="button"
+          className={btnPrimary}
+          onClick={() => {
+            setDraft(emptyDraft);
+          }}
+        >
           <svg viewBox="0 0 24 24" className="size-4" fill="none">
-            <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <path
+              d="M12 5v14M5 12h14"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
           </svg>
           Создать письмо
         </button>
@@ -103,24 +125,36 @@ export function LettersManager({ initial }: { initial: Letter[] }) {
       ) : (
         <div className="space-y-3">
           {letters.map((l) => (
-            <div key={l.id} className=" flex flex-col gap-4 rounded-sm p-5 sm:flex-row sm:items-start">
+            <div
+              key={l.id}
+              className=" flex flex-col gap-4 rounded-sm p-5 sm:flex-row sm:items-start"
+            >
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h2 className="font-serif leading-snug text-ink">{l.title}</h2>
                   <Badge>{l.content.length} симв.</Badge>
                 </div>
-                <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-sm text-muted">{l.content}</p>
+                <p className="mt-2 line-clamp-3 whitespace-pre-wrap text-sm text-muted">
+                  {l.content}
+                </p>
               </div>
               <div className="flex shrink-0 gap-2">
                 <button
                   type="button"
                   className={btnGhost}
-                  onClick={() => { setDraft({ id: l.id, title: l.title, content: l.content }); }}
+                  onClick={() => {
+                    setDraft({ id: l.id, title: l.title, content: l.content });
+                  }}
                 >
                   Редактировать
                 </button>
-                <button type="button" className={btnDanger} disabled={removingId !== null} onClick={() => setConfirmId(l.id)}>
-                  {removingId === l.id ? "Удаляем…" : "Удалить"}
+                <button
+                  type="button"
+                  className={btnDanger}
+                  disabled={removingId !== null}
+                  onClick={() => setConfirmId(l.id)}
+                >
+                  {removingId === l.id ? 'Удаляем…' : 'Удалить'}
                 </button>
               </div>
             </div>
@@ -131,7 +165,7 @@ export function LettersManager({ initial }: { initial: Letter[] }) {
       <Dialog
         open={draft !== null}
         onClose={() => setDraft(null)}
-        title={draft?.id ? "Редактировать письмо" : "Новое письмо"}
+        title={draft?.id ? 'Редактировать письмо' : 'Новое письмо'}
       >
         {draft ? (
           <form onSubmit={save} className="space-y-4">
@@ -141,14 +175,21 @@ export function LettersManager({ initial }: { initial: Letter[] }) {
               </button>
             ) : null}
             <Field label="Название">
-              <input required maxLength={100} className={inputCls} value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="Например: Стандартное письмо" />
+              <input
+                required
+                maxLength={100}
+                className={`${inputCls} w-full`}
+                value={draft.title}
+                onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                placeholder="Например: Стандартное письмо"
+              />
             </Field>
             <Field label="Текст письма">
               <textarea
                 required
                 maxLength={20000}
                 rows={9}
-                className={`${inputCls} min-h-44 resize-y leading-relaxed`}
+                className={`${inputCls} w-full min-h-44 resize-y leading-relaxed`}
                 value={draft.content}
                 onChange={(e) => setDraft({ ...draft, content: e.target.value })}
                 placeholder="Здравствуйте!..."
@@ -157,8 +198,12 @@ export function LettersManager({ initial }: { initial: Letter[] }) {
             <div className="space-y-4">
               <StatusMessage tone="error">{error}</StatusMessage>
               <div className="flex flex-wrap justify-end gap-2">
-                <button type="button" className={btnGhost} onClick={() => setDraft(null)}>Отмена</button>
-                <button type="submit" disabled={saving} className={btnPrimary}>{saving ? "Сохраняем…" : "Сохранить"}</button>
+                <button type="button" className={btnGhost} onClick={() => setDraft(null)}>
+                  Отмена
+                </button>
+                <button type="submit" disabled={saving} className={btnPrimary}>
+                  {saving ? 'Сохраняем…' : 'Сохранить'}
+                </button>
               </div>
             </div>
           </form>

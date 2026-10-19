@@ -1,6 +1,6 @@
-import { Section, SectionHead, PrimaryButton } from "@/components/ui";
-import { Reveal } from "@/components/reveal";
-import { steps } from "@/lib/data";
+import { Section, SectionHead, PrimaryButton } from '@/components/ui';
+import { Reveal } from '@/components/reveal';
+import { steps } from '@/lib/data';
 
 /*
  * «Как это работает».
@@ -79,7 +79,7 @@ export function HowItWorks() {
           >
             <div className="flex items-baseline gap-4 md:col-span-1">
               <span className="font-mono text-sm tabular-nums text-accent">
-                {String(idx + 1).padStart(2, "0")}
+                {String(idx + 1).padStart(2, '0')}
               </span>
               <svg viewBox="0 0 24 24" className="size-5 text-muted md:hidden" aria-hidden>
                 {icons[step.icon]}
@@ -98,7 +98,11 @@ export function HowItWorks() {
               {/* Иконка на широком экране живёт рядом с текстом: раньше она
                   занимала место карточки, которая сама по себе ничего
                   не сообщала. */}
-              <svg viewBox="0 0 24 24" className="mt-4 hidden size-6 text-accent-2 md:block" aria-hidden>
+              <svg
+                viewBox="0 0 24 24"
+                className="mt-4 hidden size-6 text-accent-2 md:block"
+                aria-hidden
+              >
                 {icons[step.icon]}
               </svg>
             </div>

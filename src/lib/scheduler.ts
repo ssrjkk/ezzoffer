@@ -1,12 +1,12 @@
-import type BetterSqlite3 from "better-sqlite3";
-import { db } from "./db";
-import { refreshCatalogForSearches, slowProvidersDue, fastProvidersDue } from "./catalog-refresh";
-import { runAutoApply } from "./autoapply";
-import { saveLastRun } from "./autoapply-store";
-import { sendAlerts, sendDigests } from "./telegram-digest";
-import { getVacancyBySlug } from "./vacancies";
-import { syncAllHhUsers } from "./hh-sync";
-import { logError, logInfo } from "./logger";
+import type BetterSqlite3 from 'better-sqlite3';
+import { db } from './db';
+import { refreshCatalogForSearches, slowProvidersDue, fastProvidersDue } from './catalog-refresh';
+import { runAutoApply } from './autoapply';
+import { saveLastRun } from './autoapply-store';
+import { sendAlerts, sendDigests } from './telegram-digest';
+import { getVacancyBySlug } from './vacancies';
+import { syncAllHhUsers } from './hh-sync';
+import { logError, logInfo } from './logger';
 
 /**
  * Центральный планировщик реальных фоновых задач (однопоточный, с блокировкой от перекрытия):
@@ -15,24 +15,23 @@ import { logError, logInfo } from "./logger";
  *  3. Синхронизация статусов с hh.ru.
  */
 
-const LOCK_KEY = "scheduler:lock";
-const CATALOG_REFRESH_KEY = "scheduler:catalog_refresh";
-const CATALOG_FAST_REFRESH_KEY = "scheduler:catalog_fast_refresh";
+const LOCK_KEY = 'scheduler:lock';
+const CATALOG_REFRESH_KEY = 'scheduler:catalog_refresh';
+const CATALOG_FAST_REFRESH_KEY = 'scheduler:catalog_fast_refresh';
 const LOCK_TTL_MS = 30 * 60 * 1000;
 
-type MetaStore = Pick<BetterSqlite3.Database, "prepare">;
+type MetaStore = Pick<BetterSqlite3.Database, 'prepare'>;
 
 function getMeta(instance: MetaStore, key: string): string | null {
-  const row = instance.prepare("SELECT value FROM meta WHERE key = ?").get(key) as
-    | { value: string }
-    | undefined;
+  const row = instance.prepare('SELECT value FROM meta WHERE key = ?').get(key) as
+    { value: string } | undefined;
   return row?.value ?? null;
 }
 
 function setMeta(instance: MetaStore, key: string, value: string): void {
   instance
     .prepare(
-      "INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
     )
     .run(key, value);
 }
@@ -56,9 +55,30 @@ export function acquireLock(instance: MetaStore, now: number, ttlMs = LOCK_TTL_M
   return true;
 }
 
-/** Снимает блокировку, чтобы следующий тик мог запуститься. */
-export function releaseLock(instance: MetaStore): void {
-  instance.prepare("DELETE FROM meta WHERE key = ?").run(LOCK_KEY);
+/**
+ * Снимает блокировку, чтобы следующий тик мог запуститься.
+ *
+ * `token` — метка того, кто захватил блокировку (значение, переданное в
+ * acquireLock). Если он передан, метка снимается только когда она всё ещё
+ * принадлежит этому владельцу.
+ *
+ * Зачем: без проверки владельца снятие метки из чужого прогона стирало чужую
+ * блокировку. Это не абстрактная тонкость. TTL — 30 минут, а прогон планировщика
+ * включает обновление каталога по всем площадкам, автоотклики и синхронизацию с
+ * hh; на медленной сети он уходит за TTL. Дальше метка считается свободной,
+ * её перехватывает ручной запуск через /api/autoapply/run, а по завершении
+ * ручного запуска releaseLock удаляет метку уже планировщика — и третий
+ * запуск стартует поверх второго, не дожидаясь ни одного.
+ *
+ * Без `token` поведение прежнее (снять безусловно) — так пользуются тесты и
+ * любой код, где блокировку точно никто не перехватил.
+ */
+export function releaseLock(instance: MetaStore, token?: number): void {
+  if (token === undefined) {
+    instance.prepare('DELETE FROM meta WHERE key = ?').run(LOCK_KEY);
+    return;
+  }
+  instance.prepare('DELETE FROM meta WHERE key = ? AND value = ?').run(LOCK_KEY, String(token));
 }
 
 /** Метка времени текущего владельца блокировки; 0 — блокировка свободна. */
@@ -80,10 +100,10 @@ async function refreshCatalogIfStale(now: number): Promise<void> {
     const report = await refreshCatalogForSearches({ now: () => now });
     setMeta(db, CATALOG_REFRESH_KEY, String(now));
     if (!report.ran) {
-      logInfo("scheduler", `каталог не обновлялся: ${report.skipped}`);
+      logInfo('scheduler', `каталог не обновлялся: ${report.skipped}`);
     }
   } catch (err) {
-    logError("scheduler:refresh", err);
+    logError('scheduler:refresh', err);
   }
 }
 
@@ -102,7 +122,7 @@ async function refreshFastCatalog(now: number): Promise<void> {
     await refreshCatalogForSearches({ now: () => now });
     setMeta(db, CATALOG_FAST_REFRESH_KEY, String(now));
   } catch (err) {
-    logError("scheduler:refresh-fast", err);
+    logError('scheduler:refresh-fast', err);
   }
 }
 
@@ -137,11 +157,13 @@ export async function runScheduledJobs(): Promise<void> {
       await sendAlerts((slug) => getVacancyBySlug(slug)?.title ?? null);
       await sendDigests();
     } catch (err) {
-      logError("scheduler:telegram", err);
+      logError('scheduler:telegram', err);
     }
   } catch (err) {
-    logError("scheduler", err);
+    logError('scheduler', err);
   } finally {
-    releaseLock(db);
+    // С меткой: снять можно только свою блокировку, иначе прогон, успевший
+    // перехватить её по TTL, потерял бы её из-под себя.
+    releaseLock(db, now);
   }
 }

@@ -1,20 +1,20 @@
-import test from "node:test";
-import assert from "node:assert/strict";
+import test from 'node:test';
+import assert from 'node:assert/strict';
 
-import { BOT_COMMANDS, BOT_MESSAGES } from "../src/lib/bot-data";
-import { knownButtonLabels } from "../src/lib/telegram-keyboard";
+import { BOT_COMMANDS, BOT_MESSAGES } from '../src/lib/bot-data';
+import { knownButtonLabels } from '../src/lib/telegram-keyboard';
 
 /**
  * Секция Telegram-бота на лендинге обещает конкретные возможности, поэтому
  * данные диалога должны быть непустыми и непротиворечивыми: команды из
  * BOT_COMMANDS действительно встречаются в диалоге.
  */
-test("диалог непустой и начинается с сообщения пользователя", () => {
-  assert.ok(BOT_MESSAGES.length > 0, "диалог должен демонстрировать сценарий");
-  assert.equal(BOT_MESSAGES[0].from, "user");
+test('диалог непустой и начинается с сообщения пользователя', () => {
+  assert.ok(BOT_MESSAGES.length > 0, 'диалог должен демонстрировать сценарий');
+  assert.equal(BOT_MESSAGES[0].from, 'user');
 });
 
-test("сообщения чередуются, бот не говорит дважды подряд", () => {
+test('сообщения чередуются, бот не говорит дважды подряд', () => {
   for (let i = 1; i < BOT_MESSAGES.length; i++) {
     assert.notEqual(
       BOT_MESSAGES[i].from,
@@ -33,7 +33,7 @@ test("сообщения чередуются, бот не говорит два
  * либо пустое нажатие считалось бы текстом, либо проверка отвергала бы
  * нормальный диалог.
  */
-test("у каждого сообщения есть содержимое и пауза", () => {
+test('у каждого сообщения есть содержимое и пауза', () => {
   for (const [i, msg] of BOT_MESSAGES.entries()) {
     const hasContent = msg.text.trim().length > 0 || Boolean(msg.tap);
     assert.ok(hasContent, `сообщение ${i} пустое: нет ни текста, ни нажатия кнопки`);
@@ -41,7 +41,7 @@ test("у каждого сообщения есть содержимое и па
   }
 });
 
-test("нажатия кнопок относятся к показанным рядом кнопкам", () => {
+test('нажатия кнопок относятся к показанным рядом кнопкам', () => {
   /*
    * Нажатая кнопка должна существовать в клавиатуре предыдущего сообщения
    * бота. Иначе демонстрация показывает человека, который нажимает то, чего
@@ -52,11 +52,11 @@ test("нажатия кнопок относятся к показанным р�
     if (!msg.tap) continue;
     const previousBot = BOT_MESSAGES.slice(0, i)
       .reverse()
-      .find((m) => m.from === "bot");
+      .find((m) => m.from === 'bot');
     const labels = (previousBot?.keyboard ?? []).flat();
     assert.ok(
       labels.includes(msg.tap),
-      `нажата кнопка «${msg.tap}», которой нет в предыдущей клавиатуре: ${labels.join(", ") || "(нет клавиатуры)"}`,
+      `нажата кнопка «${msg.tap}», которой нет в предыдущей клавиатуре: ${labels.join(', ') || '(нет клавиатуры)'}`,
     );
   }
 });
@@ -69,7 +69,7 @@ test("нажатия кнопок относятся к показанным р�
  * Теперь сверяются подписи — и сверяются с настоящими клавиатурами из
  * telegram-keyboard, а не со списком, написанным в тесте.
  */
-test("подписи кнопок в демо совпадают с настоящими клавиатурами бота", () => {
+test('подписи кнопок в демо совпадают с настоящими клавиатурами бота', () => {
   /*
    * Сверяются две вещи.
    *
@@ -98,30 +98,30 @@ test("подписи кнопок в демо совпадают с настоя
 });
 
 /** Хотя бы одна кнопка должна быть — иначе демо показывает бота без клавиатуры. */
-test("в демонстрации есть кнопки", () => {
+test('в демонстрации есть кнопки', () => {
   const count = BOT_MESSAGES.reduce((acc, m) => acc + (m.keyboard?.length ?? 0), 0);
-  assert.ok(count > 0, "в диалоге нет ни одной кнопки — бот на них уже работает кнопками");
+  assert.ok(count > 0, 'в диалоге нет ни одной кнопки — бот на них уже работает кнопками');
 });
 
-test("список команд уникален и описан", () => {
+test('список команд уникален и описан', () => {
   const names = BOT_COMMANDS.map((c) => c.command);
-  assert.equal(new Set(names).size, names.length, "команды не должны повторяться");
+  assert.equal(new Set(names).size, names.length, 'команды не должны повторяться');
   for (const cmd of BOT_COMMANDS) {
     assert.ok(cmd.title.trim(), `у команды /${cmd.command} нет заголовка`);
     assert.ok(cmd.text.trim().length > 20, `у команды /${cmd.command} слишком короткое описание`);
   }
 });
 
-test("тексты не содержат незакрытых плейсхолдеров", () => {
+test('тексты не содержат незакрытых плейсхолдеров', () => {
   for (const msg of BOT_MESSAGES) {
-    assert.ok(!msg.text.includes("{"), `в сообщении остался шаблон: ${msg.text}`);
+    assert.ok(!msg.text.includes('{'), `в сообщении остался шаблон: ${msg.text}`);
   }
 });
 
-test("в боте заявлены паузы между откликами", () => {
-  const text = BOT_MESSAGES.map((m) => m.text).join("\n");
+test('в боте заявлены паузы между откликами', () => {
+  const text = BOT_MESSAGES.map((m) => m.text).join('\n');
   assert.ok(
     /45|180|секунд|пауз/i.test(text),
-    "диалог должен упоминать человеческие паузы — это ключевое обещание сервиса",
+    'диалог должен упоминать человеческие паузы — это ключевое обещание сервиса',
   );
 });

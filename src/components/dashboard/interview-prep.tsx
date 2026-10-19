@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import type { InterviewPrep } from "@/lib/interview";
+import { useState } from 'react';
+import type { InterviewPrep } from '@/lib/interview';
 
 /**
  * Подготовка к собеседованию по конкретному отклику.
@@ -23,9 +23,9 @@ export function InterviewPrepPanel({ prep }: { prep: InterviewPrep }) {
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="font-mono text-[11px] uppercase tracking-[0.14em] text-accent transition-colors hover:text-ink"
+        className="-my-2 inline-flex min-h-11 cursor-pointer items-center py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-accent transition-colors hover:text-ink"
       >
-        {open ? "Свернуть подготовку" : "Подготовиться к собеседованию"}
+        {open ? 'Свернуть подготовку' : 'Подготовиться к собеседованию'}
       </button>
 
       {open ? (
@@ -35,9 +35,7 @@ export function InterviewPrepPanel({ prep }: { prep: InterviewPrep }) {
               <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-accent">
                 Спросят про то, чего в резюме нет
               </p>
-              <p className="mt-1.5 text-sm leading-relaxed text-ink">
-                {prep.riskyGaps.join(", ")}
-              </p>
+              <p className="mt-1.5 text-sm leading-relaxed text-ink">{prep.riskyGaps.join(', ')}</p>
               <p className="mt-1 text-xs leading-snug text-muted">
                 Честное «не работал, но вот как подошёл бы» ценится выше блефа.
               </p>
@@ -50,7 +48,7 @@ export function InterviewPrepPanel({ prep }: { prep: InterviewPrep }) {
                 Проговорите в первую очередь
               </p>
               <p className="mt-1.5 text-sm leading-relaxed text-ink">
-                {prep.strongCards.join(", ")}
+                {prep.strongCards.join(', ')}
               </p>
             </div>
           ) : null}
@@ -61,7 +59,10 @@ export function InterviewPrepPanel({ prep }: { prep: InterviewPrep }) {
             </p>
             <ol className="mt-2">
               {prep.questions.map((q, i) => (
-                <li key={`${q.category}-${i}`} className="border-b border-line py-3 last:border-b-0">
+                <li
+                  key={`${q.category}-${i}`}
+                  className="border-b border-line py-3 last:border-b-0"
+                >
                   <p className="text-sm leading-relaxed text-ink">{q.question}</p>
                   <p className="mt-1 text-xs leading-relaxed text-muted">{q.hint}</p>
                 </li>

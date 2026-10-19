@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
-import { requireUser, unauthorized, readJson } from "@/lib/api";
-import { db } from "@/lib/db";
-import { parseParamId, NO_STORE_HEADERS } from "@/lib/http";
-import { resumeMatch } from "@/lib/employer-dictionary";
+import { NextResponse } from 'next/server';
+import { requireUser, unauthorized, readJson } from '@/lib/api';
+import { db } from '@/lib/db';
+import { parseParamId, NO_STORE_HEADERS } from '@/lib/http';
+import { resumeMatch } from '@/lib/employer-dictionary';
 
 /**
  * POST /api/resumes/[id]/match — разрыв между резюме и текстом вакансии.
@@ -27,20 +27,20 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
 
   const { id: rawId } = await ctx.params;
   const id = parseParamId(rawId);
-  if (id === null) return NextResponse.json({ error: "Некорректный id" }, { status: 400 });
+  if (id === null) return NextResponse.json({ error: 'Некорректный id' }, { status: 400 });
 
   const resume = db
-    .prepare("SELECT content FROM resumes WHERE id = ? AND user_id = ?")
+    .prepare('SELECT content FROM resumes WHERE id = ? AND user_id = ?')
     .get(id, user.id) as { content: string } | undefined;
-  if (!resume) return NextResponse.json({ error: "Резюме не найдено" }, { status: 404 });
+  if (!resume) return NextResponse.json({ error: 'Резюме не найдено' }, { status: 404 });
 
   const { data, error } = await readJson<{ vacancy?: string }>(request);
   if (error) return error;
 
-  const vacancy = (data?.vacancy ?? "").trim().slice(0, MAX_VACANCY_CHARS);
+  const vacancy = (data?.vacancy ?? '').trim().slice(0, MAX_VACANCY_CHARS);
   if (!vacancy) {
     return NextResponse.json(
-      { error: "Вставьте текст вакансии — без него нечего сравнивать" },
+      { error: 'Вставьте текст вакансии — без него нечего сравнивать' },
       { status: 400 },
     );
   }

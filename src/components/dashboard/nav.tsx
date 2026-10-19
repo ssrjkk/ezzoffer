@@ -1,10 +1,11 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
-import { motion, useReducedMotion } from "framer-motion";
-import {LayoutDashboard,
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
+import {
+  LayoutDashboard,
   FileText,
   Briefcase,
   Bookmark,
@@ -15,20 +16,20 @@ import {LayoutDashboard,
   LogOut,
   GraduationCap,
   BriefcaseBusiness,
-} from "lucide-react";
-import { Badge } from "@/components/dashboard/ui";
+} from 'lucide-react';
+import { Badge } from '@/components/dashboard/ui';
 
 const items = [
-  { href: "/dashboard", label: "Обзор", icon: LayoutDashboard },
-  { href: "/dashboard/resumes", label: "Резюме", icon: FileText },
-  { href: "/dashboard/jobs", label: "Вакансии", icon: Briefcase },
-  { href: "/dashboard/bookmarks", label: "Избранное", icon: Bookmark },
-  { href: "/dashboard/applications", label: "Отклики", icon: Send },
-  { href: "/dashboard/letters", label: "Письма", icon: Mail },
-  { href: "/dashboard/gigs", label: "Подработка", icon: BriefcaseBusiness },
-  { href: "/dashboard/skills", label: "Навыки", icon: GraduationCap },
-  { href: "/dashboard/consultations", label: "Консультации", icon: MessageCircle },
-  { href: "/dashboard/settings", label: "Настройки", icon: Settings },
+  { href: '/dashboard', label: 'Обзор', icon: LayoutDashboard },
+  { href: '/dashboard/resumes', label: 'Резюме', icon: FileText },
+  { href: '/dashboard/jobs', label: 'Вакансии', icon: Briefcase },
+  { href: '/dashboard/bookmarks', label: 'Избранное', icon: Bookmark },
+  { href: '/dashboard/applications', label: 'Отклики', icon: Send },
+  { href: '/dashboard/letters', label: 'Письма', icon: Mail },
+  { href: '/dashboard/gigs', label: 'Подработка', icon: BriefcaseBusiness },
+  { href: '/dashboard/skills', label: 'Навыки', icon: GraduationCap },
+  { href: '/dashboard/consultations', label: 'Консультации', icon: MessageCircle },
+  { href: '/dashboard/settings', label: 'Настройки', icon: Settings },
 ];
 
 /*
@@ -51,6 +52,7 @@ export function DashboardNav({
   planActive,
   planDays,
   planLimit,
+  planPermanent,
   onMobile,
   onClose,
 }: {
@@ -60,6 +62,8 @@ export function DashboardNav({
   planActive: boolean;
   planDays: number;
   planLimit: number;
+  /** Вечный тариф: вместо «осталось 0 дн.» показывается «без срока». */
+  planPermanent?: boolean;
   onMobile?: boolean;
   onClose?: () => void;
 }) {
@@ -75,18 +79,18 @@ export function DashboardNav({
   const logout = async () => {
     setBusy(true);
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      await fetch('/api/auth/logout', { method: 'POST' });
     } finally {
-      router.push("/login");
+      router.push('/login');
       router.refresh();
     }
   };
 
-  const initial = name.trim().charAt(0).toUpperCase() || "U";
+  const initial = name.trim().charAt(0).toUpperCase() || 'U';
 
   return (
     <nav
-      className={`flex flex-col ${onMobile ? "flex lg:hidden" : "hidden lg:flex"}`}
+      className={`flex flex-col ${onMobile ? 'flex lg:hidden' : 'hidden lg:flex'}`}
       aria-label="Навигация кабинета"
     >
       <div className="mb-6 flex items-baseline gap-3 border-b border-line pb-5">
@@ -102,18 +106,16 @@ export function DashboardNav({
       <div>
         {items.map((item) => {
           const active =
-            item.href === "/dashboard"
-              ? pathname === "/dashboard"
-              : pathname.startsWith(item.href);
+            item.href === '/dashboard' ? pathname === '/dashboard' : pathname.startsWith(item.href);
           const Icon = item.icon;
           return (
             <Link
               key={item.href}
               href={item.href}
               onClick={onClose}
-              aria-current={active ? "page" : undefined}
+              aria-current={active ? 'page' : undefined}
               className={`relative -ml-3.5 flex items-center gap-3 border-b border-line py-2.5 pl-3.5 text-sm transition-colors ${
-                active ? "font-semibold text-ink" : "text-muted hover:text-ink"
+                active ? 'font-semibold text-ink' : 'text-muted hover:text-ink'
               }`}
             >
               {active && (
@@ -139,20 +141,22 @@ export function DashboardNav({
             <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
               Тариф
             </span>
-            <Badge tone={planActive ? "success" : "warn"}>
-              {planActive ? "Активен" : "Не активен"}
+            <Badge tone={planActive ? 'success' : 'warn'}>
+              {planActive ? 'Активен' : 'Не активен'}
             </Badge>
           </div>
           <p className="mt-2 font-serif text-base text-ink">{planLabel}</p>
           <p className="mt-1 text-xs leading-relaxed text-muted">
             {planActive
-              ? `${planLimit} откликов/день · осталось ${planDays} дн.`
-              : "Активируйте пробный период в настройках"}
+              ? planPermanent
+                ? `${planLimit} откликов/день · без срока`
+                : `${planLimit} откликов/день · осталось ${planDays} дн.`
+              : 'Активируйте пробный период в настройках'}
           </p>
           <Link
             href="/dashboard/settings"
             onClick={onClose}
-            className="mt-3 inline-flex items-center gap-2 border-b border-ink pb-0.5 text-xs font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
+            className="-my-1 mt-3 inline-flex min-h-11 items-center gap-2 border-b border-ink py-1 text-xs font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
           >
             Управлять тарифом
             <span aria-hidden>→</span>
@@ -166,7 +170,7 @@ export function DashboardNav({
           className="mt-6 flex items-center gap-3 border-b border-line pb-2.5 text-sm text-muted transition-colors hover:text-danger"
         >
           <LogOut className="size-4 shrink-0" aria-hidden />
-          {busy ? "Выход…" : "Выйти"}
+          {busy ? 'Выход…' : 'Выйти'}
         </button>
       </div>
     </nav>

@@ -15,8 +15,8 @@
  * отсутствующей: она обесценивала бы настоящие данные и приучала игнорировать
  * плашку.
  */
-export function DemoBanner({ mode }: { mode: "demo" | "live" }) {
-  if (mode !== "demo") return null;
+export function DemoBanner({ mode }: { mode: 'demo' | 'live' }) {
+  if (mode !== 'demo') return null;
 
   return (
     <div
@@ -25,13 +25,10 @@ export function DemoBanner({ mode }: { mode: "demo" | "live" }) {
       className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-sm border border-warn/30 bg-warn/10 px-4 py-3"
     >
       <div className="min-w-0">
-        <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-warn">
-          Демо-режим
-        </p>
+        <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-warn">Демо-режим</p>
         <p className="mt-1 text-sm text-ink">
-          Цифры и статусы откликов здесь демонстрационные, а не реальные: они не
-          отражают ответы площадок. Реальные отклики появятся после подключения
-          аккаунта hh.ru.
+          Цифры и статусы откликов здесь демонстрационные, а не реальные: они не отражают ответы
+          площадок. Реальные отклики появятся после подключения аккаунта hh.ru.
         </p>
       </div>
       <a

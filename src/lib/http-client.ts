@@ -1,4 +1,4 @@
-import { logInfo } from "./logger";
+import { logInfo } from './logger';
 
 /**
  * HTTP-клиент для внешних источников.
@@ -96,19 +96,19 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
  */
 export async function httpFetch(url: string, opts: HttpOptions = {}): Promise<HttpResult> {
   const {
-    method = "GET",
+    method = 'GET',
     headers,
     body = null,
     timeoutMs = DEFAULT_TIMEOUT_MS,
     attempts = DEFAULT_ATTEMPTS,
     retryBaseMs = DEFAULT_BASE_MS,
     retryMaxMs = DEFAULT_MAX_MS,
-    cache = "no-store",
+    cache = 'no-store',
     shouldRetry = defaultShouldRetry,
   } = opts;
 
   const total = Math.max(1, Math.floor(attempts));
-  let lastError = "unknown error";
+  let lastError = 'unknown error';
   let lastStatus = 0;
   /** Срок, который попросила площадка, — доезжает до паузера. */
   let lastRetryAfterMs = 0;
@@ -129,7 +129,7 @@ export async function httpFetch(url: string, opts: HttpOptions = {}): Promise<Ht
        * есть отклик, который площадка отвергла, считался таймаутом.
        */
       lastRetryAfterMs = parseRetryAfter(
-        typeof res.headers?.get === "function" ? res.headers.get("retry-after") : null,
+        typeof res.headers?.get === 'function' ? res.headers.get('retry-after') : null,
         Date.now(),
       );
 
@@ -152,20 +152,28 @@ export async function httpFetch(url: string, opts: HttpOptions = {}): Promise<Ht
 
       // 429 часто приходит с Retry-After — уважаем его, но с потолком,
       // иначе один капризный апстрим может остановить обновление каталога.
-      const retryAfterHeader = Number(res.headers.get("retry-after"));
-      const waitMs = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
-        ? Math.min(retryAfterHeader * 1000, retryMaxMs * 4)
-        : Math.min(retryBaseMs * 2 ** (attempt - 1), retryMaxMs);
-      logInfo("http", `повтор после ${res.status}`, { url, attempt, waitMs });
+      const retryAfterHeader = Number(res.headers.get('retry-after'));
+      const waitMs =
+        Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
+          ? Math.min(retryAfterHeader * 1000, retryMaxMs * 4)
+          : Math.min(retryBaseMs * 2 ** (attempt - 1), retryMaxMs);
+      logInfo('http', `повтор после ${res.status}`, { url, attempt, waitMs });
       await sleep(waitMs);
     } catch (err) {
       // Сетевая ошибка или таймаут — всегда имеет смысл повторить.
       lastError = err instanceof Error ? err.message : String(err);
       if (attempt === total) {
-        return { ok: false, status: 0, body: "", error: lastError, attempts: attempt, retryAfterMs: 0 };
+        return {
+          ok: false,
+          status: 0,
+          body: '',
+          error: lastError,
+          attempts: attempt,
+          retryAfterMs: 0,
+        };
       }
       const waitMs = Math.min(retryBaseMs * 2 ** (attempt - 1), retryMaxMs);
-      logInfo("http", `повтор после сетевой ошибки`, { url, attempt, error: lastError });
+      logInfo('http', `повтор после сетевой ошибки`, { url, attempt, error: lastError });
       await sleep(waitMs);
     } finally {
       clearTimeout(timer);
@@ -175,7 +183,7 @@ export async function httpFetch(url: string, opts: HttpOptions = {}): Promise<Ht
   return {
     ok: false,
     status: lastStatus,
-    body: "",
+    body: '',
     error: lastError,
     attempts: total,
     retryAfterMs: lastRetryAfterMs,

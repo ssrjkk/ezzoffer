@@ -1,7 +1,7 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
  * Интерлиньяж антиквы.
@@ -31,7 +31,6 @@ const MIN_GAP_EM = 0.15;
 
 const MIN_LINE_HEIGHT = PLAYFAIR_INK_EM + MIN_GAP_EM; // 1.12
 
-
 /** Разбирает line-height из класса вида leading-tight / leading-[1.05]. */
 function lineHeightOf(cls: string): number | null {
   if (/\bleading-none\b/.test(cls)) return 1;
@@ -54,23 +53,23 @@ function sourceFiles(): string[] {
   const out: string[] = [];
   const walk = (dir: string): void => {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
-      if (e.name === "node_modules" || e.name === ".next" || e.name.startsWith(".")) continue;
+      if (e.name === 'node_modules' || e.name === '.next' || e.name.startsWith('.')) continue;
       const full = join(dir, e.name);
       if (e.isDirectory()) walk(full);
       else if (/\.tsx?$/.test(e.name)) out.push(full);
     }
   };
-  walk(join(process.cwd(), "src"));
+  walk(join(process.cwd(), 'src'));
   return out.sort();
 }
 
-test("утилита display не сжимает строки", () => {
-  const css = readFileSync("src/app/globals.css", "utf8");
+test('утилита display не сжимает строки', () => {
+  const css = readFileSync('src/app/globals.css', 'utf8');
   const block = css.match(/@utility display \{([^}]*)\}/);
-  assert.ok(block, "@utility display не найдена");
+  assert.ok(block, '@utility display не найдена');
 
   const lh = block[1]!.match(/line-height:\s*([\d.]+)/);
-  assert.ok(lh, "в @utility display не задан line-height");
+  assert.ok(lh, 'в @utility display не задан line-height');
 
   const value = Number(lh[1]);
   assert.ok(
@@ -80,11 +79,11 @@ test("утилита display не сжимает строки", () => {
   );
 });
 
-test("на антикве нет line-height ниже порога", () => {
+test('на антикве нет line-height ниже порога', () => {
   const offenders: string[] = [];
 
   for (const file of sourceFiles()) {
-    const source = readFileSync(file, "utf8");
+    const source = readFileSync(file, 'utf8');
 
     // Антиква в этом проекте всегда задаётся либо утилитой display,
     // либо парой font-serif в том же className.
@@ -101,8 +100,10 @@ test("на антикве нет line-height ниже порога", () => {
       if (lh === 1 && /\bleading-none\b/.test(cls)) continue;
 
       if (lh < MIN_LINE_HEIGHT) {
-        const line = source.slice(0, m.index).split("\n").length;
-        offenders.push(`${file}:${line}  line-height ${lh} (порог ${MIN_LINE_HEIGHT})  «${cls.slice(0, 64)}»`);
+        const line = source.slice(0, m.index).split('\n').length;
+        offenders.push(
+          `${file}:${line}  line-height ${lh} (порог ${MIN_LINE_HEIGHT})  «${cls.slice(0, 64)}»`,
+        );
       }
     }
   }
@@ -110,6 +111,6 @@ test("на антикве нет line-height ниже порога", () => {
   assert.deepEqual(
     offenders,
     [],
-    `строки антиквы накладываются — глифы Playfair занимают ${PLAYFAIR_INK_EM}em:\n${offenders.join("\n")}`,
+    `строки антиквы накладываются — глифы Playfair занимают ${PLAYFAIR_INK_EM}em:\n${offenders.join('\n')}`,
   );
 });

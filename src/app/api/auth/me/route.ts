@@ -1,5 +1,5 @@
-import { getCurrentUser, publicUser } from "@/lib/auth";
-import { NO_STORE_HEADERS } from "@/lib/http";
+import { getCurrentUser, publicUser } from '@/lib/auth';
+import { NO_STORE_HEADERS } from '@/lib/http';
 
 export async function GET() {
   const user = await getCurrentUser();

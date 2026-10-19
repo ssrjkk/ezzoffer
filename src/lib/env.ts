@@ -12,7 +12,11 @@
  */
 
 /** Строка: пустое значение (в т.ч. из пробелов) равносильно отсутствию. */
-export function envStr(env: Record<string, string | undefined>, key: string, fallback: string): string {
+export function envStr(
+  env: Record<string, string | undefined>,
+  key: string,
+  fallback: string,
+): string {
   const value = env[key]?.trim();
   return value ? value : fallback;
 }
@@ -43,5 +47,5 @@ export function envBaseUrl(
   key: string,
   fallback: string,
 ): string {
-  return envStr(env, key, fallback).replace(/\/$/, "");
+  return envStr(env, key, fallback).replace(/\/$/, '');
 }

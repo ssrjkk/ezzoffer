@@ -1,13 +1,13 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import { Section, SectionHead, Eyebrow } from "@/components/ui";
-import { Reveal } from "@/components/reveal";
-import { internships } from "@/lib/data";
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { Section, SectionHead, Eyebrow } from '@/components/ui';
+import { Reveal } from '@/components/reveal';
+import { internships } from '@/lib/data';
 
 export const metadata: Metadata = {
-  title: "Стажировки для студентов и junior",
+  title: 'Стажировки для студентов и junior',
   description:
-    "Платные стажировки по разработке, аналитике и маркетингу. Наставник, реальные задачи и путь в штат.",
+    'Платные стажировки по разработке, аналитике и маркетингу. Наставник, реальные задачи и путь в штат.',
 };
 
 /*
@@ -31,8 +31,8 @@ export default function InternshipsPage() {
           Стажировки с <span className="text-accent">наставником</span> и задачами продукта
         </h1>
         <p className="measure mt-6 text-base leading-relaxed text-muted md:text-lg">
-          Платные стажировочные треки для студентов и junior-специалистов: реальные задачи
-          продукта, наставник и путь в штат.
+          Платные стажировочные треки для студентов и junior-специалистов: реальные задачи продукта,
+          наставник и путь в штат.
         </p>
       </Section>
 
@@ -82,7 +82,7 @@ export default function InternshipsPage() {
                   <p className="font-mono text-lg tabular-nums text-ink">{int.salary}</p>
                   <Link
                     href="/signup"
-                    className="inline-flex items-center gap-2 border-b border-ink pb-0.5 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
+                    className="inline-flex min-h-11 items-center gap-2 border-b border-ink py-1 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
                   >
                     Откликнуться
                     <span aria-hidden>→</span>
@@ -104,13 +104,13 @@ export default function InternshipsPage() {
           />
           <ol className="grid gap-x-8 gap-y-10 md:grid-cols-3">
             {[
-              ["Отбор", "Отклик и короткое собеседование с ментором по вашей специальности."],
-              ["Работа", "Реальные задачи продукта с код-ревью и еженедельной обратной связью."],
-              ["Рост", "Лучшие стажёры получают оффер в штат и рекомендацию."],
+              ['Отбор', 'Отклик и короткое собеседование с ментором по вашей специальности.'],
+              ['Работа', 'Реальные задачи продукта с код-ревью и еженедельной обратной связью.'],
+              ['Рост', 'Лучшие стажёры получают оффер в штат и рекомендацию.'],
             ].map(([h, p], idx) => (
               <Reveal as="li" key={h} delay={idx * 80} className="border-t-2 border-ink pt-5">
                 <p className="font-mono text-xs tabular-nums text-accent">
-                  {String(idx + 1).padStart(2, "0")}
+                  {String(idx + 1).padStart(2, '0')}
                 </p>
                 <h3 className="mt-2 font-serif text-lg text-ink">{h}</h3>
                 <p className="mt-2 text-sm leading-relaxed text-muted">{p}</p>

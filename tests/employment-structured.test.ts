@@ -1,7 +1,7 @@
-import test, { before, beforeEach } from "node:test";
-import assert from "node:assert/strict";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import test, { before, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 /**
  * Занятость, полученная от площадки.
@@ -18,47 +18,55 @@ import { tmpdir } from "node:os";
  * бумаге, а на деле подработки стало бы больше, а не точнее.
  */
 
-type Database = ReturnType<typeof import("../src/lib/db").createDatabase>;
+type Database = ReturnType<typeof import('../src/lib/db').createDatabase>;
 
 let db: Database;
-let direction: typeof import("../src/lib/direction");
-let gigs: typeof import("../src/lib/gigs");
-let trud: typeof import("../src/lib/vacancies/trudvsem");
-let geek: typeof import("../src/lib/vacancies/geekjob");
+let direction: typeof import('../src/lib/direction');
+let gigs: typeof import('../src/lib/gigs');
+let trud: typeof import('../src/lib/vacancies/trudvsem');
+let geek: typeof import('../src/lib/vacancies/geekjob');
 let resetCatalogCache: () => void;
 
 before(async () => {
-  process.env.EZOFFER_DB_PATH = ":memory:";
-  process.env.EZOFFER_SILENT = "1";
-  db = (await import("../src/lib/db")).db;
-  direction = await import("../src/lib/direction");
-  gigs = await import("../src/lib/gigs");
-  trud = await import("../src/lib/vacancies/trudvsem");
-  geek = await import("../src/lib/vacancies/geekjob");
-  resetCatalogCache = (await import("../src/lib/vacancies")).resetCatalogCache;
+  process.env.EZOFFER_DB_PATH = ':memory:';
+  process.env.EZOFFER_SILENT = '1';
+  db = (await import('../src/lib/db')).db;
+  direction = await import('../src/lib/direction');
+  gigs = await import('../src/lib/gigs');
+  trud = await import('../src/lib/vacancies/trudvsem');
+  geek = await import('../src/lib/vacancies/geekjob');
+  resetCatalogCache = (await import('../src/lib/vacancies')).resetCatalogCache;
 });
 
 beforeEach(() => {
-  db.exec("DELETE FROM vacancies;");
+  db.exec('DELETE FROM vacancies;');
   resetCatalogCache();
 });
 
-test("поле площадки сильнее текста в обе стороны", () => {
+test('поле площадки сильнее текста в обе стороны', () => {
   // Поле сказало «подработка», в тексте её нет — верим полю.
   assert.equal(
-    direction.detectWorkMode("Разработчик в банк, офис в центре", false, "Неполный рабочий день/неполная рабочая неделя"),
-    "подработка",
-    "структурное поле проигнорировано",
+    direction.detectWorkMode(
+      'Разработчик в банк, офис в центре',
+      false,
+      'Неполный рабочий день/неполная рабочая неделя',
+    ),
+    'подработка',
+    'структурное поле проигнорировано',
   );
   // Поле сказало «основная», в тексте «частичная занятость» — верим полю.
   assert.equal(
-    direction.detectWorkMode("Частичная занятость возможна", false, "Полная занятость · Полный рабочий день"),
-    "основная",
-    "текст перебил структурное поле",
+    direction.detectWorkMode(
+      'Частичная занятость возможна',
+      false,
+      'Полная занятость · Полный рабочий день',
+    ),
+    'основная',
+    'текст перебил структурное поле',
   );
 });
 
-test("живые значения Работы России распознаются", () => {
+test('живые значения Работы России распознаются', () => {
   /*
    * Строки взяты из живого ответа opendata.trudvsem.ru, а не придуманы:
    * в выборке из 100 вакансий встречаются «Неполный рабочий
@@ -66,93 +74,93 @@ test("живые значения Работы России распознают
    * «Временная работа» и «Сезонная работа».
    */
   const sidegig: [string, string][] = [
-    ["Полная занятость", "Неполный рабочий день/неполная рабочая неделя"],
-    ["Полная занятость", "Режим гибкого рабочего времени"],
-    ["Временная работа", "Полный рабочий день"],
-    ["Сезонная работа", "Сменная работа"],
-    ["Полная занятость", "Частичная занятость"],
+    ['Полная занятость', 'Неполный рабочий день/неполная рабочая неделя'],
+    ['Полная занятость', 'Режим гибкого рабочего времени'],
+    ['Временная работа', 'Полный рабочий день'],
+    ['Сезонная работа', 'Сменная работа'],
+    ['Полная занятость', 'Частичная занятость'],
   ];
   for (const [employment, schedule] of sidegig) {
     const joined = `${employment} · ${schedule}`;
     assert.equal(
-      direction.detectWorkMode("Ничего в тексте нет", false, joined),
-      "подработка",
+      direction.detectWorkMode('Ничего в тексте нет', false, joined),
+      'подработка',
       `«${joined}» не признана подработкой`,
     );
   }
 
   const fulltime: [string, string][] = [
-    ["Полная занятость", "Полный рабочий день"],
-    ["Полная занятость", "Сменная работа"],
+    ['Полная занятость', 'Полный рабочий день'],
+    ['Полная занятость', 'Сменная работа'],
   ];
   for (const [employment, schedule] of fulltime) {
     assert.equal(
-      direction.detectWorkMode("", false, `${employment} · ${schedule}`),
-      "основная",
+      direction.detectWorkMode('', false, `${employment} · ${schedule}`),
+      'основная',
       `«${employment} · ${schedule}» названа подработкой`,
     );
   }
 });
 
-test("GeekJob отдаёт занятость булевым полем, и оно доезжает до вакансии", () => {
+test('GeekJob отдаёт занятость булевым полем, и оно доезжает до вакансии', () => {
   const raw = {
     id: 42,
-    position: "Разработчик",
-    company: { name: "Компания" },
+    position: 'Разработчик',
+    company: { name: 'Компания' },
     jobFormat: { remote: true, parttime: true, relocate: false, inhouse: false },
   } as unknown as Parameters<typeof geek.mapGeekVacancy>[0];
 
   const v = geek.mapGeekVacancy(raw);
-  assert.ok(v, "вакансия GeekJob не разобралась");
+  assert.ok(v, 'вакансия GeekJob не разобралась');
   assert.equal(
     v!.employment,
-    "Частичная занятость",
+    'Частичная занятость',
     `parttime=true, а занятость: ${v!.employment}`,
   );
   assert.equal(
-    direction.detectWorkMode("Обычное описание без подработки", false, v!.employment),
-    "подработка",
-    "структурное поле GeekJob не привело к подработке",
+    direction.detectWorkMode('Обычное описание без подработки', false, v!.employment),
+    'подработка',
+    'структурное поле GeekJob не привело к подработке',
   );
 
   const full = geek.mapGeekVacancy({
     ...raw,
     jobFormat: { remote: true, parttime: false, relocate: false, inhouse: false },
   } as unknown as Parameters<typeof geek.mapGeekVacancy>[0]);
-  assert.equal(full!.employment, "Полная занятость");
-  assert.equal(direction.detectWorkMode("", false, full!.employment), "основная");
+  assert.equal(full!.employment, 'Полная занятость');
+  assert.equal(direction.detectWorkMode('', false, full!.employment), 'основная');
 });
 
-test("Работа России склеивает занятость и график в одну строку", () => {
+test('Работа России склеивает занятость и график в одну строку', () => {
   const raw = {
-    id: "abc",
-    "job-name": "Инженер",
-    employment: "Полная занятость",
-    schedule: "Неполный рабочий день/неполная рабочая неделя",
+    id: 'abc',
+    'job-name': 'Инженер',
+    employment: 'Полная занятость',
+    schedule: 'Неполный рабочий день/неполная рабочая неделя',
   } as unknown as Parameters<typeof trud.mapTrudVacancy>[0];
 
   const v = trud.mapTrudVacancy(raw);
   assert.ok(v);
-  const emp = v!.employment ?? "";
+  const emp = v!.employment ?? '';
   assert.match(emp, /Полная занятость/, `потеряна занятость: «${emp}»`);
   assert.match(emp, /Неполный рабочий день/, `потерян график: «${emp}»`);
 });
 
-test("пустое занятость не превращается в прочерк в базе", () => {
+test('пустое занятость не превращается в прочерк в базе', () => {
   const v = trud.mapTrudVacancy({
-    id: "x",
-    "job-name": "Инженер",
-    employment: "",
-    schedule: "",
+    id: 'x',
+    'job-name': 'Инженер',
+    employment: '',
+    schedule: '',
   } as unknown as Parameters<typeof trud.mapTrudVacancy>[0]);
   assert.ok(v);
   assert.ok(
-    v!.employment === undefined || v!.employment === "",
+    v!.employment === undefined || v!.employment === '',
     `пустое значение сохранилось как «${v!.employment}»`,
   );
 });
 
-test("подработка из структурного поля попадает в раздел, а текстовая — тоже", () => {
+test('подработка из структурного поля попадает в раздел, а текстовая — тоже', () => {
   const seed = (slug: string, source: string, about: string, employment: string | null) => {
     db.prepare(
       `INSERT INTO vacancies (slug, source, source_id, title, company, salary, level, format, city,
@@ -162,30 +170,38 @@ test("подработка из структурного поля попадае
     ).run(slug, source, slug, Date.now(), about, employment, Date.now());
   };
 
-  seed("geek-part", "geekjob", "Обычное описание", "Частичная занятость");
+  seed('geek-part', 'geekjob', 'Обычное описание', 'Частичная занятость');
   // У Работы России цифровую вакансию выдаёт навык в описании: площадка по всем
   // профессиям, и без «Требуется: Linux, PostgreSQL» это «Обычное описание».
-  seed("trud-part", "trudvsem", "Требуется: Python, PostgreSQL, Git", "Полная занятость · Неполный рабочий день");
-  seed("hh-text", "hh", "Требуется разработчик. Частичная занятость, 3 часа в день.", null);
-  seed("full", "hh", "Полная занятость, офис", null);
+  seed(
+    'trud-part',
+    'trudvsem',
+    'Требуется: Python, PostgreSQL, Git',
+    'Полная занятость · Неполный рабочий день',
+  );
+  seed('hh-text', 'hh', 'Требуется разработчик. Частичная занятость, 3 часа в день.', null);
+  seed('full', 'hh', 'Полная занятость, офис', null);
   resetCatalogCache();
 
-  const list = gigs.findGigs({ mode: "подработка" });
+  const list = gigs.findGigs({ mode: 'подработка' });
   const slugs = list.map((g) => g.slug);
 
-  for (const s of ["geek-part", "trud-part", "hh-text"]) {
-    assert.ok(slugs.includes(s), `подработка «${s}» не попала в раздел: ${slugs.join(", ")}`);
+  for (const s of ['geek-part', 'trud-part', 'hh-text']) {
+    assert.ok(slugs.includes(s), `подработка «${s}» не попала в раздел: ${slugs.join(', ')}`);
   }
-  assert.ok(!slugs.includes("full"), `вакансия с полной занятостью попала в подработку: ${slugs.join(", ")}`);
+  assert.ok(
+    !slugs.includes('full'),
+    `вакансия с полной занятостью попала в подработку: ${slugs.join(', ')}`,
+  );
 });
 
-test("без поля решение остаётся прежним — по тексту", () => {
-  assert.equal(direction.detectWorkMode("Подработка на вечер, удалённо"), "подработка");
-  assert.equal(direction.detectWorkMode("Полная занятость, 5/2, офис"), "основная");
-  assert.equal(direction.detectWorkMode("Ничего особенного"), "основная");
+test('без поля решение остаётся прежним — по тексту', () => {
+  assert.equal(direction.detectWorkMode('Подработка на вечер, удалённо'), 'подработка');
+  assert.equal(direction.detectWorkMode('Полная занятость, 5/2, офис'), 'основная');
+  assert.equal(direction.detectWorkMode('Ничего особенного'), 'основная');
 });
 
-test("раздел подработки не показывает профессии не из IT", () => {
+test('раздел подработки не показывает профессии не из IT', () => {
   /*
    * Проверено на живом каталоге: до этого в подбор попадали «Тракторист -
    * машинист», «Продавец-кассир», «Курьер» и «Водитель категории Е». Работа
@@ -202,22 +218,40 @@ test("раздел подработки не показывает професс
   };
 
   // Площадка по всем профессиям: нужен навык из словаря.
-  seed("tractor", "trudvsem", "Тракторист - машинист", "Сельское хозяйство, экология, ветеринария", "Работа в поле");
-  seed("cashier", "trudvsem", "Продавец-кассир", "Продажи, закупки, снабжение, торговля", "Приёмка товара");
-  seed("courier", "rabota", "Курьер на автомобиле", "Услуги", "Доставка заказов");
-  seed("electrician", "rabota", "Электрик", "Строительство", "Прокладка кабеля");
+  seed(
+    'tractor',
+    'trudvsem',
+    'Тракторист - машинист',
+    'Сельское хозяйство, экология, ветеринария',
+    'Работа в поле',
+  );
+  seed(
+    'cashier',
+    'trudvsem',
+    'Продавец-кассир',
+    'Продажи, закупки, снабжение, торговля',
+    'Приёмка товара',
+  );
+  seed('courier', 'rabota', 'Курьер на автомобиле', 'Услуги', 'Доставка заказов');
+  seed('electrician', 'rabota', 'Электрик', 'Строительство', 'Прокладка кабеля');
   // А вот это — цифровая работа, пусть даже на общей площадке.
-  seed("real-it", "trudvsem", "Системный администратор", "Информационные технологии", "Требуется: Linux, PostgreSQL, Bash");
+  seed(
+    'real-it',
+    'trudvsem',
+    'Системный администратор',
+    'Информационные технологии',
+    'Требуется: Linux, PostgreSQL, Bash',
+  );
   resetCatalogCache();
 
-  const slugs = gigs.findGigs({ mode: "подработка" }).map((g) => g.slug);
-  assert.ok(slugs.includes("real-it"), `настоящая IT-вакансия отсеяна: ${slugs.join(", ")}`);
-  for (const junk of ["tractor", "cashier", "courier", "electrician"]) {
+  const slugs = gigs.findGigs({ mode: 'подработка' }).map((g) => g.slug);
+  assert.ok(slugs.includes('real-it'), `настоящая IT-вакансия отсеяна: ${slugs.join(', ')}`);
+  for (const junk of ['tractor', 'cashier', 'courier', 'electrician']) {
     assert.ok(!slugs.includes(junk), `профессия не из IT попала в подбор: ${junk}`);
   }
 });
 
-test("«Специалист» без цифровых признаков в подбор не идёт, даже на IT-площадке", () => {
+test('«Специалист» без цифровых признаков в подбор не идёт, даже на IT-площадке', () => {
   /*
    * Здесь была проверка «IT-площадке можно верить на слово» — GeekJob доска
    * про IT, поэтому любую её вакансию считали цифровой. Она отбрасывала
@@ -237,27 +271,32 @@ test("«Специалист» без цифровых признаков в п�
     ).run(slug, slug, title, Date.now(), about, employment, Date.now());
   };
 
-  put("geek-generic", "Специалист", "Описание без перечня навыков", "Частичная занятость");
-  put("geek-devops", "DevOps-инженер", "Требуется: Docker, Kubernetes, Linux", "Частичная занятость");
+  put('geek-generic', 'Специалист', 'Описание без перечня навыков', 'Частичная занятость');
+  put(
+    'geek-devops',
+    'DevOps-инженер',
+    'Требуется: Docker, Kubernetes, Linux',
+    'Частичная занятость',
+  );
   resetCatalogCache();
 
-  const slugs = gigs.findGigs({ mode: "подработка" }).map((g) => g.slug);
-  assert.ok(slugs.includes("geek-devops"), `IT-вакансия по названию отсеяна: ${slugs.join(", ")}`);
+  const slugs = gigs.findGigs({ mode: 'подработка' }).map((g) => g.slug);
+  assert.ok(slugs.includes('geek-devops'), `IT-вакансия по названию отсеяна: ${slugs.join(', ')}`);
   assert.ok(
-    !slugs.includes("geek-generic"),
-    `«Специалист» без признаков попал в подбор: ${slugs.join(", ")}`,
+    !slugs.includes('geek-generic'),
+    `«Специалист» без признаков попал в подбор: ${slugs.join(', ')}`,
   );
 });
 
-test("миграция добавляет колонку в старую базу и не падает на новой", async () => {
+test('миграция добавляет колонку в старую базу и не падает на новой', async () => {
   /*
    * Проверка колонки без самого ALTER — это не «миграция», а пустая функция с
    * хорошим названием. Такое и случилось: страховка от «duplicate column name»
    * была, а ALTER убрали при правке соседней строки. На новой базе всё работало,
    * и ломалось только на рабочей — там, где её и создают.
    */
-  const { createDatabase } = await import("../src/lib/db");
-  const Database = (await import("better-sqlite3")).default;
+  const { createDatabase } = await import('../src/lib/db');
+  const Database = (await import('better-sqlite3')).default;
 
   // Путь к временной базе не берётся из EZOFFER_DB_PATH: в тестах это
   // «:memory:», и склейка дала бы имя вида «:memory:.mig-123», которое SQLite
@@ -280,22 +319,22 @@ test("миграция добавляет колонку в старую баз�
 
   const migrated = createDatabase(tmp);
   const cols = migrated
-    .prepare("PRAGMA table_info(vacancies)")
+    .prepare('PRAGMA table_info(vacancies)')
     .all()
     .map((c) => (c as { name: string }).name);
   migrated.close();
 
-  assert.ok(cols.includes("employment"), `в старой базе колонка не появилась: ${cols.join(", ")}`);
+  assert.ok(cols.includes('employment'), `в старой базе колонка не появилась: ${cols.join(', ')}`);
 
   // На свежей базе миграция не должна падать: колонка уже создана CREATE TABLE.
-  const fresh = createDatabase(":memory:");
+  const fresh = createDatabase(':memory:');
   const freshCols = fresh
-    .prepare("PRAGMA table_info(vacancies)")
+    .prepare('PRAGMA table_info(vacancies)')
     .all()
     .map((c) => (c as { name: string }).name);
-  assert.ok(freshCols.includes("employment"), "на свежей базе колонки нет");
+  assert.ok(freshCols.includes('employment'), 'на свежей базе колонки нет');
 
-  const unlink = (await import("node:fs")).unlinkSync;
+  const unlink = (await import('node:fs')).unlinkSync;
   try {
     unlink(tmp);
   } catch {

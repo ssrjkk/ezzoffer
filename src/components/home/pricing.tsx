@@ -1,18 +1,18 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { Section, SectionHead, StatusMessage } from "@/components/ui";
-import { Reveal } from "@/components/reveal";
-import { plans, type PlanPeriod } from "@/lib/data";
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { Section, SectionHead, StatusMessage } from '@/components/ui';
+import { Reveal } from '@/components/reveal';
+import { plans, type PlanPeriod } from '@/lib/data';
 
-const PLAN_IDS = ["start", "pro", "expert"];
+const PLAN_IDS = ['start', 'pro', 'expert'];
 
 const periods: { days: PlanPeriod; label: string }[] = [
-  { days: 7, label: "7 дней" },
-  { days: 14, label: "14 дней" },
-  { days: 30, label: "30 дней" },
+  { days: 7, label: '7 дней' },
+  { days: 14, label: '14 дней' },
+  { days: 30, label: '30 дней' },
 ];
 
 export function PricingSection({ compact = false }: { compact?: boolean }) {
@@ -23,7 +23,7 @@ export function PricingSection({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
 
   useEffect(() => {
-    fetch("/api/auth/me")
+    fetch('/api/auth/me')
       .then((r) => r.json())
       .then((d) => setHasAccount(Boolean(d?.user)))
       .catch(() => setHasAccount(false));
@@ -32,29 +32,34 @@ export function PricingSection({ compact = false }: { compact?: boolean }) {
   const choose = async (planId: string) => {
     setNotice(null);
     if (!hasAccount) {
-      router.push("/signup");
+      router.push('/signup');
       return;
     }
     setBusy(planId);
     try {
-      const res = await fetch("/api/plan", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ planId, period }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setNotice(data.error ?? "Не удалось активировать тариф");
+        setNotice(data.error ?? 'Не удалось активировать тариф');
         return;
       }
-      router.push("/dashboard/settings");
+      router.push('/dashboard/settings');
     } finally {
       setBusy(null);
     }
   };
 
   return (
-    <Section id={compact ? undefined : "tariff"} className={compact ? "border-t border-line bg-surface-2" : "relative border-y border-line bg-surface-2"}>
+    <Section
+      id={compact ? undefined : 'tariff'}
+      className={
+        compact ? 'border-t border-line bg-surface-2' : 'relative border-y border-line bg-surface-2'
+      }
+    >
       <SectionHead
         eyebrow="Подписочная модель"
         title={
@@ -73,9 +78,7 @@ export function PricingSection({ compact = false }: { compact?: boolean }) {
               type="button"
               onClick={() => setPeriod(p.days)}
               className={`rounded-sm px-5 py-2 text-sm font-medium transition-all ${
-                period === p.days
-                  ? "bg-accent text-white"
-                  : "text-muted hover:text-ink"
+                period === p.days ? 'bg-accent text-white' : 'text-muted hover:text-ink'
               }`}
             >
               {p.label}
@@ -101,7 +104,7 @@ export function PricingSection({ compact = false }: { compact?: boolean }) {
             */}
             <article
               className={`flex h-full flex-col bg-surface p-7 md:p-8 ${
-                plan.popular ? "border-t-2 border-accent" : "border-t-2 border-transparent"
+                plan.popular ? 'border-t-2 border-accent' : 'border-t-2 border-transparent'
               }`}
             >
               <div className="flex items-baseline justify-between gap-3">
@@ -112,13 +115,11 @@ export function PricingSection({ compact = false }: { compact?: boolean }) {
                   </span>
                 ) : null}
               </div>
-              <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted">
-                {plan.tagline}
-              </p>
+              <p className="mt-2 max-w-prose text-sm leading-relaxed text-muted">{plan.tagline}</p>
 
               <div className="mt-6 flex items-baseline gap-2">
                 <span className="font-mono text-4xl tabular-nums md:text-5xl">
-                  {plan.prices[period].toLocaleString("ru-RU")}
+                  {plan.prices[period].toLocaleString('ru-RU')}
                 </span>
                 <span className="text-sm text-muted">₽ / {period} дн.</span>
               </div>
@@ -141,11 +142,11 @@ export function PricingSection({ compact = false }: { compact?: boolean }) {
                 onClick={() => choose(PLAN_IDS[idx])}
                 className={`mt-8 inline-flex items-center justify-center gap-2 rounded-sm px-6 py-3 text-sm font-semibold transition-colors disabled:opacity-50 ${
                   plan.popular
-                    ? "bg-accent text-white hover:bg-accent-hover"
-                    : "border border-line-strong text-ink hover:bg-surface-2"
+                    ? 'bg-accent text-white hover:bg-accent-hover'
+                    : 'border border-line-strong text-ink hover:bg-surface-2'
                 }`}
               >
-                {busy === PLAN_IDS[idx] ? "Активируем…" : hasAccount ? "Выбрать тариф" : plan.cta}
+                {busy === PLAN_IDS[idx] ? 'Активируем…' : hasAccount ? 'Выбрать тариф' : plan.cta}
               </button>
             </article>
           </Reveal>
@@ -155,11 +156,14 @@ export function PricingSection({ compact = false }: { compact?: boolean }) {
       <Reveal delay={100}>
         <p className="mt-8 text-center text-xs text-muted">
           {hasAccount ? (
-            "Тариф активируется мгновенно без оплаты — демо-режим. Затем он откроется в кабинете."
+            'Тариф активируется мгновенно без оплаты — демо-режим. Затем он откроется в кабинете.'
           ) : (
             <>
-              Приобретая тариф, вы соглашаетесь с{" "}
-              <Link href="/faq" className="underline decoration-line underline-offset-2 hover:text-ink">
+              Приобретая тариф, вы соглашаетесь с{' '}
+              <Link
+                href="/faq"
+                className="underline decoration-line underline-offset-2 hover:text-ink"
+              >
                 условиями сервиса
               </Link>
               . Авторизуйтесь, чтобы активировать тариф.

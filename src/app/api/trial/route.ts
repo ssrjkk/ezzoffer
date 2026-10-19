@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
-import { requireUser, unauthorized } from "@/lib/api";
-import { db, type User } from "@/lib/db";
+import { NextResponse } from 'next/server';
+import { requireUser, unauthorized } from '@/lib/api';
+import { db, type User } from '@/lib/db';
+import { isPlanActive } from '@/lib/plans';
 
 const TRIAL_MS = 24 * 60 * 60 * 1000;
 
@@ -9,16 +10,17 @@ export async function POST() {
   if (!user) return unauthorized();
 
   if (user.trial_started_at) {
-    return NextResponse.json(
-      { error: "Пробный период уже был активирован" },
-      { status: 409 },
-    );
+    return NextResponse.json({ error: 'Пробный период уже был активирован' }, { status: 409 });
   }
-  if (["start", "pro", "expert"].includes(user.plan)) {
-    return NextResponse.json(
-      { error: "У вас уже активен платный тариф" },
-      { status: 409 },
-    );
+  /*
+   * Проверка — через isPlanActive, а не списком планов: у вечного тарифа
+   * (beta_life) срока нет, и наивный список его не видел. Без этого пробник
+   * на 24 часа СНОСИЛ оплаченное «навсегда» — та же дыра, что была в /api/plan.
+   */
+  const fresh = db.prepare('SELECT plan, plan_expires_at FROM users WHERE id = ?').get(user.id) as
+    { plan: string; plan_expires_at: number | null } | undefined;
+  if (fresh && isPlanActive(fresh)) {
+    return NextResponse.json({ error: 'У вас уже активен тариф' }, { status: 409 });
   }
 
   const now = Date.now();
@@ -31,9 +33,9 @@ export async function POST() {
   // `as User`, и при отсутствии строки `updated.plan` бросал TypeError —
   // клиент получал 500 вместо внятного ответа. Отвечаем 401: сессия больше
   // недействительна, пусть перезайдёт.
-  const updated = db.prepare("SELECT * FROM users WHERE id = ?").get(user.id) as User | undefined;
+  const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id) as User | undefined;
   if (!updated) {
-    return NextResponse.json({ error: "Требуется авторизация" }, { status: 401 });
+    return NextResponse.json({ error: 'Требуется авторизация' }, { status: 401 });
   }
   return Response.json({
     plan: {

@@ -1,12 +1,28 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import type { Vacancy } from "@/lib/vacancies";
-import { Badge, EmptyState, Field, Panel, btnPrimary, btnGhost, btnDanger, inputCls, StatusMessage } from "@/components/dashboard/ui";
-import { ConfirmDialog } from "@/components/dialog";
-import { Sparkles } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import type { Vacancy } from '@/lib/vacancies';
+import {
+  Badge,
+  EmptyState,
+  Field,
+  Panel,
+  btnPrimary,
+  btnGhost,
+  btnDanger,
+  inputCls,
+  StatusMessage,
+} from '@/components/dashboard/ui';
+import { ConfirmDialog } from '@/components/dialog';
+import { Sparkles } from 'lucide-react';
 
-type Resume = { id: number; title: string; content: string; years_label: string; ai_improved: number };
+type Resume = {
+  id: number;
+  title: string;
+  content: string;
+  years_label: string;
+  ai_improved: number;
+};
 type Letter = { id: number; title: string; content: string };
 type Search = {
   id: number;
@@ -23,28 +39,33 @@ type Search = {
   created_at: number;
   match_count: number;
 };
-type Application = { id: number; job_slug: string; external_url?: string | null; withdrawable?: boolean };
+type Application = {
+  id: number;
+  job_slug: string;
+  external_url?: string | null;
+  withdrawable?: boolean;
+};
 type Source = { source: string; label: string; available: boolean; count: number };
 
-import { SOURCE_LABELS } from "@/lib/source-labels";
+import { SOURCE_LABELS } from '@/lib/source-labels';
 
 const emptySearch = {
-  title: "",
-  keywords: "",
-  level: "" as string,
-  format: "" as string,
-  city: "",
-  salaryMin: "",
-  salaryMax: "",
-  blacklist: "",
+  title: '',
+  keywords: '',
+  level: '' as string,
+  format: '' as string,
+  city: '',
+  salaryMin: '',
+  salaryMax: '',
+  blacklist: '',
 };
 
 function parseSalary(text: string): number {
   const m = text.match(/от\s*([\d\s]+)/);
-  return m ? parseInt(m[1].replace(/\s/g, ""), 10) || 0 : 0;
+  return m ? parseInt(m[1].replace(/\s/g, ''), 10) || 0 : 0;
 }
 
-const AUTOREFRESH_KEY = "ez_jobs_autorefresh_at";
+const AUTOREFRESH_KEY = 'ez_jobs_autorefresh_at';
 const AUTOREFRESH_MS = 10 * 60 * 1000;
 
 export function JobExplorer() {
@@ -56,11 +77,11 @@ export function JobExplorer() {
   const [saved, setSaved] = useState<Set<string>>(new Set());
   const [appliedId, setAppliedId] = useState(0);
   const [letterId, setLetterId] = useState(0);
-  const [q, setQ] = useState("");
-  const [level, setLevel] = useState("");
-  const [format, setFormat] = useState("");
-  const [minSalary, setMinSalary] = useState("");
-  const [busy, setBusy] = useState("");
+  const [q, setQ] = useState('');
+  const [level, setLevel] = useState('');
+  const [format, setFormat] = useState('');
+  const [minSalary, setMinSalary] = useState('');
+  const [busy, setBusy] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [draft, setDraft] = useState(emptySearch);
@@ -77,7 +98,7 @@ export function JobExplorer() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [externalUrl, setExternalUrl] = useState<Record<string, string>>({});
-  const [markingExternal, setMarkingExternal] = useState("");
+  const [markingExternal, setMarkingExternal] = useState('');
   const vacanciesRef = useRef<Vacancy[]>([]);
 
   useEffect(() => {
@@ -88,7 +109,8 @@ export function JobExplorer() {
     const query = q.trim().toLowerCase();
     const min = Number(minSalary) || 0;
     return vacancies.filter((v) => {
-      if (query && !`${v.title} ${v.company} ${v.category}`.toLowerCase().includes(query)) return false;
+      if (query && !`${v.title} ${v.company} ${v.category}`.toLowerCase().includes(query))
+        return false;
       if (level && v.level !== level) return false;
       if (format && v.format !== format) return false;
       const salary = v.salary_min ?? parseSalary(v.salary);
@@ -100,46 +122,43 @@ export function JobExplorer() {
   const totalPages = Math.ceil(filtered.length / perPage);
   const paginated = filtered.slice((page - 1) * perPage, page * perPage);
 
-  const loadVacancies = useCallback(
-    async (withRefresh: boolean) => {
-      setRefreshing(withRefresh);
-      try {
-        const url = withRefresh ? "/api/jobs?refresh=1" : "/api/jobs";
-        const res = await fetch(url, { cache: "no-store" });
-        const data = await res.json();
-        if (!res.ok) {
-          if (withRefresh) setError(data.error ?? "Не удалось обновить каталог");
-          return;
-        }
-        if (Array.isArray(data.vacancies)) setVacancies(data.vacancies);
-        if (Array.isArray(data.sources)) setSources(data.sources);
-        if (withRefresh && data.refreshed) {
-          setNotice(`Каталог обновлён: ${data.vacancies?.length ?? 0} вакансий`);
-        }
-      } catch {
-        if (withRefresh) setError("Не удалось обновить каталог — попробуйте позже");
-      } finally {
-        setLoading(false);
-        setRefreshing(false);
+  const loadVacancies = useCallback(async (withRefresh: boolean) => {
+    setRefreshing(withRefresh);
+    try {
+      const url = withRefresh ? '/api/jobs?refresh=1' : '/api/jobs';
+      const res = await fetch(url, { cache: 'no-store' });
+      const data = await res.json();
+      if (!res.ok) {
+        if (withRefresh) setError(data.error ?? 'Не удалось обновить каталог');
+        return;
       }
-    },
-    [],
-  );
+      if (Array.isArray(data.vacancies)) setVacancies(data.vacancies);
+      if (Array.isArray(data.sources)) setSources(data.sources);
+      if (withRefresh && data.refreshed) {
+        setNotice(`Каталог обновлён: ${data.vacancies?.length ?? 0} вакансий`);
+      }
+    } catch {
+      if (withRefresh) setError('Не удалось обновить каталог — попробуйте позже');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
         const [r, l, s, a, jobs, ai, bm] = await Promise.all([
-          fetch("/api/resumes").then((x) => x.json()),
-          fetch("/api/letters").then((x) => x.json()),
-          fetch("/api/searches").then((x) => x.json()),
-          fetch("/api/applications").then((x) => x.json()),
-          fetch("/api/jobs").then((x) => x.json()),
-          fetch("/api/ai-recommendations").then((x) => x.json()),
+          fetch('/api/resumes').then((x) => x.json()),
+          fetch('/api/letters').then((x) => x.json()),
+          fetch('/api/searches').then((x) => x.json()),
+          fetch('/api/applications').then((x) => x.json()),
+          fetch('/api/jobs').then((x) => x.json()),
+          fetch('/api/ai-recommendations').then((x) => x.json()),
           // Отдельный запрос, а не часть jobs: закладки живут в своей таблице,
           // и их отсутствие не должно ломать загрузку каталога.
-          fetch("/api/bookmarks")
+          fetch('/api/bookmarks')
             .then((x) => x.json())
             .catch(() => ({ bookmarks: [] })),
         ]);
@@ -155,20 +174,20 @@ export function JobExplorer() {
         if (Array.isArray(jobs.sources)) setSources(jobs.sources);
         if (Array.isArray(ai.recommendations)) setAiRecommendations(ai.recommendations);
       } catch {
-        if (alive) setError("Не удалось загрузить данные кабинета");
+        if (alive) setError('Не удалось загрузить данные кабинета');
       } finally {
         if (alive) setLoading(false);
       }
     })();
 
     const id = setInterval(() => {
-      const hasExternal = vacanciesRef.current.some((v) => v.source !== "local");
+      const hasExternal = vacanciesRef.current.some((v) => v.source !== 'local');
       if (hasExternal) return;
       const last = Number(window.localStorage.getItem(AUTOREFRESH_KEY) ?? 0);
       if (Date.now() - last >= AUTOREFRESH_MS) {
         window.localStorage.setItem(AUTOREFRESH_KEY, String(Date.now()));
         try {
-          fetch("/api/jobs?refresh=1", { cache: "no-store" })
+          fetch('/api/jobs?refresh=1', { cache: 'no-store' })
             .then((x) => x.json())
             .then((data) => {
               if (Array.isArray(data.vacancies)) setVacancies(data.vacancies);
@@ -192,20 +211,26 @@ export function JobExplorer() {
     setError(null);
     setNotice(null);
     try {
-      const res = await fetch("/api/applications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ jobSlug: slug, resumeId: appliedId || null, letterId: letterId || null }),
+      const res = await fetch('/api/applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jobSlug: slug,
+          resumeId: appliedId || null,
+          letterId: letterId || null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Не удалось отправить отклик");
+        setError(data.error ?? 'Не удалось отправить отклик');
         return;
       }
       setApplied((prev) => new Set(prev).add(slug));
-      setNotice(`Отклик отправлен: ${data.application?.job?.title ?? slug} — статус ведётся в разделе «Отклики».`);
+      setNotice(
+        `Отклик отправлен: ${data.application?.job?.title ?? slug} — статус ведётся в разделе «Отклики».`,
+      );
     } finally {
-      setBusy("");
+      setBusy('');
     }
   };
 
@@ -214,20 +239,20 @@ export function JobExplorer() {
     setError(null);
     setNotice(null);
     try {
-      const res = await fetch("/api/applications", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/applications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jobSlug: slug, externalUrl: externalUrl[slug] || null }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Не удалось отметить отклик");
+        setError(data.error ?? 'Не удалось отметить отклик');
         return;
       }
       setApplied((prev) => new Set(prev).add(slug));
       setNotice(`Отклик отмечен: ${data.application?.job?.title ?? slug}`);
     } finally {
-      setMarkingExternal("");
+      setMarkingExternal('');
     }
   };
 
@@ -235,18 +260,18 @@ export function JobExplorer() {
     setError(null);
     try {
       const res = await fetch(`/api/searches/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ active }),
       });
       if (!res.ok) {
-        setError("Не удалось изменить состояние поиска");
+        setError('Не удалось изменить состояние поиска');
         return;
       }
       const data = await res.json();
       setSearches((prev) => prev.map((s) => (s.id === id ? (data.search as Search) : s)));
     } catch {
-      setError("Сеть недоступна — состояние поиска не изменено");
+      setError('Сеть недоступна — состояние поиска не изменено');
     }
   };
 
@@ -262,16 +287,16 @@ export function JobExplorer() {
     setError(null);
     setRemovingId(id);
     try {
-      const res = await fetch(`/api/searches/${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/searches/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "Не удалось удалить поиск");
+        setError(data.error ?? 'Не удалось удалить поиск');
         return;
       }
       setSearches((prev) => prev.filter((s) => s.id !== id));
       setConfirmId(null);
     } catch {
-      setError("Сеть недоступна — поиск не удалён");
+      setError('Сеть недоступна — поиск не удалён');
     } finally {
       setRemovingId(null);
     }
@@ -282,9 +307,9 @@ export function JobExplorer() {
     setCreating(true);
     setError(null);
     try {
-      const res = await fetch("/api/searches", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/searches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: draft.title,
           keywords: draft.keywords,
@@ -298,14 +323,14 @@ export function JobExplorer() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Не удалось создать поиск");
+        setError(data.error ?? 'Не удалось создать поиск');
         return;
       }
       let search = data.search as Search;
       if (autoRun) {
         const act = await fetch(`/api/searches/${search.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ active: true }),
         });
         const actData = await act.json();
@@ -313,9 +338,13 @@ export function JobExplorer() {
       }
       setSearches((prev) => [search, ...prev]);
       setDraft(emptySearch);
-      setNotice(autoRun ? `Автопоиск «${search.title}» запущен — отклики начнут уходить.` : "Поиск сохранён. Нажмите «Запустить», чтобы активировать.");
+      setNotice(
+        autoRun
+          ? `Автопоиск «${search.title}» запущен — отклики начнут уходить.`
+          : 'Поиск сохранён. Нажмите «Запустить», чтобы активировать.',
+      );
     } catch {
-      setError("Сеть недоступна — поиск не создан");
+      setError('Сеть недоступна — поиск не создан');
     } finally {
       setCreating(false);
     }
@@ -331,13 +360,13 @@ export function JobExplorer() {
   const toggleBookmark = async (slug: string) => {
     const wasSaved = saved.has(slug);
     try {
-      const res = await fetch("/api/bookmarks", {
-        method: wasSaved ? "DELETE" : "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/bookmarks', {
+        method: wasSaved ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slug }),
       });
       if (!res.ok) {
-        setError("Не удалось изменить избранное");
+        setError('Не удалось изменить избранное');
         return;
       }
       setSaved((prev) => {
@@ -347,11 +376,11 @@ export function JobExplorer() {
         return next;
       });
     } catch {
-      setError("Сеть недоступна — закладка не сохранена");
+      setError('Сеть недоступна — закладка не сохранена');
     }
   };
 
-  const levelOptions = ["Intern", "Junior", "Middle", "Senior"];
+  const levelOptions = ['Intern', 'Junior', 'Middle', 'Senior'];
 
   return (
     <div className="space-y-8">
@@ -369,25 +398,41 @@ export function JobExplorer() {
         {searches.length ? (
           <div className="mb-5 space-y-2.5">
             {searches.map((s) => (
-              <div key={s.id} className="flex flex-col gap-3 rounded-sm border border-line bg-surface-2 p-4 sm:flex-row sm:items-center">
+              <div
+                key={s.id}
+                className="flex flex-col gap-3 rounded-sm border border-line bg-surface-2 p-4 sm:flex-row sm:items-center"
+              >
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold">{s.title}</span>
-                    <Badge tone={s.active ? "success" : "neutral"}>
-                      <span className={`size-1.5 rounded-full ${s.active ? "bg-success" : "bg-muted"}`} />
-                      {s.active ? "Работает" : "Пауза"}
+                    <Badge tone={s.active ? 'success' : 'neutral'}>
+                      <span
+                        className={`size-1.5 rounded-full ${s.active ? 'bg-success' : 'bg-muted'}`}
+                      />
+                      {s.active ? 'Работает' : 'Пауза'}
                     </Badge>
                     <Badge tone="cyan">подходит {s.match_count} вакансий</Badge>
                   </div>
                   <p className="mt-1 text-xs text-muted">
-                    {[s.keywords && `ключи: ${s.keywords}`, s.level, s.format, s.city, s.salary_min && `от ${s.salary_min}`, s.salary_max && `до ${s.salary_max}`]
+                    {[
+                      s.keywords && `ключи: ${s.keywords}`,
+                      s.level,
+                      s.format,
+                      s.city,
+                      s.salary_min && `от ${s.salary_min}`,
+                      s.salary_max && `до ${s.salary_max}`,
+                    ]
                       .filter(Boolean)
-                      .join(" · ") || "Без фильтров"}
+                      .join(' · ') || 'Без фильтров'}
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-2">
-                  <button type="button" className={s.active ? btnGhost : btnPrimary} onClick={() => toggleSearch(s.id, !s.active)}>
-                    {s.active ? "Пауза" : `Запустить · ${s.match_count}`}
+                  <button
+                    type="button"
+                    className={s.active ? btnGhost : btnPrimary}
+                    onClick={() => toggleSearch(s.id, !s.active)}
+                  >
+                    {s.active ? 'Пауза' : `Запустить · ${s.match_count}`}
                   </button>
                   <button type="button" className={btnDanger} onClick={() => setConfirmId(s.id)}>
                     Удалить
@@ -400,21 +445,44 @@ export function JobExplorer() {
 
         <form onSubmit={(e) => createSearch(e, true)} className="grid gap-4 md:grid-cols-2">
           <Field label="Название поиска">
-            <input required maxLength={100} className={inputCls} value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="Например: Frontend Middle" />
+            <input
+              required
+              maxLength={100}
+              className={`${inputCls} w-full`}
+              value={draft.title}
+              onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+              placeholder="Например: Frontend Middle"
+            />
           </Field>
           <Field label="Ключевые слова (через запятую)">
-            <input maxLength={400} className={inputCls} value={draft.keywords} onChange={(e) => setDraft({ ...draft, keywords: e.target.value })} placeholder="react, typescript, next" />
+            <input
+              maxLength={400}
+              className={`${inputCls} w-full`}
+              value={draft.keywords}
+              onChange={(e) => setDraft({ ...draft, keywords: e.target.value })}
+              placeholder="react, typescript, next"
+            />
           </Field>
           <Field label="Уровень">
-            <select className={inputCls} value={draft.level} onChange={(e) => setDraft({ ...draft, level: e.target.value })}>
+            <select
+              className={`${inputCls} w-full`}
+              value={draft.level}
+              onChange={(e) => setDraft({ ...draft, level: e.target.value })}
+            >
               <option value="">Любой</option>
               {levelOptions.map((l) => (
-                <option key={l} value={l}>{l}</option>
+                <option key={l} value={l}>
+                  {l}
+                </option>
               ))}
             </select>
           </Field>
           <Field label="Формат">
-            <select className={inputCls} value={draft.format} onChange={(e) => setDraft({ ...draft, format: e.target.value })}>
+            <select
+              className={`${inputCls} w-full`}
+              value={draft.format}
+              onChange={(e) => setDraft({ ...draft, format: e.target.value })}
+            >
               <option value="">Любой</option>
               <option>Удалённо</option>
               <option>Гибрид</option>
@@ -422,24 +490,52 @@ export function JobExplorer() {
             </select>
           </Field>
           <Field label="Город">
-            <input maxLength={60} className={inputCls} value={draft.city} onChange={(e) => setDraft({ ...draft, city: e.target.value })} placeholder="Москва, Казань…" />
+            <input
+              maxLength={60}
+              className={`${inputCls} w-full`}
+              value={draft.city}
+              onChange={(e) => setDraft({ ...draft, city: e.target.value })}
+              placeholder="Москва, Казань…"
+            />
           </Field>
           <Field label="Зарплата, руб.">
             <div className="grid grid-cols-2 gap-2">
-              <input className={inputCls} type="number" value={draft.salaryMin} onChange={(e) => setDraft({ ...draft, salaryMin: e.target.value })} placeholder="от" />
-              <input className={inputCls} type="number" value={draft.salaryMax} onChange={(e) => setDraft({ ...draft, salaryMax: e.target.value })} placeholder="до" />
+              <input
+                className={`${inputCls} w-full`}
+                type="number"
+                value={draft.salaryMin}
+                onChange={(e) => setDraft({ ...draft, salaryMin: e.target.value })}
+                placeholder="от"
+              />
+              <input
+                className={`${inputCls} w-full`}
+                type="number"
+                value={draft.salaryMax}
+                onChange={(e) => setDraft({ ...draft, salaryMax: e.target.value })}
+                placeholder="до"
+              />
             </div>
           </Field>
           <div className="md:col-span-2">
             <Field label="Исключить компании (через запятую)">
-              <input className={inputCls} value={draft.blacklist} onChange={(e) => setDraft({ ...draft, blacklist: e.target.value })} placeholder="компания А, бренд Б" />
+              <input
+                className={`${inputCls} w-full`}
+                value={draft.blacklist}
+                onChange={(e) => setDraft({ ...draft, blacklist: e.target.value })}
+                placeholder="компания А, бренд Б"
+              />
             </Field>
           </div>
           <div className="flex flex-wrap gap-2 md:col-span-2">
             <button type="submit" disabled={creating} className={btnPrimary}>
-              {creating ? "Создаём…" : "Создать и запустить"}
+              {creating ? 'Создаём…' : 'Создать и запустить'}
             </button>
-            <button type="button" disabled={creating} className={btnGhost} onClick={(e) => createSearch(e as unknown as FormEvent, false)}>
+            <button
+              type="button"
+              disabled={creating}
+              className={btnGhost}
+              onClick={(e) => createSearch(e as unknown as FormEvent, false)}
+            >
               Сохранить без запуска
             </button>
           </div>
@@ -451,11 +547,9 @@ export function JobExplorer() {
           <div>
             <h2 className="font-serif text-lg leading-snug text-ink">Каталог вакансий</h2>
             <p className="mt-0.5 text-xs text-muted">
-              {sources
-                .map((src) => `${src.label} · ${src.count}`)
-                .join("  ")}
+              {sources.map((src) => `${src.label} · ${src.count}`).join('  ')}
             </p>
-            {sources.some((src) => src.source === "hh" && !src.available) ? (
+            {sources.some((src) => src.source === 'hh' && !src.available) ? (
               <p className="mt-1 text-xs text-warn">
                 Вакансии hh.ru отключены: задайте HH_ACCESS_TOKEN в окружении сервера.
               </p>
@@ -468,26 +562,33 @@ export function JobExplorer() {
               onClick={() => loadVacancies(true)}
               className={`${btnGhost} shrink-0`}
             >
-              {refreshing ? "Обновляем…" : "Обновить вакансии"}
+              {refreshing ? 'Обновляем…' : 'Обновить вакансии'}
             </button>
-            <input className={`${inputCls} w-44`} placeholder="Поиск…" value={q} onChange={(e) => setQ(e.target.value)} />
+            <input
+              className={`${inputCls} w-full sm:w-44`}
+              placeholder="Поиск…"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+            />
             {/* aria-label, а не только первый <option>: «Уровень» — это
                 значение по умолчанию, а не имя элемента. Без имени скринридер
                 озвучивал «выпадающий список, пункт 1 из 4» и молчал, что это. */}
             <select
               aria-label="Фильтр по уровню"
-              className={`${inputCls} w-36`}
+              className={`${inputCls} w-full sm:w-36`}
               value={level}
               onChange={(e) => setLevel(e.target.value)}
             >
               <option value="">Уровень</option>
               {levelOptions.map((l) => (
-                <option key={l} value={l}>{l}</option>
+                <option key={l} value={l}>
+                  {l}
+                </option>
               ))}
             </select>
             <select
               aria-label="Фильтр по формату работы"
-              className={`${inputCls} w-36`}
+              className={`${inputCls} w-full sm:w-36`}
               value={format}
               onChange={(e) => setFormat(e.target.value)}
             >
@@ -496,32 +597,44 @@ export function JobExplorer() {
               <option>Гибрид</option>
               <option>В офисе</option>
             </select>
-            <input className={`${inputCls} w-32`} type="number" placeholder="от ₽" value={minSalary} onChange={(e) => setMinSalary(e.target.value)} />
+            <input
+              className={`${inputCls} w-full sm:w-32`}
+              type="number"
+              placeholder="от ₽"
+              value={minSalary}
+              onChange={(e) => setMinSalary(e.target.value)}
+            />
           </div>
         </div>
 
         <div className="mb-4 flex flex-wrap items-center gap-3 border-b border-line pb-4">
-          <span className="text-xs font-semibold uppercase tracking-wider text-muted">Откликаться от имени:</span>
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted">
+            Откликаться от имени:
+          </span>
           <select
             aria-label="Резюме для отклика"
-            className={`${inputCls} w-56`}
+            className={`${inputCls} w-full sm:w-56`}
             value={appliedId}
             onChange={(e) => setAppliedId(Number(e.target.value))}
           >
             <option value={0}>Без резюме</option>
             {resumes.map((r) => (
-              <option key={r.id} value={r.id}>{r.title}</option>
+              <option key={r.id} value={r.id}>
+                {r.title}
+              </option>
             ))}
           </select>
           <select
             aria-label="Сопроводительное письмо для отклика"
-            className={`${inputCls} w-56`}
+            className={`${inputCls} w-full sm:w-56`}
             value={letterId}
             onChange={(e) => setLetterId(Number(e.target.value))}
           >
             <option value={0}>Без письма</option>
             {letters.map((l) => (
-              <option key={l.id} value={l.id}>{l.title}</option>
+              <option key={l.id} value={l.id}>
+                {l.title}
+              </option>
             ))}
           </select>
         </div>
@@ -555,21 +668,43 @@ export function JobExplorer() {
             ))}
           </div>
         ) : filtered.length === 0 ? (
-          <EmptyState title="Ничего не найдено" text="Попробуйте смягчить фильтры или нажмите «Обновить вакансии»." />
+          <EmptyState
+            title="Ничего не найдено"
+            text="Попробуйте смягчить фильтры или нажмите «Обновить вакансии»."
+          />
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {paginated.map((v) => (
-              <div key={v.slug} className="flex flex-col gap-3 rounded-sm border border-line bg-surface-2 p-5">
+              <div
+                key={v.slug}
+                className="flex flex-col gap-3 rounded-sm border border-line bg-surface-2 p-5"
+              >
                 <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="font-serif leading-snug text-ink">{v.title}</h3>
-                    <p className="mt-0.5 text-sm text-muted">{v.company} · {v.city}</p>
+                  {/*
+                    min-w-0 обязателен на текстовой колонке.
+
+                    Без него flex-элемент не сжимается: его автоматический
+                    минимум равен ширине самого длинного слова заголовка.
+                    Заголовок вакансии с hh — это часто одна длинная строка
+                    («Senior Software Engineer, Golang, Kafka»), а справа
+                    стоит колонка `shrink-0` с бейджами, которая своего места
+                    не уступает. На 360px бокс карточки 244 px, а заголовок плюс
+                    бейджи давали ~484 px.
+
+                    Тот же приём уже применён в bookmarks-list — здесь его
+                    просто не было.
+                  */}
+                  <div className="min-w-0">
+                    <h3 className="font-serif leading-snug break-words text-ink">{v.title}</h3>
+                    <p className="mt-0.5 break-words text-sm text-muted">
+                      {v.company} · {v.city}
+                    </p>
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1">
-                    <Badge tone={applied.has(v.slug) ? "success" : "neutral"}>
-                      {applied.has(v.slug) ? "Отклик отправлен" : v.level}
+                    <Badge tone={applied.has(v.slug) ? 'success' : 'neutral'}>
+                      {applied.has(v.slug) ? 'Отклик отправлен' : v.level}
                     </Badge>
-                    <Badge tone={v.source === "local" ? "neutral" : "cyan"}>
+                    <Badge tone={v.source === 'local' ? 'neutral' : 'cyan'}>
                       {SOURCE_LABELS[v.source] ?? v.source}
                     </Badge>
                   </div>
@@ -581,21 +716,45 @@ export function JobExplorer() {
                   <Badge>{v.category}</Badge>
                 </div>
                 <div className="mt-1 flex flex-col gap-2">
-                  <div className="flex gap-2">
+                  {/*
+                  Ряд действий переносится, а не жмётся.
+
+                  Раньше здесь стояло `flex gap-2` с главной кнопкой на
+                  `flex-1` и двумя `shrink-0` рядом. На 360px измерено: дети
+                  раскладывались в 253 / 163 / 228 px при боксе карточки 244 px,
+                  то есть ряд уезжал за правый край на ~420 px и уводил в
+                  сторону всю страницу. `flex-1` здесь не помогает: он задаёт
+                  `flex-basis: 0`, но автоматический минимум элемента равен
+                  min-content подписи, а два `shrink-0` своего места не
+                  уступают.
+
+                  `flex-wrap` + `basis-full` у главной кнопки дают то, что
+                  нужно на телефоне: широкая кнопка отклика и две второстепенные
+                  под ней, а на широком экране всё остаётся в одну строку.
+                */}
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
                       disabled={busy === v.slug || applied.has(v.slug)}
                       onClick={() => apply(v.slug)}
-                      className={applied.has(v.slug) ? `${btnGhost} flex-1 disabled:opacity-60` : `${btnPrimary} flex-1`}
+                      className={
+                        applied.has(v.slug)
+                          ? `${btnGhost} w-full basis-full disabled:opacity-60`
+                          : `${btnPrimary} w-full basis-full`
+                      }
                     >
-                      {busy === v.slug ? "Отправляем…" : applied.has(v.slug) ? "Уже откликнулись" : "Откликнуться сейчас"}
+                      {busy === v.slug
+                        ? 'Отправляем…'
+                        : applied.has(v.slug)
+                          ? 'Уже откликнулись'
+                          : 'Откликнуться сейчас'}
                     </button>
                     {v.source_url ? (
                       <a
                         href={v.source_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className={`${btnGhost} shrink-0`}
+                        className={`${btnGhost} flex-1 sm:flex-none`}
                       >
                         На сайте
                       </a>
@@ -609,18 +768,20 @@ export function JobExplorer() {
                       type="button"
                       onClick={() => toggleBookmark(v.slug)}
                       aria-pressed={saved.has(v.slug)}
-                      className={`${btnGhost} shrink-0`}
+                      className={`${btnGhost} flex-1 sm:flex-none`}
                     >
-                      {saved.has(v.slug) ? "В избранном" : "В избранное"}
+                      {saved.has(v.slug) ? 'В избранном' : 'В избранное'}
                     </button>
                   </div>
-                  {!applied.has(v.slug) && v.source !== "hh" ? (
-                    <div className="flex gap-2">
+                  {!applied.has(v.slug) && v.source !== 'hh' ? (
+                    <div className="flex flex-col gap-2 sm:flex-row">
                       <input
-                        className={`${inputCls} flex-1`}
+                        className={`${inputCls} w-full`}
                         placeholder="Ссылка на отклик (необязательно)"
-                        value={externalUrl[v.slug] ?? ""}
-                        onChange={(e) => setExternalUrl((prev) => ({ ...prev, [v.slug]: e.target.value }))}
+                        value={externalUrl[v.slug] ?? ''}
+                        onChange={(e) =>
+                          setExternalUrl((prev) => ({ ...prev, [v.slug]: e.target.value }))
+                        }
                       />
                       <button
                         type="button"
@@ -628,7 +789,7 @@ export function JobExplorer() {
                         onClick={() => markAsExternal(v.slug)}
                         className={`${btnGhost} shrink-0`}
                       >
-                        {markingExternal === v.slug ? "Отмечаем…" : "Отметить отклик"}
+                        {markingExternal === v.slug ? 'Отмечаем…' : 'Отметить отклик'}
                       </button>
                     </div>
                   ) : null}

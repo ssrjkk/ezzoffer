@@ -1,7 +1,7 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
  * Классы Tailwind, которых не существует.
@@ -18,7 +18,6 @@ import { join } from "node:path";
  * никогда намеренно.
  */
 
-
 /**
  * Все исходники на диске.
  *
@@ -30,21 +29,21 @@ function sourceFiles(): string[] {
   const out: string[] = [];
   const walk = (dir: string): void => {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
-      if (e.name === "node_modules" || e.name === ".next" || e.name.startsWith(".")) continue;
+      if (e.name === 'node_modules' || e.name === '.next' || e.name.startsWith('.')) continue;
       const full = join(dir, e.name);
       if (e.isDirectory()) walk(full);
       else if (/\.tsx?$/.test(e.name)) out.push(full);
     }
   };
-  walk(join(process.cwd(), "src"));
+  walk(join(process.cwd(), 'src'));
   return out.sort();
 }
 
-test("в className нет классов с оборванной альфой", () => {
+test('в className нет классов с оборванной альфой', () => {
   const offenders: string[] = [];
 
   for (const file of sourceFiles()) {
-    const content = readFileSync(file, "utf8");
+    const content = readFileSync(file, 'utf8');
     for (const m of content.matchAll(
       /\b(?:bg|text|border|ring|shadow|from|via|to|divide|fill|stroke|outline|accent|caret)-[a-z0-9-]*\d+\]/g,
     )) {
@@ -55,11 +54,11 @@ test("в className нет классов с оборванной альфой", 
   assert.deepEqual(
     offenders,
     [],
-    `Tailwind не знает таких имён — CSS не генерируется, элемент останется без оформления:\n${offenders.join("\n")}`,
+    `Tailwind не знает таких имён — CSS не генерируется, элемент останется без оформления:\n${offenders.join('\n')}`,
   );
 });
 
-test("альфа-скобочная запись не поехала", () => {
+test('альфа-скобочная запись не поехала', () => {
   /*
    * Ловушка того же бага в другой форме. Легитимные записи:
    *   bg-accent/[0.06]  — альфа в квадратных скобках, после «]» ничего;
@@ -70,7 +69,7 @@ test("альфа-скобочная запись не поехала", () => {
   const offenders: string[] = [];
 
   for (const file of sourceFiles()) {
-    const content = readFileSync(file, "utf8");
+    const content = readFileSync(file, 'utf8');
     for (const m of content.matchAll(
       /(?:^|[\s"'(,])((?:bg|text|border|ring|from|via|to)-[a-z0-9-]*\d+\])/g,
     )) {
@@ -81,7 +80,7 @@ test("альфа-скобочная запись не поехала", () => {
   assert.deepEqual(
     offenders,
     [],
-    `похоже на испорченный класс (цифры сразу перед «]»):\n${offenders.join("\n")}`,
+    `похоже на испорченный класс (цифры сразу перед «]»):\n${offenders.join('\n')}`,
   );
 });
 
@@ -96,15 +95,15 @@ test("альфа-скобочная запись не поехала", () => {
  * Проверка эвристическая: смотрим блок вокруг строки и ищем тёмную
  * подложку. Если её нет — белый текст на светлом фоне.
  */
-test("белый текст только на тёмной подложке", () => {
+test('белый текст только на тёмной подложке', () => {
   const DARK_BG = /bg-ink|bg-black|bg-accent\b|bg-violet|bg-danger\b|bg-paper|#229ED9|#2AABEE/;
   const offenders: string[] = [];
 
   for (const file of sourceFiles()) {
-    const lines = readFileSync(file, "utf8").split("\n");
+    const lines = readFileSync(file, 'utf8').split('\n');
     lines.forEach((line, i) => {
       if (!/text-white(?![\w/-])/.test(line)) return;
-      const around = lines.slice(Math.max(0, i - 6), i + 7).join("\n");
+      const around = lines.slice(Math.max(0, i - 6), i + 7).join('\n');
       if (DARK_BG.test(around)) return;
       offenders.push(`${file}:${i + 1}  ${line.trim().slice(0, 80)}`);
     });
@@ -113,6 +112,6 @@ test("белый текст только на тёмной подложке", ()
   assert.deepEqual(
     offenders,
     [],
-    `белый текст без тёмной подложки — невидим:\n${offenders.join("\n")}`,
+    `белый текст без тёмной подложки — невидим:\n${offenders.join('\n')}`,
   );
 });

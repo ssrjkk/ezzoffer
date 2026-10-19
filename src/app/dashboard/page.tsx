@@ -1,20 +1,20 @@
-import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
-import { getStats, type Stats } from "@/lib/stats";
-import { isPlanActive, planDailyLimit, planLabel, daysLeft } from "@/lib/plans";
-import { StatsPanel } from "@/components/dashboard/stats-panel";
-import { NextActionsPanel } from "@/components/dashboard/next-actions";
-import { nextActions } from "@/lib/pipeline";
-import { Badge, Panel, btnPrimary, btnGhost } from "@/components/dashboard/ui";
-import Link from "next/link";
+import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
+import { getCurrentUser } from '@/lib/auth';
+import { getStats, type Stats } from '@/lib/stats';
+import { isPlanActive, planDailyLimit, planLabel, daysLeft } from '@/lib/plans';
+import { StatsPanel } from '@/components/dashboard/stats-panel';
+import { NextActionsPanel } from '@/components/dashboard/next-actions';
+import { nextActions } from '@/lib/pipeline';
+import { Badge, Panel, btnPrimary, btnGhost } from '@/components/dashboard/ui';
+import Link from 'next/link';
 
-export const metadata: Metadata = { title: "Обзор" };
-export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: 'Обзор' };
+export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect('/login');
 
   const stats = getStats(user.id);
   const actions = nextActions(user.id);
@@ -36,27 +36,37 @@ export default async function DashboardPage() {
           <div>
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="font-serif text-2xl leading-snug sm:text-3xl">
-                Добро пожаловать{user.name ? `, ${user.name}` : ""}
+                Добро пожаловать{user.name ? `, ${user.name}` : ''}
               </h1>
-              <Badge tone={active ? "success" : "warn"}>{active ? "Активен" : "Не активен"}</Badge>
+              <Badge tone={active ? 'success' : 'warn'}>{active ? 'Активен' : 'Не активен'}</Badge>
             </div>
             <p className="mt-2 max-w-xl font-mono text-xs leading-relaxed text-muted sm:text-sm">
               {active
                 ? `Тариф «${planLabel(user)}» · ${limit} откликов/день · осталось ${days} дн.`
-                : "Активируйте пробный период, чтобы запустить автоматические отклики."}
+                : 'Активируйте пробный период, чтобы запустить автоматические отклики.'}
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
             <Link href="/dashboard/jobs" className={btnPrimary}>
               <svg viewBox="0 0 24 24" fill="none" className="size-4" aria-hidden>
                 <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
-                <path d="m21 21-4.3-4.3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <path
+                  d="m21 21-4.3-4.3"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
               </svg>
               Каталог вакансий
             </Link>
             <Link href="/dashboard/applications" className={btnGhost}>
               <svg viewBox="0 0 24 24" fill="none" className="size-4" aria-hidden>
-                <path d="m22 2-7 20-4-9-9-4 20-7Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+                <path
+                  d="m22 2-7 20-4-9-9-4 20-7Z"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinejoin="round"
+                />
               </svg>
               Мои отклики
             </Link>
@@ -73,10 +83,22 @@ export default async function DashboardPage() {
       <NextActionsPanel actions={actions} />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Отправлено" value={stats.sent} trend={weeklyTrend(stats.series, "sent")} />
-        <StatCard label="Просмотрено" value={stats.viewed} trend={weeklyTrend(stats.series, "viewed")} />
-        <StatCard label="Ответов HR" value={stats.responded} trend={weeklyTrend(stats.series, "responded")} />
-        <StatCard label="Приглашения" value={stats.invited} trend={weeklyTrend(stats.series, "invited")} />
+        <StatCard label="Отправлено" value={stats.sent} trend={weeklyTrend(stats.series, 'sent')} />
+        <StatCard
+          label="Просмотрено"
+          value={stats.viewed}
+          trend={weeklyTrend(stats.series, 'viewed')}
+        />
+        <StatCard
+          label="Ответов HR"
+          value={stats.responded}
+          trend={weeklyTrend(stats.series, 'responded')}
+        />
+        <StatCard
+          label="Приглашения"
+          value={stats.invited}
+          trend={weeklyTrend(stats.series, 'invited')}
+        />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -111,8 +133,8 @@ export default async function DashboardPage() {
   );
 }
 
-type Series = Stats["series"];
-type SeriesKey = "sent" | "viewed" | "responded" | "invited";
+type Series = Stats['series'];
+type SeriesKey = 'sent' | 'viewed' | 'responded' | 'invited';
 
 /**
  * Раньше карточки и «недельная» таблица были зашиты на константы (+12%, 12/18/15/20…),
@@ -141,15 +163,7 @@ function weekRows(stats: Stats): { day: string; value: number; max: number }[] {
   return stats.series.map((d) => ({ day: d.label, value: d.sent, max }));
 }
 
-function StatCard({
-  label,
-  value,
-  trend,
-}: {
-  label: string;
-  value: number;
-  trend: string | null;
-}) {
+function StatCard({ label, value, trend }: { label: string; value: number; trend: string | null }) {
   return (
     <div className="border border-line bg-surface p-5">
       <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">{label}</p>
@@ -157,7 +171,7 @@ function StatCard({
           разрядам, и их можно сравнивать не читая подписи. Раньше здесь
           стоял эмодзи-иконка, которая ничего не кодировала. */}
       <p className="mt-3 font-mono text-3xl tabular-nums text-ink">{value}</p>
-      <p className="mt-1 text-xs text-muted">{trend ?? "за неделю нет данных"}</p>
+      <p className="mt-1 text-xs text-muted">{trend ?? 'за неделю нет данных'}</p>
     </div>
   );
 }

@@ -1,5 +1,5 @@
-import { mock } from "node:test";
-import type { User } from "../../src/lib/db";
+import { mock } from 'node:test';
+import type { User } from '../../src/lib/db';
 
 /**
  * Подмена сессии для вызова API-роутов напрямую.
@@ -17,18 +17,18 @@ import type { User } from "../../src/lib/db";
  * тестов, поэтому порядок соблюдается автоматически.
  */
 
-export const DUMMY_HASH = `scrypt$65536$8$1$${"0".repeat(32)}$${"0".repeat(128)}`;
+export const DUMMY_HASH = `scrypt$65536$8$1$${'0'.repeat(32)}$${'0'.repeat(128)}`;
 
 let currentUser: User | null = null;
 
 export function fakeUser(over: Partial<User> = {}): User {
   return {
     id: 1,
-    email: "route@example.test",
-    name: "Тестовый Пользователь",
+    email: 'route@example.test',
+    name: 'Тестовый Пользователь',
     password_hash: DUMMY_HASH,
     created_at: 0,
-    plan: "pro",
+    plan: 'pro',
     plan_period: 14,
     plan_activated_at: 0,
     plan_expires_at: Date.now() + 24 * 60 * 60 * 1000,
@@ -40,14 +40,15 @@ export function fakeUser(over: Partial<User> = {}): User {
     telegram_chat_id: null,
     autoapply_paused: 0,
     autoapply_blocked_until: 0,
-    autoapply_block_reason: "",
+    autoapply_block_reason: '',
     email_verified: 1,
-    mode: "demo",
+    mode: 'demo',
     email_verification_token: null,
+    email_verification_expires: null,
     password_reset_token: null,
     password_reset_expires: null,
     salary_expectation: null,
-    city_preference: "",
+    city_preference: '',
     ...over,
   };
 }
@@ -73,7 +74,7 @@ export const authCalls = {
   verifyPassword: 0,
 };
 
-mock.module("../../src/lib/auth.ts", {
+mock.module('../../src/lib/auth.ts', {
   exports: {
     getCurrentUser: async (): Promise<User | undefined> => currentUser ?? undefined,
     hashPassword: async (): Promise<string> => {
@@ -85,9 +86,9 @@ mock.module("../../src/lib/auth.ts", {
       return true;
     },
     needsRehash: (): boolean => false,
-    SESSION_COOKIE: "ez_session",
+    SESSION_COOKIE: 'ez_session',
     isHttpsRequest: (): boolean => false,
-    createSession: () => ({ token: "test-token", expiresAt: Date.now() + 86_400_000 }),
+    createSession: () => ({ token: 'test-token', expiresAt: Date.now() + 86_400_000 }),
     destroySession: (): void => undefined,
     getSessionUser: (): undefined => undefined,
     rotateSession: (): null => null,
@@ -106,8 +107,8 @@ mock.module("../../src/lib/auth.ts", {
 
 /** Подготовка окружения для роутов: тихая БД в памяти. */
 export function useInMemoryDb(env: Record<string, string | undefined> = {}): void {
-  process.env.EZOFFER_DB_PATH = ":memory:";
-  process.env.EZOFFER_SILENT = "1";
+  process.env.EZOFFER_DB_PATH = ':memory:';
+  process.env.EZOFFER_SILENT = '1';
   for (const [k, v] of Object.entries(env)) {
     if (v === undefined) delete process.env[k];
     else process.env[k] = v;
@@ -116,18 +117,18 @@ export function useInMemoryDb(env: Record<string, string | undefined> = {}): voi
 
 /** Строит POST-запрос с JSON-телом. */
 export function post(body: unknown): Request {
-  return new Request("http://localhost:3000/api/test", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+  return new Request('http://localhost:3000/api/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
 }
 
 /** Строит PATCH/PUT-запрос с JSON-телом. */
-export function write(method: "PATCH" | "PUT", body: unknown): Request {
-  return new Request("http://localhost:3000/api/test", {
+export function write(method: 'PATCH' | 'PUT', body: unknown): Request {
+  return new Request('http://localhost:3000/api/test', {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
 }

@@ -1,6 +1,6 @@
-import { logError, logInfo } from "./logger";
-import { envNum } from "./env";
-import { purgeExpiredAuthRows } from "./auth";
+import { logError, logInfo } from './logger';
+import { envNum } from './env';
+import { purgeExpiredAuthRows } from './auth';
 
 /**
  * Node-часть bootstrap.
@@ -21,8 +21,11 @@ import { purgeExpiredAuthRows } from "./auth";
 let schedulerStarted = false;
 
 export async function startNodeRuntime(): Promise<void> {
-  process.on("unhandledRejection", (reason) => {
-    logError("process:unhandledRejection", reason instanceof Error ? reason : new Error(String(reason)));
+  process.on('unhandledRejection', (reason) => {
+    logError(
+      'process:unhandledRejection',
+      reason instanceof Error ? reason : new Error(String(reason)),
+    );
   });
 
   // Разовая уборка просроченных сессий и OAuth-состояний на старте: за время
@@ -30,12 +33,12 @@ export async function startNodeRuntime(): Promise<void> {
   try {
     purgeExpiredAuthRows();
   } catch (err) {
-    logError("bootstrap:purge", err);
+    logError('bootstrap:purge', err);
   }
 
   // envNum, а не Number(process.env.X ?? default): Number("") === 0, и пустая
   // переменная в .env.example полностью отключала бы планировщик.
-  const intervalMs = envNum(process.env, "SCHEDULER_INTERVAL_MS", 5 * 60 * 1000, { min: 60_000 });
+  const intervalMs = envNum(process.env, 'SCHEDULER_INTERVAL_MS', 5 * 60 * 1000, { min: 60_000 });
 
   // Защита от двойного запуска: register() зовётся и при старте, и в некоторых
   // dev-сценариях повторно. Два интервала означали бы двойной поток откликов.
@@ -43,17 +46,17 @@ export async function startNodeRuntime(): Promise<void> {
   schedulerStarted = true;
 
   if (intervalMs < 60_000) {
-    logInfo("scheduler", "интервал меньше минуты — планировщик не запущен");
+    logInfo('scheduler', 'интервал меньше минуты — планировщик не запущен');
     return;
   }
 
-  logInfo("scheduler", `интервал запуска: ${Math.round(intervalMs / 1000)} с`);
+  logInfo('scheduler', `интервал запуска: ${Math.round(intervalMs / 1000)} с`);
   const tick = async (): Promise<void> => {
     try {
-      const { runScheduledJobs } = await import("./scheduler");
+      const { runScheduledJobs } = await import('./scheduler');
       await runScheduledJobs();
     } catch (err) {
-      logError("scheduler:schedule", err);
+      logError('scheduler:schedule', err);
     }
   };
   const id = setInterval(() => {

@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import type { Stats } from "@/lib/stats";
-import { StatCard, Panel } from "@/components/dashboard/ui";
-import { TodayLimitBar } from "@/components/dashboard/plan-banner";
+import { useEffect, useState } from 'react';
+import type { Stats } from '@/lib/stats';
+import { StatCard, Panel } from '@/components/dashboard/ui';
+import { TodayLimitBar } from '@/components/dashboard/plan-banner';
 
 /**
  * Ряд графика: подпись, значение, ключ в stats.series и заливка.
@@ -16,10 +16,14 @@ import { TodayLimitBar } from "@/components/dashboard/plan-banner";
  * подпись переставала означать то, что нарисовано.
  */
 const SERIES = [
-  { key: "sent", label: "Отправлено", color: "bg-accent-2" },
-  { key: "viewed", label: "Просмотрено", color: "bg-cyan" },
-  { key: "invited", label: "Приглашения", color: "bg-success" },
-] as const satisfies readonly { key: "sent" | "viewed" | "invited"; label: string; color: string }[];
+  { key: 'sent', label: 'Отправлено', color: 'bg-accent-2' },
+  { key: 'viewed', label: 'Просмотрено', color: 'bg-cyan' },
+  { key: 'invited', label: 'Приглашения', color: 'bg-success' },
+] as const satisfies readonly {
+  key: 'sent' | 'viewed' | 'invited';
+  label: string;
+  color: string;
+}[];
 
 export function StatsPanel({ initial }: { initial: Stats }) {
   const [stats, setStats] = useState<Stats>(initial);
@@ -28,12 +32,11 @@ export function StatsPanel({ initial }: { initial: Stats }) {
     let alive = true;
     const tick = async () => {
       try {
-        const res = await fetch("/api/stats", { cache: "no-store" });
+        const res = await fetch('/api/stats', { cache: 'no-store' });
         if (!res.ok) return;
         const data = await res.json();
         if (alive && data.stats) setStats(data.stats);
-      } catch {
-      }
+      } catch {}
     };
     const id = setInterval(tick, 5000);
     return () => {
@@ -59,15 +62,21 @@ export function StatsPanel({ initial }: { initial: Stats }) {
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <Panel className="flex items-center justify-between">
-          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">Просмотры</span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+            Просмотры
+          </span>
           <span className="font-mono text-xl tabular-nums text-ink">{stats.viewRate}%</span>
         </Panel>
         <Panel className="flex items-center justify-between">
-          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">Отответы HR</span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+            Отответы HR
+          </span>
           <span className="font-mono text-xl tabular-nums text-ink">{stats.respondRate}%</span>
         </Panel>
         <Panel className="flex items-center justify-between">
-          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">Приглашения</span>
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+            Приглашения
+          </span>
           <span className="font-mono text-xl tabular-nums text-ink">{stats.inviteRate}%</span>
         </Panel>
       </div>
@@ -93,10 +102,21 @@ export function StatsPanel({ initial }: { initial: Stats }) {
           </ul>
         </div>
 
-        <div className="flex h-44 items-end gap-3">
+        {/*
+            Семь дней по четыре полосы (отправлено / просмотрено / приглашено
+            / отказано) не помещались в ширину панели на телефоне: у каждой
+            группы свой min-content 38px (3×w-2.5 + 2×gap-1), а `flex-1` не
+            даёт колонке сжаться меньше него. Итого 338px при боксе 286px —
+            график выходил за край и уводил вбок всю страницу.
+
+            Полосы сделаны `w-full` внутри группы с `min-w-0`, поэтому
+            делят доступную ширину, а не требуют минимум. Столбцы прижаты к
+            низу, подписи остаются под ними.
+          */}
+        <div className="flex h-44 items-end gap-2 sm:gap-3">
           {stats.series.map((d) => (
-            <div key={d.label} className="flex flex-1 flex-col items-center gap-2">
-              <div className="flex h-36 w-full items-end justify-center gap-1">
+            <div key={d.label} className="flex min-w-0 flex-1 flex-col items-center gap-2">
+              <div className="flex h-36 w-full min-w-0 items-end justify-center gap-0.5 sm:gap-1">
                 {SERIES.map((s) => (
                   <div
                     key={s.key}
@@ -106,7 +126,7 @@ export function StatsPanel({ initial }: { initial: Stats }) {
                        браузеров. */
                     role="img"
                     aria-label={`${d.label}: ${s.label} — ${d[s.key]}`}
-                    className={`w-2.5 transition-opacity hover:opacity-100 ${s.color} opacity-85`}
+                    className={`w-full max-w-2.5 transition-opacity hover:opacity-100 ${s.color} opacity-85`}
                     style={{ height: `${(d[s.key] / max) * 100}%` }}
                   />
                 ))}

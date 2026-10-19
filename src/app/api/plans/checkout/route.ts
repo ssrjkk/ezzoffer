@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
-import { requireUser, unauthorized } from "@/lib/api";
-import { catalogItem } from "@/lib/payments/catalog";
-import { registry } from "@/lib/payments/registry";
-import { NO_STORE_HEADERS } from "@/lib/http";
+import { NextResponse } from 'next/server';
+import { requireUser, unauthorized } from '@/lib/api';
+import { catalogItem } from '@/lib/payments/catalog';
+import { registry } from '@/lib/payments/registry';
+import { NO_STORE_HEADERS } from '@/lib/http';
 
 /**
  * POST /api/plans/checkout — создать счёт за тариф.
@@ -19,25 +19,32 @@ export async function POST(request: Request) {
   if (!user) return unauthorized();
 
   const url = new URL(request.url);
-  const planId = url.searchParams.get("planId") ?? "";
-  const methodId = url.searchParams.get("method") ?? "";
+  const planId = url.searchParams.get('planId') ?? '';
+  const methodId = url.searchParams.get('method') ?? '';
 
   const item = catalogItem(planId);
-  if (!item) return NextResponse.json({ error: "Тариф неизвестен" }, { status: 400 });
+  if (!item) return NextResponse.json({ error: 'Тариф неизвестен' }, { status: 400 });
 
   // Бесплатный тариф оплатой не проходит: это activate, а не checkout.
   if (item.priceRub <= 0) {
-    return NextResponse.json({ error: "Этот тариф не требует оплаты" }, { status: 400 });
+    return NextResponse.json({ error: 'Этот тариф не требует оплаты' }, { status: 400 });
   }
 
   if (!registry.has(methodId)) {
-    return NextResponse.json({ error: "Способ оплаты неизвестен" }, { status: 400 });
+    return NextResponse.json({ error: 'Способ оплаты неизвестен' }, { status: 400 });
   }
 
   const method = registry.get(methodId)!;
-  if (!method.ready()) {
+  /*
+   * Проверяется умение выставить счёт, а не готовность принимать вебхуки.
+   *
+   * Раньше здесь стояло method.ready(): карта и СБП его проходили (HMAC-секрет
+   * задан), счёт «создавался» — номер без адреса и ссылки, платить некуда, а
+   * клиент показывал «Готово». Человек уходил уверенным, что оплатил.
+   */
+  if (!method.canCheckout()) {
     return NextResponse.json(
-      { error: method.reason?.() ?? "Способ оплаты не настроен", ready: false },
+      { error: method.checkoutReason?.() ?? 'Способ оплаты не настроен', ready: false },
       { status: 503 },
     );
   }
@@ -49,6 +56,6 @@ export async function POST(request: Request) {
       { headers: NO_STORE_HEADERS },
     );
   } catch {
-    return NextResponse.json({ error: "Не удалось создать счёт" }, { status: 502 });
+    return NextResponse.json({ error: 'Не удалось создать счёт' }, { status: 502 });
   }
 }

@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
-import { Badge, Panel, btnPrimary, btnGhost, StatusMessage } from "@/components/dashboard/ui";
-import type { LastRunReport } from "@/lib/autoapply-report";
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Badge, Panel, btnPrimary, btnGhost, StatusMessage } from '@/components/dashboard/ui';
+import type { LastRunReport } from '@/lib/autoapply-report';
 
 /**
  * Тон рамки по типу сообщения.
@@ -13,11 +13,11 @@ import type { LastRunReport } from "@/lib/autoapply-report";
  * где их легко перепутать между собой — а это ровно тот класс ошибок, который
  * уже стоил контраста.
  */
-const TONE: Record<LastRunReport["reasons"][number]["tone"], string> = {
-  good: "border-l-success",
-  warn: "border-l-warn",
-  bad: "border-l-danger",
-  muted: "border-l-line-strong",
+const TONE: Record<LastRunReport['reasons'][number]['tone'], string> = {
+  good: 'border-l-success',
+  warn: 'border-l-warn',
+  bad: 'border-l-danger',
+  muted: 'border-l-line-strong',
 };
 
 /**
@@ -31,14 +31,14 @@ const TONE: Record<LastRunReport["reasons"][number]["tone"], string> = {
 function untilText(at: number): string {
   const date = new Date(at);
   const now = new Date();
-  const time = date.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  const time = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
   if (date.toDateString() === now.toDateString()) return `сегодня в ${time}`;
 
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
   if (date.toDateString() === tomorrow.toDateString()) return `завтра в ${time}`;
 
-  return `${date.toLocaleDateString("ru-RU", { day: "numeric", month: "long" })}, ${time}`;
+  return `${date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}, ${time}`;
 }
 
 export function AutoApplyPause({ initialPaused }: { initialPaused: boolean }) {
@@ -48,11 +48,11 @@ export function AutoApplyPause({ initialPaused }: { initialPaused: boolean }) {
   const [lastRun, setLastRun] = useState<LastRunReport | null>(null);
   const [blocked, setBlocked] = useState(false);
   const [blockedUntil, setBlockedUntil] = useState(0);
-  const [blockedReason, setBlockedReason] = useState("");
+  const [blockedReason, setBlockedReason] = useState('');
 
   useEffect(() => {
     let alive = true;
-    fetch("/api/autoapply/state", { cache: "no-store" })
+    fetch('/api/autoapply/state', { cache: 'no-store' })
       .then((r) => r.json())
       .then(
         (data: {
@@ -66,7 +66,7 @@ export function AutoApplyPause({ initialPaused }: { initialPaused: boolean }) {
           setPaused(Boolean(data.paused));
           setBlocked(Boolean(data.blocked));
           setBlockedUntil(data.blockedUntil ?? 0);
-          setBlockedReason(data.blockedReason ?? "");
+          setBlockedReason(data.blockedReason ?? '');
           setLastRun(data.lastRun ?? null);
         },
       )
@@ -83,17 +83,17 @@ export function AutoApplyPause({ initialPaused }: { initialPaused: boolean }) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(paused ? "/api/autoapply/resume" : "/api/autoapply/pause", {
-        method: "POST",
+      const res = await fetch(paused ? '/api/autoapply/resume' : '/api/autoapply/pause', {
+        method: 'POST',
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Не удалось переключить");
+        setError(data.error ?? 'Не удалось переключить');
         return;
       }
       setPaused(Boolean(data.paused));
     } catch {
-      setError("Не удалось переключить");
+      setError('Не удалось переключить');
     } finally {
       setBusy(false);
     }
@@ -106,12 +106,12 @@ export function AutoApplyPause({ initialPaused }: { initialPaused: boolean }) {
           <h2 className="font-serif text-lg leading-snug text-ink">Автоотклики</h2>
           <p className="mt-1 text-sm text-muted">
             {blocked
-              ? "Отклики остановлены ограничением hh. Пауза ни при чём — состояние снимается только на площадке."
-              : "Пауза мгновенно останавливает все автоотклики и активные поиски. Настройки сохраняются."}
+              ? 'Отклики остановлены ограничением hh. Пауза ни при чём — состояние снимается только на площадке.'
+              : 'Пауза мгновенно останавливает все автоотклики и активные поиски. Настройки сохраняются.'}
           </p>
         </div>
-        <Badge tone={blocked ? "danger" : paused ? "warn" : "success"}>
-          {blocked ? "Аккаунт ограничен" : paused ? "На паузе" : "Активны"}
+        <Badge tone={blocked ? 'danger' : paused ? 'warn' : 'success'}>
+          {blocked ? 'Аккаунт ограничен' : paused ? 'На паузе' : 'Активны'}
         </Badge>
       </div>
 
@@ -127,17 +127,20 @@ export function AutoApplyPause({ initialPaused }: { initialPaused: boolean }) {
       {blocked ? (
         <div className="mt-4 border-l-2 border-l-danger bg-surface-2 px-4 py-3">
           <p className="text-sm font-semibold text-ink">
-            {blockedReason || "hh.ru ограничил доступ к аккаунту"}
+            {blockedReason || 'hh.ru ограничил доступ к аккаунту'}
           </p>
           <p className="mt-1.5 text-sm leading-relaxed text-muted">
-            Отклики остановлены до {blockedUntil ? untilText(blockedUntil) : "снятия ограничения"}.
-            Пока ограничение висит, любая отправка только ухудшает положение аккаунта, поэтому сервис
-            ждёт и не повторяет попытки.
+            Отклики остановлены до {blockedUntil ? untilText(blockedUntil) : 'снятия ограничения'}.
+            Пока ограничение висит, любая отправка только ухудшает положение аккаунта, поэтому
+            сервис ждёт и не повторяет попытки.
           </p>
           <p className="mt-2 text-sm leading-relaxed text-muted">
             Снять это можно только на hh.ru: проверьте, нет ли там ограничений или требования
-            подтвердить аккаунт. Если после снятия отклики так и не пошли, переподключите его в{" "}
-            <Link href="/dashboard/settings" className="font-medium text-accent-2 underline-offset-2 hover:underline">
+            подтвердить аккаунт. Если после снятия отклики так и не пошли, переподключите его в{' '}
+            <Link
+              href="/dashboard/settings"
+              className="font-medium text-accent-2 underline-offset-2 hover:underline"
+            >
               настройках
             </Link>
             .
@@ -160,13 +163,18 @@ export function AutoApplyPause({ initialPaused }: { initialPaused: boolean }) {
             Проверить аккаунт hh
           </Link>
         ) : (
-          <button type="button" disabled={busy} onClick={toggle} className={paused ? btnPrimary : btnGhost}>
-            {busy ? "Сохраняем…" : paused ? "Возобновить автоотклики" : "Поставить на паузу"}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={toggle}
+            className={paused ? btnPrimary : btnGhost}
+          >
+            {busy ? 'Сохраняем…' : paused ? 'Возобновить автоотклики' : 'Поставить на паузу'}
           </button>
         )}
         <Link
           href="/platform-rules"
-          className="text-sm font-medium text-accent-2 underline-offset-2 transition-colors hover:underline"
+          className="-my-1 inline-flex min-h-11 items-center text-sm font-medium text-accent-2 underline-offset-2 transition-colors hover:underline"
         >
           Правила платформ и риски
         </Link>
@@ -184,16 +192,17 @@ export function AutoApplyPause({ initialPaused }: { initialPaused: boolean }) {
 
         {!lastRun ? (
           <p className="mt-2 text-sm text-muted">
-            Прогон ещё не выполнялся. Он запускается автоматически, когда есть активные поиски и привязанный аккаунт hh.
+            Прогон ещё не выполнялся. Он запускается автоматически, когда есть активные поиски и
+            привязанный аккаунт hh.
           </p>
         ) : (
           <>
             <p className="mt-1 text-sm text-muted">
-              {new Date(lastRun.at).toLocaleString("ru-RU", {
-                day: "2-digit",
-                month: "2-digit",
-                hour: "2-digit",
-                minute: "2-digit",
+              {new Date(lastRun.at).toLocaleString('ru-RU', {
+                day: '2-digit',
+                month: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
               })}
             </p>
             <ul className="mt-3 space-y-2">

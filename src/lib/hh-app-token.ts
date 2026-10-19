@@ -1,5 +1,5 @@
-import { envOpt } from "./env";
-import { logError, logInfo } from "./logger";
+import { envOpt } from './env';
+import { logError, logInfo } from './logger';
 
 /**
  * Токен приложения hh.ru.
@@ -29,7 +29,7 @@ import { logError, logInfo } from "./logger";
  * то есть автоотклик не отправлял ничего вообще.
  */
 
-const TOKEN_URL = "https://api.hh.ru/token";
+const TOKEN_URL = 'https://api.hh.ru/token';
 /** Обновляем за 5 минут до истечения: токен может протухнуть во время запроса. */
 const REFRESH_MARGIN_MS = 5 * 60_000;
 
@@ -42,8 +42,8 @@ let cached: HhAppToken | null = null;
 let inFlight: Promise<HhAppToken | null> | null = null;
 
 function credentials(): { clientId: string; clientSecret: string } | null {
-  const clientId = envOpt(process.env, "HH_CLIENT_ID");
-  const clientSecret = envOpt(process.env, "HH_CLIENT_SECRET");
+  const clientId = envOpt(process.env, 'HH_CLIENT_ID');
+  const clientSecret = envOpt(process.env, 'HH_CLIENT_SECRET');
   return clientId && clientSecret ? { clientId, clientSecret } : null;
 }
 
@@ -55,7 +55,7 @@ function credentials(): { clientId: string; clientSecret: string } | null {
  * вручную, — но основной путь это client_credentials.
  */
 export function hhSearchConfigured(): boolean {
-  if (envOpt(process.env, "HH_ACCESS_TOKEN")) return true;
+  if (envOpt(process.env, 'HH_ACCESS_TOKEN')) return true;
   return credentials() !== null;
 }
 
@@ -79,7 +79,7 @@ export async function getHhAppToken(): Promise<string | null> {
   if (cached && cached.expiresAt - REFRESH_MARGIN_MS > now) return cached.token;
 
   // Статический токен в конфигурации приоритетнее: он не протухает сам.
-  const staticToken = envOpt(process.env, "HH_ACCESS_TOKEN");
+  const staticToken = envOpt(process.env, 'HH_ACCESS_TOKEN');
   if (staticToken) return staticToken;
 
   const creds = credentials();
@@ -93,7 +93,7 @@ export async function getHhAppToken(): Promise<string | null> {
   inFlight = (async (): Promise<HhAppToken | null> => {
     try {
       const body = new URLSearchParams({
-        grant_type: "client_credentials",
+        grant_type: 'client_credentials',
         client_id: creds.clientId,
         client_secret: creds.clientSecret,
       });
@@ -102,15 +102,15 @@ export async function getHhAppToken(): Promise<string | null> {
       const timer = setTimeout(() => controller.abort(), 15_000);
       try {
         const res = await fetch(TOKEN_URL, {
-          method: "POST",
+          method: 'POST',
           signal: controller.signal,
           headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            Accept: "application/json",
-            "User-Agent": "EZOffer/1.0",
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Accept: 'application/json',
+            'User-Agent': 'EZOffer/1.0',
           },
           body,
-          cache: "no-store",
+          cache: 'no-store',
         });
 
         const text = await res.text();
@@ -123,7 +123,7 @@ export async function getHhAppToken(): Promise<string | null> {
 
         if (!res.ok || !data.access_token) {
           const detail = data.error_description || data.error || `HTTP ${res.status}`;
-          logError("hh:app-token", new Error(detail), { detail: text.slice(0, 200) });
+          logError('hh:app-token', new Error(detail), { detail: text.slice(0, 200) });
           // Сбрасываем кэш, чтобы следующая попытка не ждала истечения.
           cached = null;
           return null;
@@ -132,13 +132,13 @@ export async function getHhAppToken(): Promise<string | null> {
         // Если hh не отдал срок — считаем час, типичное значение для клиентских токенов.
         const ttlMs = (data.expires_in ?? 3600) * 1000;
         cached = { token: data.access_token, expiresAt: now + ttlMs };
-        logInfo("hh:app-token", `токен приложения получен, ttl ${Math.round(ttlMs / 1000)} с`);
+        logInfo('hh:app-token', `токен приложения получен, ttl ${Math.round(ttlMs / 1000)} с`);
         return cached;
       } finally {
         clearTimeout(timer);
       }
     } catch (e) {
-      logError("hh:app-token", e);
+      logError('hh:app-token', e);
       cached = null;
       return null;
     } finally {

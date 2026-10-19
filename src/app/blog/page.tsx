@@ -1,12 +1,13 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import { articles } from "@/lib/data";
-import { articleDateIso } from "@/lib/article-date";
-import { Eyebrow } from "@/components/ui";
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { articles } from '@/lib/data';
+import { articleDateIso } from '@/lib/article-date';
+import { Eyebrow } from '@/components/ui';
 
 export const metadata: Metadata = {
-  title: "Блог",
-  description: "Статьи и советы о поиске работы: автоотклики, резюме, ATS, сопроводительные письма и карьерные стратегии.",
+  title: 'Блог',
+  description:
+    'Статьи и советы о поиске работы: автоотклики, резюме, ATS, сопроводительные письма и карьерные стратегии.',
 };
 
 export default function BlogPage() {
@@ -40,7 +41,7 @@ export default function BlogPage() {
             className="group grid gap-3 border-b border-line py-7 transition-colors hover:bg-surface-2 md:grid-cols-12 md:gap-8 md:px-4"
           >
             <span className="font-mono text-xs tabular-nums text-muted md:col-span-1">
-              {String(idx + 1).padStart(2, "0")}
+              {String(idx + 1).padStart(2, '0')}
             </span>
 
             <div className="md:col-span-7">

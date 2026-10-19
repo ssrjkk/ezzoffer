@@ -1,5 +1,5 @@
-import test, { before, beforeEach } from "node:test";
-import assert from "node:assert/strict";
+import test, { before, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
 
 /*
  * Важно: ни одного статического импорта модулей, которые тянут ./db.
@@ -29,18 +29,18 @@ let resetPacing: () => void;
  * действию: кнопка, которая выглядит рабочей и молчит, хуже отсутствующей.
  */
 
-type Database = ReturnType<typeof import("../src/lib/db").createDatabase>;
+type Database = ReturnType<typeof import('../src/lib/db').createDatabase>;
 
 let db: Database;
-let bot: typeof import("../src/lib/telegram-bot");
+let bot: typeof import('../src/lib/telegram-bot');
 let sent: { chatId: string; text: string; keyboard?: unknown; parseMode?: string }[];
 let edited: { chatId: string; messageId: number; text: string }[];
 let answered: { id: string; text?: string }[];
 
 before(async () => {
-  process.env.EZOFFER_DB_PATH = ":memory:";
-  process.env.EZOFFER_SILENT = "1";
-  process.env.TELEGRAM_BOT_TOKEN = "test-token";
+  process.env.EZOFFER_DB_PATH = ':memory:';
+  process.env.EZOFFER_SILENT = '1';
+  process.env.TELEGRAM_BOT_TOKEN = 'test-token';
   /*
    * Рабочее окно расширено на весь час.
    *
@@ -49,48 +49,48 @@ before(async () => {
    * подменить, поэтому окно раскрывается переменными окружения — это штатная
    * настройка сервиса, а не обход проверки.
    */
-  process.env.AUTOAPPLY_WORK_START = "0";
+  process.env.AUTOAPPLY_WORK_START = '0';
   // 24, а не 23: workEndHour() допускает 24, а при 23 час 23 всё ещё
   // считается ночным.
-  process.env.AUTOAPPLY_WORK_END = "24";
-  db = (await import("../src/lib/db")).db;
-  bot = await import("../src/lib/telegram-bot");
-  escapeHtml = (await import("../src/lib/telegram")).escapeHtml;
-  resetCatalogCache = (await import("../src/lib/vacancies")).resetCatalogCache;
-  resetPacing = (await import("../src/lib/autoapply")).resetPacing;
+  process.env.AUTOAPPLY_WORK_END = '24';
+  db = (await import('../src/lib/db')).db;
+  bot = await import('../src/lib/telegram-bot');
+  escapeHtml = (await import('../src/lib/telegram')).escapeHtml;
+  resetCatalogCache = (await import('../src/lib/vacancies')).resetCatalogCache;
+  resetPacing = (await import('../src/lib/autoapply')).resetPacing;
 
   globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
     const u = String(url);
     const body = (() => {
       try {
-        return JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+        return JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
       } catch {
         return {};
       }
     })();
 
-    if (u.includes("/sendMessage")) {
+    if (u.includes('/sendMessage')) {
       sent.push({
-        chatId: String(body.chat_id ?? ""),
-        text: String(body.text ?? ""),
+        chatId: String(body.chat_id ?? ''),
+        text: String(body.text ?? ''),
         keyboard: body.reply_markup,
         parseMode: body.parse_mode as string | undefined,
       });
-      return { ok: true, status: 200, text: async () => "{}" } as unknown as Response;
+      return { ok: true, status: 200, text: async () => '{}' } as unknown as Response;
     }
-    if (u.includes("/editMessageText")) {
+    if (u.includes('/editMessageText')) {
       edited.push({
-        chatId: String(body.chat_id ?? ""),
+        chatId: String(body.chat_id ?? ''),
         messageId: Number(body.message_id),
-        text: String(body.text ?? ""),
+        text: String(body.text ?? ''),
       });
-      return { ok: true, status: 200, text: async () => "{}" } as unknown as Response;
+      return { ok: true, status: 200, text: async () => '{}' } as unknown as Response;
     }
-    if (u.includes("/answerCallbackQuery")) {
-      answered.push({ id: String(body.callback_query_id ?? ""), text: body.text as string });
-      return { ok: true, status: 200, text: async () => "{}" } as unknown as Response;
+    if (u.includes('/answerCallbackQuery')) {
+      answered.push({ id: String(body.callback_query_id ?? ''), text: body.text as string });
+      return { ok: true, status: 200, text: async () => '{}' } as unknown as Response;
     }
-    return { ok: true, status: 200, text: async () => "{}" } as unknown as Response;
+    return { ok: true, status: 200, text: async () => '{}' } as unknown as Response;
   }) as typeof globalThis.fetch;
 });
 
@@ -100,7 +100,7 @@ beforeEach(() => {
    * удаляются раньше родителя — иначе SQLITE_CONSTRAINT_FOREIGNKEY.
    */
   db.exec(
-    "DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies;",
+    'DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies;',
   );
   // getCatalog() кэширует выборку на 30 секунд и сам сбрасывается только при
   // записи через upsertMany. Прямая вставка в SQL кэш не трогает, и каталог
@@ -121,13 +121,9 @@ beforeEach(() => {
 function seedUser(over: Record<string, unknown> = {}): void {
   db.prepare(
     `INSERT INTO users (id, email, password_hash, plan, plan_expires_at, created_at, hh_token,
-       hh_resume_id, telegram_chat_id, autoapply_paused)
-     VALUES (1, 'u@example.test', 'h', 'pro', ?, ?, 'user-token', 'res123', '777', ?)`,
-  ).run(
-    Date.now() + 100_000,
-    Date.now(),
-    (over.autoapply_paused as number) ?? 0,
-  );
+       hh_resume_id, telegram_chat_id, autoapply_paused, mode)
+     VALUES (1, 'u@example.test', 'h', 'pro', ?, ?, 'user-token', 'res123', '777', ?, 'live')`,
+  ).run(Date.now() + 100_000, Date.now(), (over.autoapply_paused as number) ?? 0);
   db.prepare(
     `INSERT INTO resumes (user_id, title, content, hh_id, created_at, updated_at)
      VALUES (1, 'Frontend', 'React, TypeScript, Next.js', 'hh-front', ?, ?)`,
@@ -150,7 +146,7 @@ function seedVacancy(slug: string, title: string): void {
 async function click(data: string, messageId = 100) {
   await bot.handleUpdate({
     update_id: Math.floor(Math.random() * 1e9),
-    callback_query: { id: "cb1", data, message_id: messageId, chat: { id: 777 } },
+    callback_query: { id: 'cb1', data, message_id: messageId, chat: { id: 777 } },
   });
 }
 
@@ -163,92 +159,98 @@ async function click(data: string, messageId = 100) {
  * Неэкранированная строка ломает разметку всего сообщения — Telegram отвергнет
  * его целиком, и человек не получит ни ответа, ни кнопок.
  */
-test("спецсимволы в данных не ломают разметку", () => {
-  assert.equal(escapeHtml("A & B"), "A &amp; B");
-  assert.equal(escapeHtml("<script>"), "&lt;script&gt;");
+test('спецсимволы в данных не ломают разметку', () => {
+  assert.equal(escapeHtml('A & B'), 'A &amp; B');
+  assert.equal(escapeHtml('<script>'), '&lt;script&gt;');
   // Амперсанд экранируется первым: иначе «&lt;» превратится в «&amp;lt;».
-  assert.equal(escapeHtml("&lt;"), "&amp;lt;");
+  assert.equal(escapeHtml('&lt;'), '&amp;lt;');
 });
 
-test("название вакансии с угловыми скобками не ломает сообщение", async () => {
+test('название вакансии с угловыми скобками не ломает сообщение', async () => {
   seedUser();
-  seedVacancy("hh-xss", "React <dev> & co");
+  seedVacancy('hh-xss', 'React <dev> & co');
 
-  await bot.handleUpdate({ update_id: 1, message: { chat: { id: 777 }, text: "/подбор" } });
-  assert.ok(sent.length > 0, "подбор не ответил");
+  await bot.handleUpdate({ update_id: 1, message: { chat: { id: 777 }, text: '/подбор' } });
+  assert.ok(sent.length > 0, 'подбор не ответил');
   const last = sent[sent.length - 1]!;
-  assert.ok(!last.text.includes("<dev>"), `неэкранированные данные в сообщении: ${last.text}`);
-  assert.ok(last.text.includes("&lt;dev&gt;"), `данные потеряны: ${last.text}`);
+  assert.ok(!last.text.includes('<dev>'), `неэкранированные данные в сообщении: ${last.text}`);
+  assert.ok(last.text.includes('&lt;dev&gt;'), `данные потеряны: ${last.text}`);
 });
 
 // ------------------------------------------------------------------ клавиатуры
 
-test("у справки есть кнопки", async () => {
+test('у справки есть кнопки', async () => {
   seedUser();
-  await bot.handleUpdate({ update_id: 2, message: { chat: { id: 777 }, text: "/помощь" } });
+  await bot.handleUpdate({ update_id: 2, message: { chat: { id: 777 }, text: '/помощь' } });
 
   const kb = sent[sent.length - 1]!.keyboard as
-    | { inline_keyboard: { text: string; data?: string; url?: string }[][] }
-    | undefined;
-  assert.ok(kb, "у справки нет кнопок — человек обязан помнить команды");
+    { inline_keyboard: { text: string; data?: string; url?: string }[][] } | undefined;
+  assert.ok(kb, 'у справки нет кнопок — человек обязан помнить команды');
   const labels = kb!.inline_keyboard.flat().map((b) => b.text);
   assert.ok(labels.length >= 2, `кнопок слишком мало: ${JSON.stringify(labels)}`);
 });
 
-test("подбор даёт кнопку на каждую вакансию", async () => {
+test('подбор даёт кнопку на каждую вакансию', async () => {
   seedUser();
-  seedVacancy("hh-r1", "React-разработчик");
-  seedVacancy("hh-r2", "React-инженер");
+  seedVacancy('hh-r1', 'React-разработчик');
+  seedVacancy('hh-r2', 'React-инженер');
 
-  await bot.handleUpdate({ update_id: 3, message: { chat: { id: 777 }, text: "/подбор" } });
+  await bot.handleUpdate({ update_id: 3, message: { chat: { id: 777 }, text: '/подбор' } });
   const kb = sent[sent.length - 1]!.keyboard as
-    | { inline_keyboard: { text: string; data?: string }[][] }
-    | undefined;
-  assert.ok(kb, "у подбора нет кнопок");
+    { inline_keyboard: { text: string; data?: string }[][] } | undefined;
+  assert.ok(kb, 'у подбора нет кнопок');
 
-  const applyButtons = kb!.inline_keyboard.flat().filter((b) => b.data?.startsWith("apply:"));
+  const applyButtons = kb!.inline_keyboard.flat().filter((b) => b.data?.startsWith('apply:'));
   assert.ok(applyButtons.length >= 2, `кнопок отклика ${applyButtons.length} вместо 2`);
-  assert.equal(applyButtons[0]!.data, "apply:1");
+  assert.equal(applyButtons[0]!.data, 'apply:1');
 });
 
-test("подпись кнопки содержит номер и название", () => {
-  const kb = bot.keyboardFor([{ title: "Senior React Developer", company: "Авито" }]);
+test('подпись кнопки содержит номер и название', () => {
+  const kb = bot.keyboardFor([{ title: 'Senior React Developer', company: 'Авито' }]);
   const label = kb!.inline_keyboard[0]![0]!.text;
   assert.match(label, /^1\./, `в подписи нет номера: ${label}`);
-  assert.ok(label.includes("Авито"), `в подписи нет компании: ${label}`);
+  assert.ok(label.includes('Авито'), `в подписи нет компании: ${label}`);
 });
 
-test("длинная подпись обрезается, а не вылезает за экран", () => {
-  const kb = bot.keyboardFor([{ title: "Очень длинное название вакансии ".repeat(6), company: "К" }]);
+test('длинная подпись обрезается, а не вылезает за экран', () => {
+  const kb = bot.keyboardFor([
+    { title: 'Очень длинное название вакансии '.repeat(6), company: 'К' },
+  ]);
   const label = kb!.inline_keyboard[0]![0]!.text;
-  assert.ok(label.length <= 36, `подпись длиной ${label.length} — Telegram обрежет её сам, но многоточие не на месте`);
+  assert.ok(
+    label.length <= 36,
+    `подпись длиной ${label.length} — Telegram обрежет её сам, но многоточие не на месте`,
+  );
 });
 
-test("подбор ограничен пятью вакансиями и говорит об этом", async () => {
+test('подбор ограничен пятью вакансиями и говорит об этом', async () => {
   seedUser();
   for (let i = 0; i < 9; i++) seedVacancy(`hh-m${i}`, `React-разработчик ${i}`);
 
-  await bot.handleUpdate({ update_id: 4, message: { chat: { id: 777 }, text: "/подбор" } });
+  await bot.handleUpdate({ update_id: 4, message: { chat: { id: 777 }, text: '/подбор' } });
   const kb = sent[sent.length - 1]!.keyboard as { inline_keyboard: { data?: string }[][] };
-  const applyButtons = kb.inline_keyboard.flat().filter((b) => b.data?.startsWith("apply:"));
-  assert.ok(applyButtons.length <= 5, `показано ${applyButtons.length} вакансий — список не читают`);
+  const applyButtons = kb.inline_keyboard.flat().filter((b) => b.data?.startsWith('apply:'));
+  assert.ok(
+    applyButtons.length <= 5,
+    `показано ${applyButtons.length} вакансий — список не читают`,
+  );
 
   const text = sent[sent.length - 1]!.text;
-  assert.match(text, /ещё|еще/i, "не сказано, что список неполный — это молчаливое усечение");
+  assert.match(text, /ещё|еще/i, 'не сказано, что список неполный — это молчаливое усечение');
 });
 
 // ------------------------------------------------------------------ нажатия
 
-test("нажатие на кнопку подбора открывает подбор, а не молчит", async () => {
+test('нажатие на кнопку подбора открывает подбор, а не молчит', async () => {
   seedUser();
-  seedVacancy("hh-c1", "React-разработчик");
+  seedVacancy('hh-c1', 'React-разработчик');
 
-  await click("menu:search");
-  assert.ok(edited.length > 0, "сообщение не изменилось — нажатие ничего не сделало");
-  assert.match(edited[0]!.text, /Подбор/i, "нажатие открыло не подбор");
+  await click('menu:search');
+  assert.ok(edited.length > 0, 'сообщение не изменилось — нажатие ничего не сделало');
+  assert.match(edited[0]!.text, /Подбор/i, 'нажатие открыло не подбор');
 });
 
-test("нажатие подтверждается — иначе кнопка «часит» и её жмут ещё раз", async () => {
+test('нажатие подтверждается — иначе кнопка «часит» и её жмут ещё раз', async () => {
   /*
    * Без answerCallbackQuery Telegram держит «часики» на кнопке, пока бот думает.
    * Человек нажимает повторно — это второй отклик на ту же вакансию.
@@ -258,19 +260,22 @@ test("нажатие подтверждается — иначе кнопка «
    */
   seedUser();
   for (const [data, label] of [
-    ["menu:stats", "статистика"],
-    ["menu:pause", "пауза"],
-    ["menu:resume", "продолжить"],
-    ["menu:search", "подбор"],
-    ["menu:help", "помощь"],
+    ['menu:stats', 'статистика'],
+    ['menu:pause', 'пауза'],
+    ['menu:resume', 'продолжить'],
+    ['menu:search', 'подбор'],
+    ['menu:help', 'помощь'],
   ] as const) {
     answered = [];
     await click(data);
-    assert.ok(answered.length > 0, `кнопка «${label}» не подтвердила нажатие — будет выглядеть зависшей`);
+    assert.ok(
+      answered.length > 0,
+      `кнопка «${label}» не подтвердила нажатие — будет выглядеть зависшей`,
+    );
   }
 });
 
-test("нажатие меняет сообщение на месте, а не шлёт новое", async () => {
+test('нажатие меняет сообщение на месте, а не шлёт новое', async () => {
   /*
    * Новое сообщение после каждого нажатия превращало бы переписку в стопку
    * одинаковых сообщений, и нужный ответ уезжал бы наверх.
@@ -279,91 +284,98 @@ test("нажатие меняет сообщение на месте, а не ш
    * на месте должна работать в обеих.
    */
   seedUser();
-  for (const data of ["menu:stats", "menu:pause"]) {
+  for (const data of ['menu:stats', 'menu:pause']) {
     sent = [];
     edited = [];
     await click(data);
-    assert.equal(sent.length, 0, `${data}: отправлено ${sent.length} новых сообщений вместо правки`);
+    assert.equal(
+      sent.length,
+      0,
+      `${data}: отправлено ${sent.length} новых сообщений вместо правки`,
+    );
     assert.equal(edited.length, 1, `${data}: сообщение не изменено`);
     assert.equal(edited[0]!.messageId, 100, `${data}: изменено не то сообщение`);
   }
 });
 
-test("нажатие «Пауза» реально останавливает отправку", async () => {
+test('нажатие «Пауза» реально останавливает отправку', async () => {
   seedUser();
-  await click("menu:pause");
+  await click('menu:pause');
 
-  const row = db.prepare("SELECT autoapply_paused FROM users WHERE id = 1").get() as {
+  const row = db.prepare('SELECT autoapply_paused FROM users WHERE id = 1').get() as {
     autoapply_paused: number;
   };
-  assert.equal(row.autoapply_paused, 1, "кнопка паузы не изменила состояние");
+  assert.equal(row.autoapply_paused, 1, 'кнопка паузы не изменила состояние');
 
-  const text = edited[0]?.text ?? sent[sent.length - 1]?.text ?? "";
-  assert.match(text, /пауз/i, "ответ не сообщает о результате");
+  const text = edited[0]?.text ?? sent[sent.length - 1]?.text ?? '';
+  assert.match(text, /пауз/i, 'ответ не сообщает о результате');
 });
 
-test("нажатие «Продолжить» снимает паузу", async () => {
+test('нажатие «Продолжить» снимает паузу', async () => {
   seedUser({ autoapply_paused: 1 });
-  await click("menu:resume");
-  const row = db.prepare("SELECT autoapply_paused FROM users WHERE id = 1").get() as {
+  await click('menu:resume');
+  const row = db.prepare('SELECT autoapply_paused FROM users WHERE id = 1').get() as {
     autoapply_paused: number;
   };
-  assert.equal(row.autoapply_paused, 0, "кнопка не сняла паузу");
+  assert.equal(row.autoapply_paused, 0, 'кнопка не сняла паузу');
 });
 
-test("нажатие на отклик отправляет отклик", async () => {
+test('нажатие на отклик отправляет отклик', async () => {
   seedUser();
-  seedVacancy("hh-a1", "React-разработчик");
+  seedVacancy('hh-a1', 'React-разработчик');
 
   // Перехватываем запрос к hh, чтобы отклик ушёл, а не упал.
   const savedFetch = globalThis.fetch;
   let sentToHh = false;
   globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
     const u = String(url);
-    if (u.includes("api.hh.ru/negotiations")) {
+    if (u.includes('api.hh.ru/negotiations')) {
       sentToHh = true;
-      return { ok: true, status: 200, text: async () => "{}" } as unknown as Response;
+      return { ok: true, status: 200, text: async () => '{}' } as unknown as Response;
     }
-    if (u.includes("/token")) {
+    if (u.includes('/token')) {
       return {
         ok: true,
         status: 200,
-        text: async () => JSON.stringify({ access_token: "user-token", expires_in: 3600 }),
+        text: async () => JSON.stringify({ access_token: 'user-token', expires_in: 3600 }),
       } as unknown as Response;
     }
     return savedFetch(url, init);
   }) as typeof globalThis.fetch;
 
   try {
-    await click("apply:1");
+    await click('apply:1');
   } finally {
     globalThis.fetch = savedFetch;
   }
 
-  assert.ok(sentToHh, "нажатие на «откликнуться» не отправило отклик");
-  const apps = (db.prepare("SELECT COUNT(*) AS c FROM applications").get() as { c: number }).c;
-  assert.equal(apps, 1, "отклик не записан в историю");
+  assert.ok(sentToHh, 'нажатие на «откликнуться» не отправило отклик');
+  const apps = (db.prepare('SELECT COUNT(*) AS c FROM applications').get() as { c: number }).c;
+  assert.equal(apps, 1, 'отклик не записан в историю');
 });
 
-test("нажатие без привязки объясняет, что делать", async () => {
-  await click("menu:stats");
-  assert.ok(sent.length + edited.length > 0, "нажатие без привязки не получило ответа");
-  const text = sent.map((s) => s.text).join("\n");
-  assert.match(text, /привян|привяза/i, "не сказано, что аккаунт не привязан");
+test('нажатие без привязки объясняет, что делать', async () => {
+  await click('menu:stats');
+  assert.ok(sent.length + edited.length > 0, 'нажатие без привязки не получило ответа');
+  const text = sent.map((s) => s.text).join('\n');
+  assert.match(text, /привян|привяза/i, 'не сказано, что аккаунт не привязан');
 });
 
-test("устаревшая кнопка не выглядит как поломка", () => {
+test('устаревшая кнопка не выглядит как поломка', () => {
   // Кнопка из старого сообщения приходит с номером, которого уже нет в подборе.
   // Молчание читалось бы как «бот сломался».
-  const reply = bot.replyFor("отклик", "99", null);
-  assert.ok(reply.text.length > 0, "на несуществующий номер нет ответа");
+  const reply = bot.replyFor('отклик', '99', null);
+  assert.ok(reply.text.length > 0, 'на несуществующий номер нет ответа');
 });
 
-test("сообщения бота не содержат незакрытой разметки", async () => {
+test('сообщения бота не содержат незакрытой разметки', async () => {
   seedUser();
-  seedVacancy("hh-m1", "React-разработчик");
-  for (const cmd of ["/подбор", "/статистика", "/помощь"]) {
-    await bot.handleUpdate({ update_id: 100 + cmd.length, message: { chat: { id: 777 }, text: cmd } });
+  seedVacancy('hh-m1', 'React-разработчик');
+  for (const cmd of ['/подбор', '/статистика', '/помощь']) {
+    await bot.handleUpdate({
+      update_id: 100 + cmd.length,
+      message: { chat: { id: 777 }, text: cmd },
+    });
   }
   for (const s of [...sent, ...edited]) {
     const open = (s.text.match(/<b>/g) ?? []).length;

@@ -47,3 +47,6 @@ next-env.d.ts
 # temp test output
 test_tmp.txt
 .playwright-cli/
+
+# Пакет деплоя собирается локально и в репозиторий не нужен
+deploy-out/

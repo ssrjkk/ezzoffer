@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
-import { requireUser, unauthorized } from "@/lib/api";
-import { db } from "@/lib/db";
+import { NextResponse } from 'next/server';
+import { requireUser, unauthorized } from '@/lib/api';
+import { db } from '@/lib/db';
 
 /**
  * Мгновенная пауза всех автооткликов пользователя.
@@ -15,6 +15,6 @@ export async function POST() {
   const user = await requireUser();
   if (!user) return unauthorized();
 
-  db.prepare("UPDATE users SET autoapply_paused = 1 WHERE id = ?").run(user.id);
+  db.prepare('UPDATE users SET autoapply_paused = 1 WHERE id = ?').run(user.id);
   return NextResponse.json({ paused: true });
 }

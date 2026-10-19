@@ -1,12 +1,12 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import { Section } from "@/components/ui";
-import { HowItWorks } from "@/components/how-it-works";
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { Section } from '@/components/ui';
+import { HowItWorks } from '@/components/how-it-works';
 
 export const metadata: Metadata = {
-  title: "Как это работает",
+  title: 'Как это работает',
   description:
-    "Пример работы EZOffer: сопроводительное письмо под конкретную вакансию и разбор резюме против требований — с теми же расчётами, что работают в сервисе.",
+    'Пример работы EZOffer: сопроводительное письмо под конкретную вакансию и разбор резюме против требований — с теми же расчётами, что работают в сервисе.',
 };
 
 /*
@@ -74,7 +74,10 @@ export default function HowItWorksPage() {
               Попробовать бесплатно
               <span aria-hidden>→</span>
             </Link>
-            <Link href="/dashboard/resumes" className="text-sm font-medium text-accent-2 underline-offset-2 hover:underline">
+            <Link
+              href="/dashboard/resumes"
+              className="-my-1 inline-flex min-h-11 items-center text-sm font-medium text-accent-2 underline-offset-2 hover:underline"
+            >
               Загрузить резюме →
             </Link>
           </div>

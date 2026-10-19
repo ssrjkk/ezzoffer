@@ -1,5 +1,5 @@
-import Link from "next/link";
-import type { ReactNode } from "react";
+import Link from 'next/link';
+import type { ReactNode } from 'react';
 
 /*
  * Базовые элементы в редакционном ключе.
@@ -32,31 +32,31 @@ import type { ReactNode } from "react";
  * role="status" (вежливо, не перебивая).
  */
 export function StatusMessage({
-  tone = "error",
+  tone = 'error',
   children,
-  className = "",
+  className = '',
 }: {
-  tone?: "error" | "success" | "notice";
+  tone?: 'error' | 'success' | 'notice';
   children?: React.ReactNode;
   className?: string;
 }) {
-  const isError = tone === "error";
+  const isError = tone === 'error';
   const live = isError
-    ? { role: "alert" as const, "aria-live": "assertive" as const }
-    : { role: "status" as const, "aria-live": "polite" as const };
+    ? { role: 'alert' as const, 'aria-live': 'assertive' as const }
+    : { role: 'status' as const, 'aria-live': 'polite' as const };
 
   // Пустая область остаётся в DOM, но без оформления: иначе она занимала
   // бы место в вёрстке между нажатием и ответом сервера. Отступ у <p> здесь
   // не обнулён префлайтом, поэтому задаём margin явно.
-  if (children === null || children === undefined || children === "") {
+  if (children === null || children === undefined || children === '') {
     return <p {...live} className="m-0" />;
   }
 
   const cls = isError
-    ? "border-danger/30 bg-danger/10 text-danger"
-    : tone === "success"
-      ? "border-success/30 bg-success/10 text-success"
-      : "border-accent/30 bg-accent/10 text-accent-2";
+    ? 'border-danger/30 bg-danger/10 text-danger'
+    : tone === 'success'
+      ? 'border-success/30 bg-success/10 text-success'
+      : 'border-accent/30 bg-accent/10 text-accent-2';
   return (
     <p {...live} className={`rounded-sm border px-4 py-3 text-sm ${cls} ${className}`}>
       {children}
@@ -65,9 +65,11 @@ export function StatusMessage({
 }
 
 /** Прописная метка-«рубрика». Единственный красный элемент в разделе. */
-export function Eyebrow({ children, className = "" }: { children: ReactNode; className?: string }) {
+export function Eyebrow({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
-    <p className={`flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-accent ${className}`}>
+    <p
+      className={`flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-accent ${className}`}
+    >
       <span aria-hidden className="block h-px w-7 bg-accent" />
       {children}
     </p>
@@ -86,7 +88,7 @@ export function SectionHead({
   title,
   sub,
   center = false,
-  level: Heading = "h2",
+  level: Heading = 'h2',
 }: {
   eyebrow: string;
   title: ReactNode;
@@ -101,14 +103,20 @@ export function SectionHead({
    * сразу со второго уровня. Для навигации по заголовкам это значит, что
    * страницы не было в списке вообще.
    */
-  level?: "h1" | "h2";
+  level?: 'h1' | 'h2';
 }) {
   if (center) {
     return (
       <div className="mb-12 md:mb-16 mx-auto max-w-3xl text-center">
-        <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.16em] text-accent">{eyebrow}</p>
+        <p className="mb-5 font-mono text-[11px] uppercase tracking-[0.16em] text-accent">
+          {eyebrow}
+        </p>
         <Heading className="display text-3xl text-balance md:text-5xl">{title}</Heading>
-        {sub ? <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted md:text-lg">{sub}</p> : null}
+        {sub ? (
+          <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted md:text-lg">
+            {sub}
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -117,7 +125,9 @@ export function SectionHead({
     <div className="mb-12 md:mb-16 max-w-3xl">
       <Eyebrow>{eyebrow}</Eyebrow>
       <Heading className="display mt-4 text-3xl text-balance md:text-5xl">{title}</Heading>
-      {sub ? <p className="mt-5 max-w-xl text-base leading-relaxed text-muted md:text-lg">{sub}</p> : null}
+      {sub ? (
+        <p className="mt-5 max-w-xl text-base leading-relaxed text-muted md:text-lg">{sub}</p>
+      ) : null}
     </div>
   );
 }
@@ -125,7 +135,7 @@ export function SectionHead({
 export function PrimaryButton({
   href,
   children,
-  className = "",
+  className = '',
 }: {
   href: string;
   children: ReactNode;
@@ -148,7 +158,7 @@ export function PrimaryButton({
 export function GhostButton({
   href,
   children,
-  className = "",
+  className = '',
 }: {
   href: string;
   children: ReactNode;
@@ -160,14 +170,16 @@ export function GhostButton({
       className={`group inline-flex items-center justify-center gap-2 border-b border-ink px-1 py-2 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${className}`}
     >
       {children}
-      <span aria-hidden className="transition-transform group-hover:translate-x-0.5">→</span>
+      <span aria-hidden className="transition-transform group-hover:translate-x-0.5">
+        →
+      </span>
     </Link>
   );
 }
 
 export function Section({
   children,
-  className = "",
+  className = '',
   id,
 }: {
   children: ReactNode;
@@ -185,10 +197,8 @@ export function Section({
  * Карточка. Прямые углы и одна волосяная рамка вместо пилюли с тенью —
  * на бумаге объём создаёт не тень, а линия.
  */
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={`border border-line bg-surface px-6 py-6 ${className}`}>{children}</div>
-  );
+export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
+  return <div className={`border border-line bg-surface px-6 py-6 ${className}`}>{children}</div>;
 }
 
 /** Число в моноширинном — данные читаются ровно, а не «примерно». */

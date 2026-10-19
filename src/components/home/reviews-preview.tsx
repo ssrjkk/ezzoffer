@@ -1,6 +1,6 @@
-import Link from "next/link";
-import { Section, SectionHead } from "@/components/ui";
-import { HowItWorks } from "@/components/how-it-works";
+import Link from 'next/link';
+import { Section, SectionHead } from '@/components/ui';
+import { HowItWorks } from '@/components/how-it-works';
 
 /*
  * Было: превью отзывов на главной — те же выдуманные карточки, что и на
@@ -29,12 +29,15 @@ export function ReviewsPreview() {
       <div className="mt-10 flex flex-col items-start gap-4">
         <Link
           href="/reviews"
-          className="inline-flex items-center gap-2 border-b border-ink pb-0.5 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
+          className="inline-flex min-h-11 items-center gap-2 border-b border-ink py-1 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
         >
           Разобрать подробнее
           <span aria-hidden>→</span>
         </Link>
-        <Link href="/#tariff" className="text-sm text-muted transition-colors hover:text-accent">
+        <Link
+          href="/#tariff"
+          className="-my-1 inline-flex min-h-11 items-center text-sm text-muted transition-colors hover:text-accent"
+        >
           Перейти к тарифам
         </Link>
       </div>

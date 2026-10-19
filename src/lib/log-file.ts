@@ -1,5 +1,13 @@
-import { appendFileSync, existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync } from "node:fs";
-import { dirname, join } from "node:path";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+} from 'node:fs';
+import { dirname, join } from 'node:path';
 
 /**
  * Файловая часть логирования. Живёт отдельно от logger.ts, потому что Next
@@ -14,7 +22,7 @@ const KEEP_ROTATIONS = 5;
 
 /** Метка времени из имени ротации; для нечисловых имён — 0. */
 export function rotationStamp(name: string): number {
-  const n = Number(name.slice("app.log.".length));
+  const n = Number(name.slice('app.log.'.length));
   return Number.isFinite(n) ? n : 0;
 }
 
@@ -35,7 +43,7 @@ export function rotateLogFile(file: string, maxBytes = MAX_LOG_BYTES, keep = KEE
     renameSync(file, join(dir, `app.log.${Date.now()}`));
 
     const rotations = readdirSync(dir)
-      .filter((f: string) => f.startsWith("app.log.") && f !== "app.log")
+      .filter((f: string) => f.startsWith('app.log.') && f !== 'app.log')
       .sort((a: string, b: string) => rotationStamp(a) - rotationStamp(b));
     while (rotations.length > keep) {
       const oldest = rotations.shift();
@@ -54,9 +62,9 @@ export function rotateLogFile(file: string, maxBytes = MAX_LOG_BYTES, keep = KEE
  * тесты и локальная ezoffer.db с хэшами паролей и токенами.
  */
 export function resolveLogDir(env: Record<string, string | undefined>, cwd: string): string {
-  const raw = env.EZOFFER_LOG_DIR?.trim() ?? "";
-  const segment = raw.split(/[/\\]+/).filter((s) => s && s !== "." && s !== "..")[0];
-  return join(cwd, "data", segment || "logs");
+  const raw = env.EZOFFER_LOG_DIR?.trim() ?? '';
+  const segment = raw.split(/[/\\]+/).filter((s) => s && s !== '.' && s !== '..')[0];
+  return join(cwd, 'data', segment || 'logs');
 }
 
 function logDir(): string {
@@ -68,8 +76,8 @@ function logDir(): string {
 /** Пишет строку в ./data/logs/app.log с ротацией по размеру. */
 export function writeLogLine(line: string): void {
   try {
-    const file = join(logDir(), "app.log");
-    appendFileSync(file, line + "\n", "utf8");
+    const file = join(logDir(), 'app.log');
+    appendFileSync(file, line + '\n', 'utf8');
     rotateLogFile(file);
   } catch {
     /* ignore */

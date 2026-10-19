@@ -1,8 +1,8 @@
-import Link from "next/link";
-import { Section, Eyebrow } from "@/components/ui";
-import { Reveal } from "@/components/reveal";
-import { articles } from "@/lib/data";
-import { articleDateIso } from "@/lib/article-date";
+import Link from 'next/link';
+import { Section, Eyebrow } from '@/components/ui';
+import { Reveal } from '@/components/reveal';
+import { articles } from '@/lib/data';
+import { articleDateIso } from '@/lib/article-date';
 
 /*
  * Превью блога на главной.
@@ -28,7 +28,7 @@ export function BlogPreview() {
         </div>
         <Link
           href="/blog"
-          className="inline-flex w-fit items-center gap-2 border-b border-ink pb-0.5 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
+          className="inline-flex w-fit items-center gap-2 -my-1 inline-flex min-h-11 items-center border-b border-ink py-1 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
         >
           Все статьи
           <span aria-hidden>→</span>

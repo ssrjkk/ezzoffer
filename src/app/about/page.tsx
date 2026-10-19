@@ -1,33 +1,34 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import { Section, SectionHead, Eyebrow } from "@/components/ui";
-import { Reveal } from "@/components/reveal";
-import { team, stats } from "@/lib/data";
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { Section, SectionHead, Eyebrow } from '@/components/ui';
+import { Reveal } from '@/components/reveal';
+import { team, stats } from '@/lib/data';
 
 export const metadata: Metadata = {
-  title: "О нас",
-  description: "О EZOffer: как устроен сервис автоматических откликов, какие у него ограничения и кто его делает.",
+  title: 'О нас',
+  description:
+    'О EZOffer: как устроен сервис автоматических откликов, какие у него ограничения и кто его делает.',
 };
 
 const values = [
   {
-    title: "Время дороже кликов",
-    text: "Поиск работы не должен съедать часы. Мы автоматизируем всё, что допустимо автоматизировать, и оставляем человеку главное — собеседования и выбор.",
+    title: 'Время дороже кликов',
+    text: 'Поиск работы не должен съедать часы. Мы автоматизируем всё, что допустимо автоматизировать, и оставляем человеку главное — собеседования и выбор.',
   },
   {
-    title: "Честные цифры",
-    text: "Никаких «магических кнопок». Мы показываем воронку откликов как есть и помогаем чинить то, что реально мешает приглашениям.",
+    title: 'Честные цифры',
+    text: 'Никаких «магических кнопок». Мы показываем воронку откликов как есть и помогаем чинить то, что реально мешает приглашениям.',
   },
   {
-    title: "В рамках правил",
+    title: 'В рамках правил',
     // Прежний текст — «никаких серых схем, рисков и блокировок» — обещал
     // отсутствие блокировок, которых не существует: лимиты и паузы лишь
     // снижают риск. Формулировка ниже не отрицает его, а называет цену.
-    text: "Отклики идут через официальный API платформы. Мы выдерживаем паузы и лимиты, чтобы не выглядеть ботом, но блокировка остаётся возможной — об этом написано в правилах платформ.",
+    text: 'Отклики идут через официальный API платформы. Мы выдерживаем паузы и лимиты, чтобы не выглядеть ботом, но блокировка остаётся возможной — об этом написано в правилах платформ.',
   },
   {
-    title: "Пользователь — владелец",
-    text: "Вы решаете, на какие вакансии откликаться и что отправлять. Сервис исполняет, а не управляет вашим профилем.",
+    title: 'Пользователь — владелец',
+    text: 'Вы решаете, на какие вакансии откликаться и что отправлять. Сервис исполняет, а не управляет вашим профилем.',
   },
 ];
 
@@ -58,10 +59,7 @@ export default function AboutPage() {
       </Section>
 
       <Section>
-        <SectionHead
-          eyebrow="Принципы"
-          title={<>Чем мы руководствуемся</>}
-        />
+        <SectionHead eyebrow="Принципы" title={<>Чем мы руководствуемся</>} />
         {/* Принципы — не карточки: это нумерованный перечень, где порядок
             и есть аргумент. */}
         <ol className="grid gap-x-8 gap-y-8 border-t border-line pt-8 sm:grid-cols-2">
@@ -69,7 +67,7 @@ export default function AboutPage() {
             <Reveal key={value.title} delay={idx * 60} as="li">
               <div className="h-full">
                 <span className="font-mono text-sm tabular-nums text-accent">
-                  {String(idx + 1).padStart(2, "0")}
+                  {String(idx + 1).padStart(2, '0')}
                 </span>
                 <h3 className="mt-3 font-serif text-xl leading-snug">{value.title}</h3>
                 <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted md:text-base">
@@ -95,9 +93,7 @@ export default function AboutPage() {
         <dl className="grid grid-cols-2 gap-x-8 gap-y-10 border-t border-line pt-8 lg:grid-cols-4">
           {stats.map((stat) => (
             <div key={stat.label} className="border-t-2 border-ink pt-4">
-              <dt className="font-mono text-3xl tabular-nums text-ink md:text-4xl">
-                {stat.value}
-              </dt>
+              <dt className="font-mono text-3xl tabular-nums text-ink md:text-4xl">{stat.value}</dt>
               <dd className="mt-2 max-w-[22ch] text-sm leading-snug text-muted">{stat.label}</dd>
             </div>
           ))}
@@ -136,8 +132,8 @@ export default function AboutPage() {
             Готовы попробовать?
           </h2>
           <p className="measure mt-4 leading-relaxed text-paper">
-            24 часа бесплатного доступа. Улучшенное резюме, подбор вакансий и первые автоотклики
-            — уже сегодня.
+            24 часа бесплатного доступа. Улучшенное резюме, подбор вакансий и первые автоотклики —
+            уже сегодня.
           </p>
           <div className="mt-8">
             <Link

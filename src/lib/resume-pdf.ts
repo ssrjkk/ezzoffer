@@ -1,6 +1,6 @@
-import { existsSync } from "node:fs";
-import { dirname, join } from "node:path";
-import PDFDocument from "pdfkit";
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import PDFDocument from 'pdfkit';
 
 /**
  * Генерация PDF-резюме.
@@ -20,8 +20,8 @@ import PDFDocument from "pdfkit";
  * как модуль и падает с "Unknown module type".
  */
 const FONT_CANDIDATES: { label: string; pkg: string; file: string }[] = [
-  { label: "DejaVuSans", pkg: "dejavu-fonts-ttf", file: "DejaVuSans.ttf" },
-  { label: "DejaVuSansCondensed", pkg: "dejavu-fonts-ttf", file: "DejaVuSansCondensed.ttf" },
+  { label: 'DejaVuSans', pkg: 'dejavu-fonts-ttf', file: 'DejaVuSans.ttf' },
+  { label: 'DejaVuSansCondensed', pkg: 'dejavu-fonts-ttf', file: 'DejaVuSansCondensed.ttf' },
 ];
 
 type FontSpec = { label: string; pkg: string; file: string };
@@ -63,7 +63,7 @@ export function pdfFontDir(): string | null {
   let dir = process.cwd();
   for (let i = 0; i < 6; i++) {
     for (const font of FONT_CANDIDATES) {
-      const candidate = join(dir, "node_modules", font.pkg, "ttf");
+      const candidate = join(dir, 'node_modules', font.pkg, 'ttf');
       if (fileExists(join(candidate, font.file))) return candidate;
     }
     const parent = dirname(dir);
@@ -76,7 +76,9 @@ export function pdfFontDir(): string | null {
 function resolveFont(): FontSpec | null {
   if (fontCache !== undefined) return fontCache;
   const dir = pdfFontDir();
-  fontCache = dir ? (FONT_CANDIDATES.find((font) => fileExists(join(dir, font.file))) ?? null) : null;
+  fontCache = dir
+    ? (FONT_CANDIDATES.find((font) => fileExists(join(dir, font.file))) ?? null)
+    : null;
   return fontCache;
 }
 
@@ -87,7 +89,7 @@ export function pdfFontAvailable(): boolean {
 
 /** Имя шрифта, которым будет напечатан PDF (для диагностики и тестов). */
 export function pdfFontName(): string {
-  return resolveFont()?.label ?? "Helvetica (кириллица не поддерживается)";
+  return resolveFont()?.label ?? 'Helvetica (кириллица не поддерживается)';
 }
 
 function fontPath(): string | null {
@@ -104,9 +106,7 @@ export type ResumePdf = {
   yearsLabel: string;
 };
 
-export type PdfResult =
-  | { ok: true; buffer: Buffer; font: string }
-  | { ok: false; error: string };
+export type PdfResult = { ok: true; buffer: Buffer; font: string } | { ok: false; error: string };
 
 /** Собирает PDF резюме. Никогда не бросает: ошибки возвращаются в виде ok:false. */
 /**
@@ -123,17 +123,17 @@ export function splitLongTokens(line: string, limit = 80): string[] {
   const out: string[] = [];
   // Разрезаем по границам пробелов, где возможно, иначе — жёстко.
   const parts = line.split(/(\s+)/);
-  let current = "";
+  let current = '';
   for (const part of parts) {
     if (current.length + part.length > limit && current.trim()) {
       out.push(current.trimEnd());
-      current = "";
+      current = '';
     }
     if (part.length > limit) {
       // Очень длинный неразрывный кусок: режем напрямую.
       if (current.trim()) {
         out.push(current.trimEnd());
-        current = "";
+        current = '';
       }
       for (let i = 0; i < part.length; i += limit) {
         out.push(part.slice(i, i + limit));
@@ -152,37 +152,37 @@ export async function renderResumePdf(resume: ResumePdf): Promise<PdfResult> {
     return {
       ok: false,
       error:
-        "Не найден шрифт с кириллицей. Установите пакет dejavu-fonts-ttf — со встроенным Helvetica русский текст в PDF не отображается.",
+        'Не найден шрифт с кириллицей. Установите пакет dejavu-fonts-ttf — со встроенным Helvetica русский текст в PDF не отображается.',
     };
   }
 
-  const doc = new PDFDocument({ size: "A4", margin: 50 });
+  const doc = new PDFDocument({ size: 'A4', margin: 50 });
   const chunks: Buffer[] = [];
   const done = new Promise<Buffer>((resolvePromise, rejectPromise) => {
-    doc.on("data", (chunk: Buffer) => chunks.push(chunk));
-    doc.on("end", () => resolvePromise(Buffer.concat(chunks)));
-    doc.on("error", rejectPromise);
+    doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+    doc.on('end', () => resolvePromise(Buffer.concat(chunks)));
+    doc.on('error', rejectPromise);
   });
 
   try {
     // registerFont на путь к файлу: pdfkit читает TTF целиком и сабсетит глифы.
-    doc.registerFont("body", font);
-    doc.font("body");
+    doc.registerFont('body', font);
+    doc.font('body');
 
-    doc.fontSize(20).text(resume.title, { align: "center" });
+    doc.fontSize(20).text(resume.title, { align: 'center' });
     doc.moveDown();
     if (resume.yearsLabel.trim()) {
-      doc.fontSize(10).fillColor("#666666").text(resume.yearsLabel.trim(), { align: "center" });
+      doc.fontSize(10).fillColor('#666666').text(resume.yearsLabel.trim(), { align: 'center' });
       doc.moveDown(2);
     }
-    doc.fontSize(11).fillColor("#000000");
+    doc.fontSize(11).fillColor('#000000');
 
     for (const raw of resume.content.split(/\r?\n/)) {
-      const line = raw.replace(/\s+$/, "");
-      if (line.trim() === "") {
+      const line = raw.replace(/\s+$/, '');
+      if (line.trim() === '') {
         doc.moveDown(0.6);
       } else if (/^\s*[-•*]\s+/.test(line)) {
-        for (const chunk of splitLongTokens(line.replace(/^\s*[-•*]\s+/, "  • "))) {
+        for (const chunk of splitLongTokens(line.replace(/^\s*[-•*]\s+/, '  • '))) {
           doc.text(chunk, { indent: 8 });
         }
       } else {
@@ -196,6 +196,6 @@ export async function renderResumePdf(resume: ResumePdf): Promise<PdfResult> {
     const buffer = await done;
     return { ok: true, buffer, font: resolveFont()!.label };
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : "Не удалось собрать PDF" };
+    return { ok: false, error: err instanceof Error ? err.message : 'Не удалось собрать PDF' };
   }
 }

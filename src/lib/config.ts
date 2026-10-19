@@ -17,7 +17,7 @@
  * undefined отделяются от числа, а ноль пропускается.
  */
 function num(value: string | undefined, fallback: number): number {
-  if (value === undefined || value.trim() === "") return fallback;
+  if (value === undefined || value.trim() === '') return fallback;
   const n = Number(value);
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }

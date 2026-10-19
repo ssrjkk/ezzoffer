@@ -1,5 +1,5 @@
-import { writeCoverLetterWithAi } from "./ai";
-import type { Vacancy } from "./vacancies";
+import { writeCoverLetterWithAi } from './ai';
+import type { Vacancy } from './vacancies';
 
 /**
  * Персонализация сопроводительного письма под конкретную вакансию.
@@ -9,19 +9,22 @@ import type { Vacancy } from "./vacancies";
 
 export type RenderedLetter = {
   content: string;
-  engine: "template" | "ai";
+  engine: 'template' | 'ai';
 };
 
 export function renderLetterTemplate(template: string, vacancy: Vacancy): string {
-  const salary = vacancy.salary || "по договорённости";
+  const salary = vacancy.salary || 'по договорённости';
   const map: Record<string, string> = {
-    "{вакансия}": vacancy.title,
-    "{компания}": vacancy.company,
-    "{город}": vacancy.city || "Россия",
-    "{зарплата}": salary,
-    "{формат}": vacancy.format || "—",
+    '{вакансия}': vacancy.title,
+    '{компания}': vacancy.company,
+    '{город}': vacancy.city || 'Россия',
+    '{зарплата}': salary,
+    '{формат}': vacancy.format || '—',
   };
-  return template.replace(/\{вакансия\}|\{компания\}|\{город\}|\{зарплата\}|\{формат\}/g, (m) => map[m] ?? m);
+  return template.replace(
+    /\{вакансия\}|\{компания\}|\{город\}|\{зарплата\}|\{формат\}/g,
+    (m) => map[m] ?? m,
+  );
 }
 
 export async function personalizeLetter(
@@ -35,7 +38,7 @@ export async function personalizeLetter(
     resumeContent,
   );
   if (ai && ai.trim().length > 20) {
-    return { content: ai.trim(), engine: "ai" };
+    return { content: ai.trim(), engine: 'ai' };
   }
-  return { content: renderLetterTemplate(template, vacancy), engine: "template" };
+  return { content: renderLetterTemplate(template, vacancy), engine: 'template' };
 }

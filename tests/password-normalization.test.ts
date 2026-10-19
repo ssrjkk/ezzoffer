@@ -1,7 +1,7 @@
-import test from "node:test";
-import assert from "node:assert/strict";
+import test from 'node:test';
+import assert from 'node:assert/strict';
 
-import { hashPassword, verifyPassword, normalizePassword } from "../src/lib/password";
+import { hashPassword, verifyPassword, normalizePassword } from '../src/lib/password';
 
 /**
  * Нормализация пароля.
@@ -22,10 +22,10 @@ import { hashPassword, verifyPassword, normalizePassword } from "../src/lib/pass
  */
 
 /** Латинская «e» и её полноширинная форма — NFKC-эквивалентные. */
-const LATIN_E = "e";
-const FULLWIDTH_E = "ｅ";
+const LATIN_E = 'e';
+const FULLWIDTH_E = 'ｅ';
 
-test("NFKC-эквивалентные символы дают один результат", () => {
+test('NFKC-эквивалентные символы дают один результат', () => {
   assert.equal(normalizePassword(`p${LATIN_E}ssw0rd`), normalizePassword(`p${FULLWIDTH_E}ssw0rd`));
 });
 
@@ -41,37 +41,37 @@ test("NFKC-эквивалентные символы дают один резу�
  * проверке маскирует сломанную запись, и наоборот. Поэтому нужны оба
  * направления — запись «широкой» с входом «узкой» и наоборот.
  */
-test("пароль, записанный эквивалентными символами, подходит при входе", async () => {
+test('пароль, записанный эквивалентными символами, подходит при входе', async () => {
   const stored = await hashPassword(`p${FULLWIDTH_E}ssw0rd`);
 
   assert.equal(
     await verifyPassword(`p${LATIN_E}ssw0rd`, stored),
     true,
-    "записанный пароль не подошёл — нормализация при записи или проверке не работает",
+    'записанный пароль не подошёл — нормализация при записи или проверке не работает',
   );
 });
 
-test("обратное направление тоже работает", async () => {
+test('обратное направление тоже работает', async () => {
   const stored = await hashPassword(`p${LATIN_E}ssw0rd`);
 
   assert.equal(
     await verifyPassword(`p${FULLWIDTH_E}ssw0rd`, stored),
     true,
-    "введённый эквивалентный пароль не подошёл",
+    'введённый эквивалентный пароль не подошёл',
   );
 });
 
-test("тот же самый пароль всегда подходит", async () => {
+test('тот же самый пароль всегда подходит', async () => {
   const stored = await hashPassword(`p${FULLWIDTH_E}ssw0rd`);
   assert.equal(await verifyPassword(`p${FULLWIDTH_E}ssw0rd`, stored), true);
 });
 
-test("другой пароль по-прежнему не подходит", async () => {
-  const stored = await hashPassword("pässw0rd");
-  assert.equal(await verifyPassword("pässword", stored), false);
+test('другой пароль по-прежнему не подходит', async () => {
+  const stored = await hashPassword('pässw0rd');
+  assert.equal(await verifyPassword('pässword', stored), false);
 });
 
-test("пароль, набранный эквивалентными символами, подходит после регистрации", async () => {
+test('пароль, набранный эквивалентными символами, подходит после регистрации', async () => {
   const typed = `p${LATIN_E}ssw0rd`;
   const stored = await hashPassword(typed);
 
@@ -81,19 +81,19 @@ test("пароль, набранный эквивалентными символ
   assert.equal(
     await verifyPassword(`p${FULLWIDTH_E}ssw0rd`, stored),
     true,
-    "визуально тот же пароль не подошёл — нормализация не работает",
+    'визуально тот же пароль не подошёл — нормализация не работает',
   );
 });
 
-test("другой пароль по-прежнему не подходит", () => {
-  return hashPassword("pässw0rd").then(async (stored) => {
-    assert.equal(await verifyPassword("pässword", stored), false);
+test('другой пароль по-прежнему не подходит', () => {
+  return hashPassword('pässw0rd').then(async (stored) => {
+    assert.equal(await verifyPassword('pässword', stored), false);
   });
 });
 
-test("нормализация не делает пароль пустым или обрезанным", () => {
+test('нормализация не делает пароль пустым или обрезанным', () => {
   // Обрезка была бы потерей данных: пароль должен уходить ровно таким, каким
   // его набрали, с точностью до эквивалентных форм.
-  assert.equal(normalizePassword("  пробелы  "), "  пробелы  ");
-  assert.equal(normalizePassword(""), "");
+  assert.equal(normalizePassword('  пробелы  '), '  пробелы  ');
+  assert.equal(normalizePassword(''), '');
 });

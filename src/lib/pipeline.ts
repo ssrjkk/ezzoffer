@@ -1,6 +1,6 @@
-import { db } from "./db";
-import { getStats } from "./stats";
-import { extractSkills } from "./skills";
+import { db } from './db';
+import { getStats } from './stats';
+import { extractSkills } from './skills';
 
 /**
  * Что делать дальше.
@@ -30,7 +30,7 @@ import { extractSkills } from "./skills";
  * работать (звонок HR), раньше того, что можно сделать завтра.
  */
 
-export type ActionKind = "followup" | "interview" | "declines" | "search" | "profile" | "start";
+export type ActionKind = 'followup' | 'interview' | 'declines' | 'search' | 'profile' | 'start';
 
 export type NextAction = {
   kind: ActionKind;
@@ -58,6 +58,15 @@ type ApplicationRow = {
   title: string;
   company: string;
   source_url: string | null;
+  /**
+   * Требования и описание вакансии (JSON-строки из vacancies).
+   *
+   * Необязательные, потому что строку собирает LEFT JOIN: вакансии может уже
+   * не быть в каталоге, а прямые вызовы analyzeDeclines в тестах передают
+   * только заголовок. Отсутствие — не ошибка, просто уже текстов.
+   */
+  requirements?: string | null;
+  about?: string | null;
 };
 
 /**
@@ -87,7 +96,7 @@ export function nextActions(userId: number, now = Date.now()): NextAction[] {
               a.viewed_at, a.responded_at,
               COALESCE(v.title, a.job_slug) AS title,
               COALESCE(v.company, '') AS company,
-              v.source_url
+              v.source_url, v.requirements, v.about
        FROM applications a
        LEFT JOIN vacancies v ON v.slug = a.job_slug
        WHERE a.user_id = ? AND a.withdrawn = 0
@@ -98,11 +107,11 @@ export function nextActions(userId: number, now = Date.now()): NextAction[] {
   if (apps.length === 0) {
     return [
       {
-        kind: "start",
-        title: "Отправьте первый отклик",
+        kind: 'start',
+        title: 'Отправьте первый отклик',
         detail:
-          "Настройте поиск — сервис сам найдёт подходящие вакансии и отправит отклики с письмом.",
-        href: "/dashboard/searches",
+          'Настройте поиск — сервис сам найдёт подходящие вакансии и отправит отклики с письмом.',
+        href: '/dashboard/searches',
         urgency: 1,
         count: 1,
       },
@@ -114,26 +123,27 @@ export function nextActions(userId: number, now = Date.now()): NextAction[] {
     const oldest = followups[followups.length - 1]!;
     const days = Math.floor((now - oldest.viewed_at!) / 86_400_000);
     actions.push({
-      kind: "followup",
-      title: `Напишите в ${followups.length} ${plural(followups.length, "чат", "чата", "чатов")}`,
-      detail: `Самый старый просмотр — ${days} ${plural(days, "день", "дня", "дней")} назад. ` +
-        "Резюмо посмотрели, но ответа нет: короткое напоминание возвращает часть этих шансов.",
-      href: "/dashboard/applications",
+      kind: 'followup',
+      title: `Напишите в ${followups.length} ${plural(followups.length, 'чат', 'чата', 'чатов')}`,
+      detail:
+        `Самый старый просмотр — ${days} ${plural(days, 'день', 'дня', 'дней')} назад. ` +
+        'Резюмо посмотрели, но ответа нет: короткое напоминание возвращает часть этих шансов.',
+      href: '/dashboard/applications',
       urgency: 1,
       count: followups.length,
       draft: followupDraft(oldest.company, oldest.title),
     });
   }
 
-  const invites = apps.filter((a) => a.response === "interview");
+  const invites = apps.filter((a) => a.response === 'interview');
   if (invites.length > 0) {
     actions.push({
-      kind: "interview",
-      title: `Подготовьтесь к ${invites.length} ${plural(invites.length, "собеседованию", "собеседованиям", "собеседованиям")}`,
+      kind: 'interview',
+      title: `Подготовьтесь к ${invites.length} ${plural(invites.length, 'собеседованию', 'собеседованиям', 'собеседованиям')}`,
       detail:
-        "По каждому приглашению: требования вакансии, ваши совпадения и пробелы. " +
-        "Собеседование назначают быстро, готовиться обычно некогда.",
-      href: "/dashboard/applications",
+        'По каждому приглашению: требования вакансии, ваши совпадения и пробелы. ' +
+        'Собеседование назначают быстро, готовиться обычно некогда.',
+      href: '/dashboard/applications',
       urgency: 1,
       count: invites.length,
     });
@@ -142,10 +152,10 @@ export function nextActions(userId: number, now = Date.now()): NextAction[] {
   const declinePattern = analyzeDeclines(apps);
   if (declinePattern) {
     actions.push({
-      kind: "declines",
+      kind: 'declines',
       title: declinePattern.title,
       detail: declinePattern.detail,
-      href: "/dashboard/resumes",
+      href: '/dashboard/resumes',
       urgency: 2,
       count: declinePattern.total,
     });
@@ -154,12 +164,12 @@ export function nextActions(userId: number, now = Date.now()): NextAction[] {
   const deadSearch = findDeadSearch(userId);
   if (deadSearch) {
     actions.push({
-      kind: "search",
+      kind: 'search',
       title: `Поиск «${deadSearch.title}» не даёт просмотров`,
       detail:
-        `${deadSearch.count} ${plural(deadSearch.count, "отклик", "отклика", "откликов")} без единого просмотра. ` +
-        "Обычно это слишком узкие ключевые слова или уровень, которого на рынке нет.",
-      href: "/dashboard/searches",
+        `${deadSearch.count} ${plural(deadSearch.count, 'отклик', 'отклика', 'откликов')} без единого просмотра. ` +
+        'Обычно это слишком узкие ключевые слова или уровень, которого на рынке нет.',
+      href: '/dashboard/searches',
       urgency: 2,
       count: deadSearch.count,
     });
@@ -168,12 +178,12 @@ export function nextActions(userId: number, now = Date.now()): NextAction[] {
   const noLetters = stats.sent - countWithLetter(apps);
   if (stats.sent >= 3 && noLetters > 0) {
     actions.push({
-      kind: "profile",
-      title: "Отклики без письма получают меньше ответа",
+      kind: 'profile',
+      title: 'Отклики без письма получают меньше ответа',
       detail:
-        `${noLetters} из ${stats.sent} ${plural(stats.sent, "отклика", "откликов", "откликов")} ушли без сопроводительного. ` +
-        "Письмо — единственная часть отклика, которую читают внимательнее резюме.",
-      href: "/dashboard/letters",
+        `${noLetters} из ${stats.sent} ${plural(stats.sent, 'отклика', 'откликов', 'откликов')} ушли без сопроводительного. ` +
+        'Письмо — единственная часть отклика, которую читают внимательнее резюме.',
+      href: '/dashboard/letters',
       urgency: 2,
       count: noLetters,
     });
@@ -187,7 +197,7 @@ function collectFollowups(apps: ApplicationRow[], now: number): ApplicationRow[]
   const out: ApplicationRow[] = [];
   for (const a of apps) {
     if (!a.viewed_at || a.responded_at) continue;
-    if (a.response === "interview" || a.response === "decline") continue;
+    if (a.response === 'interview' || a.response === 'decline') continue;
     const age = now - a.viewed_at;
     if (age < FOLLOWUP_AFTER_DAYS * 86_400_000) continue;
     if (age > FOLLOWUP_BEFORE_DAYS * 86_400_000) continue;
@@ -222,14 +232,26 @@ export function plural(n: number, one: string, few: string, many: string): strin
  * а одна-две конкретные детали из резюме показывают, что отклик не массовый.
  */
 export function followupDraft(company: string, title: string): string {
-  const companyText = company ? ` в ${company}` : "";
-  const titleText = title ? ` (${title})` : "";
+  const companyText = company ? ` в ${company}` : '';
+  const titleText = title ? ` (${title})` : '';
   return (
     `Здравствуйте!\n\n` +
     `Отклик${titleText} на вакансию${companyText} я отправил(а) несколько дней назад. ` +
     `Понимаю, что откликов много — если позиция ещё актуальна, готов(а) обсудить детали ` +
     `или прислать дополнительные материалы.\n\nС уважением`
   );
+}
+
+/** JSON-строка списка в массив строк; битый JSON — пусто, а не исключение. */
+function listStrings(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((x): x is string => typeof x === 'string');
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -246,12 +268,25 @@ export function analyzeDeclines(apps: ApplicationRow[]): {
   total: number;
   skills: string[];
 } | null {
-  const declined = apps.filter((a) => a.response === "decline");
+  const declined = apps.filter((a) => a.response === 'decline');
   if (declined.length < 3) return null;
 
   const counter = new Map<string, number>();
   for (const a of declined) {
-    for (const skill of extractSkills(a.title)) {
+    /*
+     * Навыки берутся из заголовка, требований и описания.
+     *
+     * Раньше читался только title — «Backend-разработчик». А требование,
+     * по которому отказывают («Требуется: Kafka» в requirements), в заголовок
+     * не входит никогда. Разбор видел «общих требований нет» там, где все три
+     * отказа были по одной Kafka, и советовал «проверьте резюме» вместо
+     * «добавьте Kafka».
+     *
+     * requirements/about в БД — JSON-строки; битый JSON не роняет разбор, а
+     * просто не даёт навыков из этого поля.
+     */
+    const parts = [a.title, ...listStrings(a.requirements), a.about ?? ''].join(' ');
+    for (const skill of extractSkills(parts)) {
       counter.set(skill, (counter.get(skill) ?? 0) + 1);
     }
   }
@@ -265,10 +300,10 @@ export function analyzeDeclines(apps: ApplicationRow[]): {
 
   if (recurring.length === 0) {
     return {
-      title: `Разберите ${declined.length} ${plural(declined.length, "отказ", "отказа", "отказов")}`,
+      title: `Разберите ${declined.length} ${plural(declined.length, 'отказ', 'отказа', 'отказов')}`,
       detail:
-        "Общих требований в отказах не видно. Скорее всего, дело в резюме или в том, что отклики идут не туда: " +
-        "проверьте первые три отклика подряд — как их читает человек со стороны работодателя.",
+        'Общих требований в отказах не видно. Скорее всего, дело в резюме или в том, что отклики идут не туда: ' +
+        'проверьте первые три отклика подряд — как их читает человек со стороны работодателя.',
       total: declined.length,
       skills: [],
     };
@@ -290,14 +325,14 @@ export function analyzeDeclines(apps: ApplicationRow[]): {
   const list = breakdown
     .slice(0, 3)
     .map(([skill, n]) => `${skill} — ${n} из ${declined.length}`)
-    .join(", ");
+    .join(', ');
 
   return {
-    title: "Отказы повторяются на одних и тех же требованиях",
+    title: 'Отказы повторяются на одних и тех же требованиях',
     detail:
-      `${breakdown.length < 3 ? "Повторяется: " : "Повторяются: "}${list}. ` +
-      "Если требование есть в резюме — усильте формулировку; если нет — либо добавьте, " +
-      "либо сузьте поиск.",
+      `${breakdown.length < 3 ? 'Повторяется: ' : 'Повторяются: '}${list}. ` +
+      'Если требование есть в резюме — усильте формулировку; если нет — либо добавьте, ' +
+      'либо сузьте поиск.',
     total: declined.length,
     skills: breakdown.map(([s]) => s),
   };

@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { useCallback, useEffect, useId, useRef, type ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { useCallback, useEffect, useId, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 /**
  * Доступные модальные окна.
@@ -36,13 +36,13 @@ const FOCUSABLE =
  */
 export function focusableWithin(root: HTMLElement): HTMLElement[] {
   return [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => {
-    if (el.hasAttribute("hidden")) return false;
-    if (el.getAttribute("aria-hidden") === "true") return false;
+    if (el.hasAttribute('hidden')) return false;
+    if (el.getAttribute('aria-hidden') === 'true') return false;
     const style = el.ownerDocument.defaultView?.getComputedStyle(el);
     // Без вычисленных стилей (например, в изолированном окружении) считаем
     // элемент видимым: иначе ловушка выродится в «нечего фокусировать».
     if (!style) return true;
-    return style.display !== "none" && style.visibility !== "hidden";
+    return style.display !== 'none' && style.visibility !== 'hidden';
   });
 }
 
@@ -60,12 +60,12 @@ function useDialogBehavior(open: boolean, onClose: () => void) {
   // ещё не внутри, и Escape мог бы до панели не дойти.
   const onKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if (e.key === 'Escape') {
         e.stopPropagation();
         onClose();
         return;
       }
-      if (e.key !== "Tab") return;
+      if (e.key !== 'Tab') return;
 
       const panel = panelRef.current;
       if (!panel) return;
@@ -101,18 +101,18 @@ function useDialogBehavior(open: boolean, onClose: () => void) {
     // идёт на панель: скринридер объявит имя окна, а Tab начнётся изнутри,
     // а не с начала страницы.
     const panel = panelRef.current;
-    const preferred = panel?.querySelector<HTMLElement>("[data-autofocus]");
+    const preferred = panel?.querySelector<HTMLElement>('[data-autofocus]');
     (preferred ?? panel)?.focus();
 
-    document.addEventListener("keydown", onKeyDown, true);
+    document.addEventListener('keydown', onKeyDown, true);
 
     // Фон под диалогом не должен скроллиться: на мобильных жест внутри
     // панели тянул за собой страницу.
     const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    document.body.style.overflow = 'hidden';
 
     return () => {
-      document.removeEventListener("keydown", onKeyDown, true);
+      document.removeEventListener('keydown', onKeyDown, true);
       document.body.style.overflow = prevOverflow;
       // Возвращаем фокус кнопке, открывшей окно, — иначе клавиатурный
       // пользователь после закрытия остаётся «в пустоте», и следующий Tab
@@ -137,7 +137,7 @@ function Overlay({
   open: boolean;
   onClose: () => void;
   labelledBy: string;
-  role: "dialog" | "alertdialog";
+  role: 'dialog' | 'alertdialog';
   maxWidth: string;
   zIndex: string;
   onBackdropClick?: () => void;
@@ -147,25 +147,29 @@ function Overlay({
   if (!open) return null;
 
   return createPortal(
-    <div className={`fixed inset-0 ${zIndex} flex items-center justify-center p-4`}>
+    <div
+      className={`fixed inset-0 ${zIndex} flex items-center justify-center p-4 supports-[height:100dvh]:p-[max(1rem,env(safe-area-inset-top))_1rem_max(1rem,env(safe-area-inset-bottom))]`}
+      /* dvh вместо vh: в iOS Safari 100vh — это высота с развёрнутой
+           адресной строкой, то есть БОЛЬШЕ видимой области. Диалог с
+           редактором резюме (rows=14) уезжал за нижний край, а с
+           открытой клавиатурой заголовок выдавливало из экрана целиком.
+           supports-[height:100dvh] — чтобы старые браузеры не потеряли
+           обычное ограничение по 100vh. */
+    >
       {/*
         Подложка. Раньше была bg-black/70 с размытием — на бумажной теме
         это даёт грязную серую пелену, сквозь которую просвечивает текст
         страницы. Теперь ровный полупрозрачный слой: он отделяет диалог,
         не добавляя оттенка.
       */}
-      <div
-        className="absolute inset-0 bg-ink/70"
-        onClick={onBackdropClick}
-        aria-hidden
-      />
+      <div className="absolute inset-0 bg-ink/70" onClick={onBackdropClick} aria-hidden />
       <div
         ref={panelRef}
         role={role}
         aria-modal="true"
         aria-labelledby={labelledBy}
         tabIndex={-1}
-        className={`relative max-h-[calc(100vh-2rem)] w-full ${maxWidth} overflow-y-auto border border-line bg-surface p-6 shadow-[0_24px_60px_-24px_rgba(21,19,15,0.45)] outline-none sm:p-8`}
+        className={`relative max-h-[calc(100vh-2rem)] w-full ${maxWidth} overflow-y-auto overscroll-contain border border-line bg-surface p-6 pb-[calc(1.5rem+env(safe-area-inset-bottom))] shadow-[0_24px_60px_-24px_rgba(21,19,15,0.45)] outline-none supports-[height:100dvh]:max-h-[calc(100dvh-2rem)] sm:p-8 sm:pb-8`}
       >
         {children}
       </div>
@@ -179,7 +183,7 @@ export function Dialog({
   onClose,
   title,
   children,
-  maxWidth = "max-w-2xl",
+  maxWidth = 'max-w-2xl',
   dismissOnBackdrop = false,
 }: {
   open: boolean;
@@ -221,7 +225,12 @@ export function Dialog({
           aria-label="Закрыть"
         >
           <svg viewBox="0 0 24 24" className="size-4" fill="none" aria-hidden>
-            <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            <path
+              d="M6 6l12 12M18 6 6 18"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
           </svg>
         </button>
       </div>
@@ -242,7 +251,7 @@ export function ConfirmDialog({
   onConfirm,
   title,
   description,
-  confirmLabel = "Удалить",
+  confirmLabel = 'Удалить',
   busy = false,
 }: {
   open: boolean;
@@ -287,7 +296,7 @@ export function ConfirmDialog({
           onClick={onConfirm}
           disabled={busy}
         >
-          {busy ? "Удаляем…" : confirmLabel}
+          {busy ? 'Удаляем…' : confirmLabel}
         </button>
       </div>
     </Overlay>
@@ -295,4 +304,4 @@ export function ConfirmDialog({
 }
 
 const ghostBtn =
-  "inline-flex items-center gap-2 rounded-sm border border-line-strong px-4 py-2 text-sm font-medium text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-2 disabled:opacity-50";
+  'inline-flex items-center gap-2 rounded-sm border border-line-strong px-4 py-2 text-sm font-medium text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-2 disabled:opacity-50';

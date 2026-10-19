@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { Section, SectionHead } from "@/components/ui";
+import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { Section, SectionHead } from '@/components/ui';
 
 function BeforeBlock() {
   return (
@@ -11,7 +11,9 @@ function BeforeBlock() {
       </p>
       <div className="space-y-4 text-left">
         <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-sm bg-danger/10 text-danger">ИИ</span>
+          <span className="grid size-10 place-items-center rounded-sm bg-danger/10 text-danger">
+            ИИ
+          </span>
           <div className="flex-1">
             <p className="h-2.5 w-2/3 rounded bg-danger/25" />
             <p className="mt-2 h-2 w-full rounded bg-danger/15" />
@@ -19,7 +21,9 @@ function BeforeBlock() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-sm bg-danger/10 text-danger">РП</span>
+          <span className="grid size-10 place-items-center rounded-sm bg-danger/10 text-danger">
+            РП
+          </span>
           <div className="flex-1">
             <p className="h-2.5 w-1/2 rounded bg-danger/25" />
             <p className="mt-2 h-2 w-full rounded bg-danger/15" />
@@ -27,7 +31,9 @@ function BeforeBlock() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-sm bg-danger/10 text-danger">HR</span>
+          <span className="grid size-10 place-items-center rounded-sm bg-danger/10 text-danger">
+            HR
+          </span>
           <div className="flex-1">
             <p className="h-2.5 w-3/4 rounded bg-danger/25" />
             <p className="mt-2 h-2 w-full rounded bg-danger/15" />
@@ -49,7 +55,9 @@ function AfterBlock() {
       </p>
       <div className="space-y-4 text-left">
         <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-sm bg-success/15 text-success">ИИ</span>
+          <span className="grid size-10 place-items-center rounded-sm bg-success/15 text-success">
+            ИИ
+          </span>
           <div className="flex-1">
             <p className="h-2.5 w-2/3 rounded bg-success/70" />
             <p className="mt-2 h-2 w-full rounded bg-success/40" />
@@ -58,7 +66,9 @@ function AfterBlock() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-sm bg-success/15 text-success">РП</span>
+          <span className="grid size-10 place-items-center rounded-sm bg-success/15 text-success">
+            РП
+          </span>
           <div className="flex-1">
             <p className="h-2.5 w-1/2 rounded bg-success/70" />
             <p className="mt-2 h-2 w-full rounded bg-success/40" />
@@ -67,7 +77,9 @@ function AfterBlock() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-sm bg-success/15 text-success">HR</span>
+          <span className="grid size-10 place-items-center rounded-sm bg-success/15 text-success">
+            HR
+          </span>
           <div className="flex-1">
             <p className="h-2.5 w-3/4 rounded bg-success/70" />
             <p className="mt-2 h-2 w-full rounded bg-success/40" />
@@ -94,16 +106,16 @@ export function ResumeSlider() {
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "ArrowLeft") {
+    if (e.key === 'ArrowLeft') {
       e.preventDefault();
       setPos((p) => Math.max(4, p - 6));
-    } else if (e.key === "ArrowRight") {
+    } else if (e.key === 'ArrowRight') {
       e.preventDefault();
       setPos((p) => Math.min(96, p + 6));
-    } else if (e.key === "Home") {
+    } else if (e.key === 'Home') {
       e.preventDefault();
       setPos(4);
-    } else if (e.key === "End") {
+    } else if (e.key === 'End') {
       e.preventDefault();
       setPos(96);
     }
@@ -138,10 +150,7 @@ export function ResumeSlider() {
           <AfterBlock />
         </div>
 
-        <div
-          className="absolute inset-0 overflow-hidden"
-          style={{ width: `${pos}%` }}
-        >
+        <div className="absolute inset-0 overflow-hidden" style={{ width: `${pos}%` }}>
           <div className="h-full p-4 md:p-6">
             <BeforeBlock />
           </div>
@@ -152,7 +161,13 @@ export function ResumeSlider() {
           <div className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2">
             <span className="grid size-11 place-items-center rounded-sm border-2 border-ink bg-surface text-ink">
               <svg viewBox="0 0 24 24" className="size-5" fill="none">
-                <path d="m9 7-5 5 5 5M15 7l5 5-5 5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path
+                  d="m9 7-5 5 5 5M15 7l5 5-5 5"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             </span>
           </div>
@@ -166,9 +181,7 @@ export function ResumeSlider() {
         </div>
       </div>
 
-      <p className="mt-5 text-center text-sm text-muted">
-        Потяните ползунок, чтобы сравнить
-      </p>
+      <p className="mt-5 text-center text-sm text-muted">Потяните ползунок, чтобы сравнить</p>
     </Section>
   );
 }

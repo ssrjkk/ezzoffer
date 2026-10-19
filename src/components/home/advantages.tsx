@@ -1,7 +1,7 @@
-import Link from "next/link";
-import { Section, SectionHead } from "@/components/ui";
-import { Reveal } from "@/components/reveal";
-import { advantages } from "@/lib/data";
+import Link from 'next/link';
+import { Section, SectionHead } from '@/components/ui';
+import { Reveal } from '@/components/reveal';
+import { advantages } from '@/lib/data';
 
 const icons: Record<string, React.ReactNode> = {
   activity: (
@@ -84,7 +84,7 @@ export function Advantages() {
           <Reveal
             key={item.title}
             delay={idx * 60}
-            className={item.wide ? "sm:col-span-2 lg:col-span-1" : ""}
+            className={item.wide ? 'sm:col-span-2 lg:col-span-1' : ''}
           >
             {/*
               Раньше: карточка с градиентной иконкой, размытым пятном при
@@ -126,7 +126,7 @@ export function Advantages() {
             </div>
             <Link
               href="/signup"
-              className="inline-flex w-fit items-center gap-2 border-b border-paper pb-0.5 text-sm font-semibold text-paper transition-colors hover:border-accent hover:text-accent"
+              className="-my-1 inline-flex min-h-11 w-fit items-center gap-2 border-b border-paper py-1 text-sm font-semibold text-paper transition-colors hover:border-accent hover:text-accent"
             >
               Получить первый оффер
               <span aria-hidden>→</span>

@@ -13,6 +13,7 @@ If you discover a security vulnerability, please report it responsibly.
 Instead, email: security@ezoffer.ru (or use GitHub private vulnerability reporting)
 
 Include:
+
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact

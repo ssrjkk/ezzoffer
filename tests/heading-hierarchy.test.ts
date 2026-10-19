@@ -1,7 +1,7 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
  * Иерархия заголовков.
@@ -34,7 +34,8 @@ function sourceFiles(): string[] {
   const out: string[] = [];
   const walk = (dir: string): void => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      if (entry.name === "node_modules" || entry.name === ".next" || entry.name.startsWith(".")) continue;
+      if (entry.name === 'node_modules' || entry.name === '.next' || entry.name.startsWith('.'))
+        continue;
       const full = join(dir, entry.name);
       if (entry.isDirectory()) {
         walk(full);
@@ -43,15 +44,15 @@ function sourceFiles(): string[] {
       }
     }
   };
-  walk(join(root, "src"));
+  walk(join(root, 'src'));
   return out.sort();
 }
 
-test("служебная метка не надета на заголовок", () => {
+test('служебная метка не надета на заголовок', () => {
   const offenders: string[] = [];
 
   for (const file of sourceFiles()) {
-    const content = readFileSync(file, "utf8");
+    const content = readFileSync(file, 'utf8');
 
     for (const m of content.matchAll(/<(h[1-6])\b[^>]*className="([^"]*)"[^>]*>/g)) {
       const [, tag, cls] = m;
@@ -59,7 +60,7 @@ test("служебная метка не надета на заголовок", 
       const looksLikeLabel =
         /\bfont-mono\b/.test(cls!) && /\buppercase\b/.test(cls!) && /tracking-/.test(cls!);
       if (looksLikeLabel) {
-        const line = content.slice(0, m.index).split("\n").length;
+        const line = content.slice(0, m.index).split('\n').length;
         offenders.push(`${file}:${line}  <${tag}> «${cls!.slice(0, 60)}»`);
       }
     }
@@ -68,11 +69,11 @@ test("служебная метка не надета на заголовок", 
   assert.deepEqual(
     offenders,
     [],
-    `метка набрана как заголовок — в структуре документа она станет пунктом оглавления:\n${offenders.join("\n")}`,
+    `метка набрана как заголовок — в структуре документа она станет пунктом оглавления:\n${offenders.join('\n')}`,
   );
 });
 
-test("заголовки разделов набраны антиквой, а не гротеском", () => {
+test('заголовки разделов набраны антиквой, а не гротеском', () => {
   /*
    * Гротеск (шрифт по умолчанию в старой теме) на заголовке — это тот
    * самый вид «приложения из 2021 года». Проверяем по исходнику: все
@@ -85,15 +86,15 @@ test("заголовки разделов набраны антиквой, а н
   const offenders: string[] = [];
 
   for (const file of sourceFiles()) {
-    const content = readFileSync(file, "utf8");
+    const content = readFileSync(file, 'utf8');
     for (const m of content.matchAll(/<(h[1-4])\b[^>]*className="([^"]*)"[^>]*>/g)) {
       const cls = m[2]!;
       if (!/\bfont-serif\b/.test(cls) && !/\bdisplay\b/.test(cls)) {
-        const line = content.slice(0, m.index).split("\n").length;
+        const line = content.slice(0, m.index).split('\n').length;
         offenders.push(`${file}:${line}  <${m[1]}> «${cls.slice(0, 70)}»`);
       }
     }
   }
 
-  assert.deepEqual(offenders, [], `заголовок без антиквы:\n${offenders.join("\n")}`);
+  assert.deepEqual(offenders, [], `заголовок без антиквы:\n${offenders.join('\n')}`);
 });

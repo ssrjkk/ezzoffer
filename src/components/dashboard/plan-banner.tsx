@@ -1,16 +1,10 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Badge, StatusMessage } from "@/components/dashboard/ui";
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Badge, StatusMessage } from '@/components/dashboard/ui';
 
-export function PlanBanner({
-  active,
-  trialStarted,
-}: {
-  active: boolean;
-  trialStarted: boolean;
-}) {
+export function PlanBanner({ active, trialStarted }: { active: boolean; trialStarted: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,15 +15,15 @@ export function PlanBanner({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/trial", { method: "POST" });
+      const res = await fetch('/api/trial', { method: 'POST' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        setError(data.error ?? "Не удалось активировать пробный период");
+        setError(data.error ?? 'Не удалось активировать пробный период');
         return;
       }
       router.refresh();
     } catch {
-      setError("Сеть недоступна — пробный период не активирован");
+      setError('Сеть недоступна — пробный период не активирован');
     } finally {
       setBusy(false);
     }
@@ -53,17 +47,17 @@ export function PlanBanner({
     <div className="mb-6 flex flex-col gap-4 border-t-2 border-accent bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
       <div className="min-w-0">
         <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-accent">
-          {trialStarted ? "Пробный период завершён" : "Бесплатный период"}
+          {trialStarted ? 'Пробный период завершён' : 'Бесплатный период'}
         </p>
         <p className="mt-2 font-serif text-lg leading-snug text-ink">
           {trialStarted
-            ? "Продлите тариф, чтобы вернуться к откликам"
-            : "Запустите поиск прямо сейчас"}
+            ? 'Продлите тариф, чтобы вернуться к откликам'
+            : 'Запустите поиск прямо сейчас'}
         </p>
         <p className="measure mt-1.5 text-sm leading-relaxed text-muted">
           {trialStarted
-            ? "Отклики, вакансии и статистика доступны после активации."
-            : "24 часа бесплатно, 50 откликов в день, без привязки карты."}
+            ? 'Отклики, вакансии и статистика доступны после активации.'
+            : '24 часа бесплатно, 50 откликов в день, без привязки карты.'}
         </p>
         <StatusMessage tone="error" className="mt-3 py-2 text-xs">
           {error}
@@ -77,7 +71,7 @@ export function PlanBanner({
           disabled={busy}
           className="inline-flex flex-none items-center justify-center gap-2 rounded-sm bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {busy ? "Активация…" : "Активировать бесплатно"}
+          {busy ? 'Активация…' : 'Активировать бесплатно'}
         </button>
       ) : (
         <Badge tone="warn">Ожидание тарифа</Badge>
@@ -119,13 +113,13 @@ export function TodayLimitBar({ today, todayLimit }: { today: number; todayLimit
         aria-label="Использование дневного лимита откликов"
       >
         <div
-          className={`h-full transition-all duration-700 ${spent ? "bg-danger" : "bg-accent"}`}
+          className={`h-full transition-all duration-700 ${spent ? 'bg-danger' : 'bg-accent'}`}
           style={{ width: `${pct}%` }}
         />
       </div>
 
       <p className="mt-2 text-xs text-muted">
-        {spent ? "Лимит исчерпан — сброс в полночь" : `Осталось ${todayLimit - today} откликов`}
+        {spent ? 'Лимит исчерпан — сброс в полночь' : `Осталось ${todayLimit - today} откликов`}
       </p>
     </div>
   );

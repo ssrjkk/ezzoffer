@@ -1,21 +1,21 @@
-import type { Level, WorkFormat } from "../data";
+import type { Level, WorkFormat } from '../data';
 
 export type VacancySource =
-  | "local"
-  | "trudvsem"
-  | "hh"
-  | "remoteok"
-  | "greenhouse"
-  | "ashby"
-  | "company" // RSS-фиды компаний
-  | "x" // X / Twitter
-  | "tg" // Telegram-каналы компаний
-  | "geekjob"
-  | "jobicy"
-  | "weworkremotely"
-  | "rabota"
-  | "flru"
-  | "kwork";
+  | 'local'
+  | 'trudvsem'
+  | 'hh'
+  | 'remoteok'
+  | 'greenhouse'
+  | 'ashby'
+  | 'company' // RSS-фиды компаний
+  | 'x' // X / Twitter
+  | 'tg' // Telegram-каналы компаний
+  | 'geekjob'
+  | 'jobicy'
+  | 'weworkremotely'
+  | 'rabota'
+  | 'flru'
+  | 'kwork';
 
 export type Vacancy = {
   slug: string;
@@ -83,7 +83,7 @@ export type VacancyApplyResult = {
    * отталкивает», а «вакансии больше нет»: включать по ней паузу значит
    * позволить одной мёртвой записи замедлить все последующие отклики.
    */
-  kind?: "closed" | "rate_limit" | "auth" | "token" | "network" | "other";
+  kind?: 'closed' | 'rate_limit' | 'auth' | 'token' | 'network' | 'other';
   /** Сколько площадка попросила подождать, мс. 0 — не просила. */
   retryAfterMs?: number;
 };

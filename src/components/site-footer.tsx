@@ -1,5 +1,5 @@
-import Link from "next/link";
-import { Logo } from "./site-header";
+import Link from 'next/link';
+import { Logo } from './site-header';
 
 /*
  * Подвал.
@@ -19,29 +19,29 @@ import { Logo } from "./site-header";
  */
 const columns = [
   {
-    title: "Инструменты",
+    title: 'Инструменты',
     links: [
-      { href: "/jobs", label: "Вакансии" },
-      { href: "/resume-examples", label: "Примеры резюме" },
-      { href: "/internships", label: "Стажировки" },
-      { href: "/pricing", label: "Тарифы на автоотклики" },
+      { href: '/jobs', label: 'Вакансии' },
+      { href: '/resume-examples', label: 'Примеры резюме' },
+      { href: '/internships', label: 'Стажировки' },
+      { href: '/pricing', label: 'Тарифы на автоотклики' },
     ],
   },
   {
-    title: "О сервисе",
+    title: 'О сервисе',
     links: [
-      { href: "/reviews", label: "Как это работает" },
-      { href: "/platform-rules", label: "Правила платформ и безопасность" },
-      { href: "/about", label: "О сервисе" },
-      { href: "/blog", label: "Блог о поиске работы" },
+      { href: '/reviews', label: 'Как это работает' },
+      { href: '/platform-rules', label: 'Правила платформ и безопасность' },
+      { href: '/about', label: 'О сервисе' },
+      { href: '/blog', label: 'Блог о поиске работы' },
     ],
   },
   {
-    title: "Помощь",
+    title: 'Помощь',
     links: [
-      { href: "/faq", label: "Вопросы и ответы" },
-      { href: "/dashboard/consultations", label: "Записаться на консультацию" },
-      { href: "/signup", label: "Начать бесплатно" },
+      { href: '/faq', label: 'Вопросы и ответы' },
+      { href: '/dashboard/consultations', label: 'Записаться на консультацию' },
+      { href: '/signup', label: 'Начать бесплатно' },
     ],
   },
 ];
@@ -56,8 +56,8 @@ export function SiteFooter() {
           <div>
             <Logo />
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted">
-              Подбор вакансий, подходящее резюме и автоотклик с сопроводительным
-              письмом. Пробный период 24 часа без привязки карты.
+              Подбор вакансий, подходящее резюме и автоотклик с сопроводительным письмом. Пробный
+              период 24 часа без привязки карты.
             </p>
             <p className="mt-5 flex items-center gap-2 font-mono text-xs uppercase tracking-[0.1em] text-muted">
               <span className="inline-block size-1.5 rounded-full bg-success" aria-hidden />
@@ -71,12 +71,22 @@ export function SiteFooter() {
               <p className="mb-4 font-mono text-[11px] uppercase tracking-[0.16em] text-accent">
                 {col.title}
               </p>
-              <ul className="space-y-2.5">
+              {/*
+                Ссылки в колонках: `inline-block py-1` вместо голой строки.
+
+                Замер в Chromium на 360px: без этого высота цели нажатия была
+                21px (text-sm 14px × line-height 1.5). Формально WCAG 2.5.8
+                проходит за счёт расстояния между соседними пунктами, но палец
+                в такую цель не попадает, а подвал есть на КАЖДОЙ странице
+                сайта. `py-1` даёт 29px и не двигает соседей: список и так
+                разнесён `space-y`.
+              */}
+              <ul className="space-y-1.5">
                 {col.links.map((link) => (
                   <li key={link.label}>
                     <Link
                       href={link.href}
-                      className="text-sm text-muted transition-colors hover:text-accent"
+                      className="inline-block py-1 text-sm text-muted transition-colors hover:text-accent"
                     >
                       {link.label}
                     </Link>
@@ -89,14 +99,23 @@ export function SiteFooter() {
 
         <div className="mt-12 flex flex-col gap-4 border-t border-line pt-6 font-mono text-xs text-muted md:flex-row md:items-center md:justify-between">
           <p>© {new Date().getFullYear()} EZOffer. Все права защищены.</p>
-          <div className="flex flex-wrap gap-x-6 gap-y-2">
-            <Link href="/faq" className="transition-colors hover:text-ink">
+          <div className="flex flex-wrap gap-x-6 gap-y-1">
+            <Link
+              href="/faq"
+              className="inline-flex min-h-11 items-center transition-colors hover:text-ink"
+            >
               Условия сервиса
             </Link>
-            <Link href="/faq" className="transition-colors hover:text-ink">
+            <Link
+              href="/faq"
+              className="inline-flex min-h-11 items-center transition-colors hover:text-ink"
+            >
               Политика конфиденциальности
             </Link>
-            <Link href="/about" className="transition-colors hover:text-ink">
+            <Link
+              href="/about"
+              className="inline-flex min-h-11 items-center transition-colors hover:text-ink"
+            >
               Контакты
             </Link>
           </div>

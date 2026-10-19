@@ -1,5 +1,5 @@
-import { extractSkills } from "./skills";
-import type { Vacancy } from "./vacancies";
+import { extractSkills } from './skills';
+import type { Vacancy } from './vacancies';
 
 /**
  * Выбор резюме под конкретную вакансию.
@@ -34,10 +34,15 @@ export function resumeSkills(resume: ResumeTarget): Set<string> {
 }
 
 /** Текст вакансии, из которого извлекаются навыки. */
-function vacancySkills(vacancy: Vacancy, known: ReadonlySet<string> | undefined): ReadonlySet<string> {
+function vacancySkills(
+  vacancy: Vacancy,
+  known: ReadonlySet<string> | undefined,
+): ReadonlySet<string> {
   if (known) return known;
   return new Set(
-    extractSkills(`${vacancy.title} ${vacancy.category} ${vacancy.about} ${vacancy.requirements.join(" ")}`),
+    extractSkills(
+      `${vacancy.title} ${vacancy.category} ${vacancy.about} ${vacancy.requirements.join(' ')}`,
+    ),
   );
 }
 

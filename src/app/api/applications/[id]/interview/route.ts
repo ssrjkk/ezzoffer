@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
-import { requireUser, unauthorized } from "@/lib/api";
-import { db } from "@/lib/db";
-import { getVacancyBySlug } from "@/lib/vacancies";
-import { prepareInterview, vacancyBrief } from "@/lib/interview";
-import { NO_STORE_HEADERS, parseParamId } from "@/lib/http";
+import { NextResponse } from 'next/server';
+import { requireUser, unauthorized } from '@/lib/api';
+import { db } from '@/lib/db';
+import { getVacancyBySlug } from '@/lib/vacancies';
+import { prepareInterview, vacancyBrief } from '@/lib/interview';
+import { NO_STORE_HEADERS, parseParamId } from '@/lib/http';
 
 /**
  * Подготовка к собеседованию по отклику.
@@ -17,10 +17,7 @@ import { NO_STORE_HEADERS, parseParamId } from "@/lib/http";
  * а не «последнее обновлённое»: готовиться нужно к тому резюме, которое
  * компания уже видела.
  */
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   if (!user) return unauthorized();
 
@@ -35,21 +32,21 @@ export async function GET(
    */
   const appId = parseParamId(rawId);
   if (appId === null) {
-    return NextResponse.json({ error: "Некорректный идентификатор отклика" }, { status: 400 });
+    return NextResponse.json({ error: 'Некорректный идентификатор отклика' }, { status: 400 });
   }
 
   const app = db
-    .prepare("SELECT job_slug, resume_id FROM applications WHERE id = ? AND user_id = ?")
-    .get(appId, user.id) as { job_slug: string; resume_id: number | null } | undefined;
+    .prepare('SELECT job_slug, resume_id FROM applications WHERE id = ? AND user_id = ?')
+    .get(appId, user.id) as { job_slug: string; resume_id: string | null } | undefined;
 
   if (!app) {
-    return NextResponse.json({ error: "Отклик не найден" }, { status: 404 });
+    return NextResponse.json({ error: 'Отклик не найден' }, { status: 404 });
   }
 
   const vacancy = getVacancyBySlug(app.job_slug);
   if (!vacancy) {
     return NextResponse.json(
-      { error: "Вакансия недоступна: возможно, она была удалена с площадки" },
+      { error: 'Вакансия недоступна: возможно, она была удалена с площадки' },
       { status: 404, headers: NO_STORE_HEADERS },
     );
   }
@@ -68,21 +65,23 @@ export async function GET(
    * чужому резюме, чем не готовиться совсем, но это уже должен быть видимый
    * компромисс, а не случайный.
    */
-  const resume = (app.resume_id
-    ? db
-        .prepare("SELECT * FROM resumes WHERE user_id = ? AND hh_id = ?")
-        .get(user.id, app.resume_id)
-    : undefined) as { title: string; content: string } | undefined;
+  const resume = (
+    app.resume_id
+      ? db
+          .prepare('SELECT * FROM resumes WHERE user_id = ? AND hh_id = ?')
+          .get(user.id, app.resume_id)
+      : undefined
+  ) as { title: string; content: string } | undefined;
 
   const resumeForPrep =
     resume ??
     (db
-      .prepare("SELECT * FROM resumes WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1")
+      .prepare('SELECT * FROM resumes WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1')
       .get(user.id) as { title: string; content: string } | undefined);
 
   if (!resumeForPrep) {
     return NextResponse.json(
-      { error: "Сначала добавьте резюме — без него нечего готовить" },
+      { error: 'Сначала добавьте резюме — без него нечего готовить' },
       { status: 400, headers: NO_STORE_HEADERS },
     );
   }

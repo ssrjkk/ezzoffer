@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash } from 'node:crypto';
 
 export type RateLimitOptions = {
   windowMs?: number;
@@ -59,6 +59,20 @@ export function rateLimit(
   return { allowed: true, retryAfterSeconds: 0 };
 }
 
+/*
+ * Сброс бакета. Нужен там, где успешное действие доказывает легитимность:
+ * правильный пароль при входе означает, что попытки делал владелец, и
+ * накопленный счётчик обязан обнулиться.
+ *
+ * Без сброса лимит входа работал как ловушка для живых людей: 10 входов за
+ * 15 минут (несколько устройств, перевходы) — и владелец получал 429 на
+ * собственном аккаунте. Атакующему сброс не помогает: чтобы сбросить чужой
+ * бакет, нужен верный пароль, а с верным паролем подбирать уже нечего.
+ */
+export function resetRateLimit(key: string, state: RateLimiterState = defaultState): void {
+  state.buckets.delete(key);
+}
+
 const MAX_BUCKETS = 10_000;
 const EVICT_BATCH = 500;
 
@@ -73,20 +87,20 @@ function cleanup(state: RateLimiterState): void {
 }
 
 export function clientIp(request: Request): string | null {
-  if (process.env.TRUST_PROXY === "1") {
-    const forwarded = request.headers.get("x-forwarded-for");
-    if (forwarded) return forwarded.split(",")[0]?.trim() || null;
-    return request.headers.get("x-real-ip")?.trim() || null;
+  if (process.env.TRUST_PROXY === '1') {
+    const forwarded = request.headers.get('x-forwarded-for');
+    if (forwarded) return forwarded.split(',')[0]?.trim() || null;
+    return request.headers.get('x-real-ip')?.trim() || null;
   }
   return null;
 }
 
 /** Значение заголовка cookie без парсинга всего заголовка. */
 function cookieValue(request: Request, name: string): string | null {
-  const raw = request.headers.get("cookie");
+  const raw = request.headers.get('cookie');
   if (!raw) return null;
-  for (const part of raw.split(";")) {
-    const eq = part.indexOf("=");
+  for (const part of raw.split(';')) {
+    const eq = part.indexOf('=');
     if (eq === -1) continue;
     if (part.slice(0, eq).trim() !== name) continue;
     const value = part.slice(eq + 1).trim();
@@ -120,10 +134,10 @@ export function rateLimitKey(request: Request, scope: string): string {
   const ip = clientIp(request);
   if (ip) return `${scope}:ip:${ip}`;
 
-  const session = cookieValue(request, "ez_session");
+  const session = cookieValue(request, 'ez_session');
   if (session) {
     // Хешируем, чтобы полный токен сессии не оседал ключами в памяти лимитера.
-    const digest = createHash("sha256").update(session).digest("hex").slice(0, KEY_PREFIX_LEN);
+    const digest = createHash('sha256').update(session).digest('hex').slice(0, KEY_PREFIX_LEN);
     return `${scope}:sess:${digest}`;
   }
 

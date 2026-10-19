@@ -1,7 +1,7 @@
-import { Reveal } from "@/components/reveal";
-import { renderLetterTemplate } from "@/lib/cover-letter";
-import { scoreVacancyForResume } from "@/lib/ai-matching";
-import type { Vacancy } from "@/lib/vacancies/types";
+import { Reveal } from '@/components/reveal';
+import { renderLetterTemplate } from '@/lib/cover-letter';
+import { scoreVacancyForResume } from '@/lib/ai-matching';
+import type { Vacancy } from '@/lib/vacancies/types';
 
 /**
  * Как сервис работает — на конкретном примере.
@@ -20,15 +20,15 @@ import type { Vacancy } from "@/lib/vacancies/types";
  * Демонстрация честнее отзыва: отзыв можно выдумать, а пример — нельзя.
  */
 
-const RESUME_TITLE = "Frontend-разработчик";
+const RESUME_TITLE = 'Frontend-разработчик';
 
 const RESUME = [
-  "Frontend Developer",
-  "Опыт: 6 лет коммерческой разработки.",
-  "Сократил время загрузки приложения на 40%: LCP с 4.2с до 1.6с.",
-  "Внедрил Storybook, онбординг новых разработчиков сократился с 5 дней до 2.",
-  "Пишу на React, TypeScript и Next.js.",
-].join("\n");
+  'Frontend Developer',
+  'Опыт: 6 лет коммерческой разработки.',
+  'Сократил время загрузки приложения на 40%: LCP с 4.2с до 1.6с.',
+  'Внедрил Storybook, онбординг новых разработчиков сократился с 5 дней до 2.',
+  'Пишу на React, TypeScript и Next.js.',
+].join('\n');
 
 /*
  * Требования подобраны так, чтобы разбор показал обе стороны: и совпадения,
@@ -39,23 +39,23 @@ const RESUME = [
  * никто не проверял.
  */
 const VACANCY: Vacancy = {
-  slug: "hh-example",
-  source: "hh",
-  source_id: "example",
-  title: "Frontend-разработчик",
-  company: "Технологическая компания",
-  salary: "250 000 — 320 000 ₽",
+  slug: 'hh-example',
+  source: 'hh',
+  source_id: 'example',
+  title: 'Frontend-разработчик',
+  company: 'Технологическая компания',
+  salary: '250 000 — 320 000 ₽',
   salary_min: 250_000,
   salary_max: 320_000,
-  level: "Middle",
-  format: "Удалённо",
-  city: "Москва",
-  posted: "сегодня",
+  level: 'Middle',
+  format: 'Удалённо',
+  city: 'Москва',
+  posted: 'сегодня',
   published_at: null,
-  category: "Разработка",
-  about: "Ищем Frontend-разработчика. Требуются: React, TypeScript, Next.js, Docker, Redis.",
+  category: 'Разработка',
+  about: 'Ищем Frontend-разработчика. Требуются: React, TypeScript, Next.js, Docker, Redis.',
   responsibilities: [],
-  requirements: ["React", "TypeScript", "Next.js", "Docker", "Redis"],
+  requirements: ['React', 'TypeScript', 'Next.js', 'Docker', 'Redis'],
   bonus: [],
   source_url: null,
   contact_email: null,
@@ -63,15 +63,15 @@ const VACANCY: Vacancy = {
 };
 
 const LETTER_TEMPLATE = [
-  "Здравствуйте!",
-  "",
-  "Меня заинтересовала вакансия {вакансия} в компании {компания} ({город}).",
-  "В последней работе: Сократил время загрузки приложения на 40%: LCP с 4.2с до 1.6с.",
-  "",
-  "Буду рад обсудить задачи и рассказать, как могу быть полезен.",
-  "",
-  "С уважением",
-].join("\n");
+  'Здравствуйте!',
+  '',
+  'Меня заинтересовала вакансия {вакансия} в компании {компания} ({город}).',
+  'В последней работе: Сократил время загрузки приложения на 40%: LCP с 4.2с до 1.6с.',
+  '',
+  'Буду рад обсудить задачи и рассказать, как могу быть полезен.',
+  '',
+  'С уважением',
+].join('\n');
 
 export function HowItWorks() {
   const letter = renderLetterTemplate(LETTER_TEMPLATE, VACANCY);
@@ -93,9 +93,9 @@ export function HowItWorks() {
           </pre>
 
           <p className="mt-4 text-sm leading-relaxed text-muted">
-            Письмо строится по совпадению с резюме, а не из общего шаблона: строка с
-            достижением и цифрой — та, которую работодатель спросит подробнее всего, поэтому она
-            и попадает в письмо.
+            Письмо строится по совпадению с резюме, а не из общего шаблона: строка с достижением и
+            цифрой — та, которую работодатель спросит подробнее всего, поэтому она и попадает в
+            письмо.
           </p>
         </figure>
       </Reveal>
@@ -126,19 +126,19 @@ export function HowItWorks() {
           <div className="mt-5 border-t border-line pt-4">
             {scored.matchedSkills.length > 0 ? (
               <p className="text-sm leading-relaxed text-ink">
-                <span className="font-medium">Совпало:</span>{" "}
-                <span className="text-muted">{scored.matchedSkills.join(", ")}</span>
+                <span className="font-medium">Совпало:</span>{' '}
+                <span className="text-muted">{scored.matchedSkills.join(', ')}</span>
               </p>
             ) : null}
             {scored.missingSkills.length > 0 ? (
               <p className="mt-1.5 text-sm leading-relaxed text-ink">
-                <span className="font-medium">Пробелы:</span>{" "}
-                <span className="text-muted">{scored.missingSkills.join(", ")}</span>
+                <span className="font-medium">Пробелы:</span>{' '}
+                <span className="text-muted">{scored.missingSkills.join(', ')}</span>
               </p>
             ) : null}
             <p className="mt-3 text-sm leading-relaxed text-muted">
-              Пробелы — не минус. По ним собирается блок подготовки к собеседованию: о том, чего
-              нет в резюме, всё равно спросят.
+              Пробелы — не минус. По ним собирается блок подготовки к собеседованию: о том, чего нет
+              в резюме, всё равно спросят.
             </p>
           </div>
         </figure>

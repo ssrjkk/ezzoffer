@@ -1,5 +1,5 @@
-import test, { before } from "node:test";
-import assert from "node:assert/strict";
+import test, { before } from 'node:test';
+import assert from 'node:assert/strict';
 
 /**
  * Постраничная выдача откликов.
@@ -9,15 +9,15 @@ import assert from "node:assert/strict";
  * границе страниц, поэтому он составной: (sent_at, id).
  */
 
-type Database = ReturnType<typeof import("../src/lib/db").createDatabase>;
+type Database = ReturnType<typeof import('../src/lib/db').createDatabase>;
 let db: Database;
-let listApplicationsPage: typeof import("../src/lib/applications").listApplicationsPage;
+let listApplicationsPage: typeof import('../src/lib/applications').listApplicationsPage;
 
 before(async () => {
-  process.env.EZOFFER_DB_PATH = ":memory:";
-  process.env.EZOFFER_SILENT = "1";
-  db = (await import("../src/lib/db")).db;
-  listApplicationsPage = (await import("../src/lib/applications")).listApplicationsPage;
+  process.env.EZOFFER_DB_PATH = ':memory:';
+  process.env.EZOFFER_SILENT = '1';
+  db = (await import('../src/lib/db')).db;
+  listApplicationsPage = (await import('../src/lib/applications')).listApplicationsPage;
 });
 
 function seed(userId: number, count: number, sameTimestamp: boolean) {
@@ -36,22 +36,22 @@ function seed(userId: number, count: number, sameTimestamp: boolean) {
 function newUser(email: string): number {
   return Number(
     db
-      .prepare("INSERT INTO users (email, password_hash, created_at) VALUES (?,?,?)")
-      .run(email, "h", Date.now()).lastInsertRowid,
+      .prepare('INSERT INTO users (email, password_hash, created_at) VALUES (?,?,?)')
+      .run(email, 'h', Date.now()).lastInsertRowid,
   );
 }
 
-test("первая страница отдаёт limit записей и курсор", () => {
-  const uid = newUser("page1@test.dev");
+test('первая страница отдаёт limit записей и курсор', () => {
+  const uid = newUser('page1@test.dev');
   seed(uid, 25, false);
 
   const page = listApplicationsPage(uid, 10);
   assert.equal(page.items.length, 10);
-  assert.ok(page.nextCursor, "курсор должен быть, пока есть ещё записи");
+  assert.ok(page.nextCursor, 'курсор должен быть, пока есть ещё записи');
 });
 
-test("обход страниц возвращает все записи без пропусков и дублей", () => {
-  const uid = newUser("page2@test.dev");
+test('обход страниц возвращает все записи без пропусков и дублей', () => {
+  const uid = newUser('page2@test.dev');
   seed(uid, 25, false);
 
   const seen = new Set<number>();
@@ -70,8 +70,8 @@ test("обход страниц возвращает все записи без 
   assert.equal(seen.size, 25, `ожидались 25 записей, получено ${seen.size}`);
 });
 
-test("одинаковые sent_at не приводят к пропускам на границе страниц", () => {
-  const uid = newUser("page3@test.dev");
+test('одинаковые sent_at не приводят к пропускам на границе страниц', () => {
+  const uid = newUser('page3@test.dev');
   seed(uid, 20, true);
 
   const seen = new Set<number>();
@@ -90,8 +90,8 @@ test("одинаковые sent_at не приводят к пропускам �
   assert.equal(seen.size, 20, `ожидались 20 записей, получено ${seen.size}`);
 });
 
-test("после последней страницы курсор равен null", () => {
-  const uid = newUser("page4@test.dev");
+test('после последней страницы курсор равен null', () => {
+  const uid = newUser('page4@test.dev');
   seed(uid, 5, false);
 
   const page = listApplicationsPage(uid, 50);
@@ -99,25 +99,25 @@ test("после последней страницы курсор равен nul
   assert.equal(page.nextCursor, null);
 });
 
-test("пустой результат даёт пустую страницу без курсора", () => {
-  const uid = newUser("page5@test.dev");
+test('пустой результат даёт пустую страницу без курсора', () => {
+  const uid = newUser('page5@test.dev');
   const page = listApplicationsPage(uid, 10);
   assert.deepEqual(page.items, []);
   assert.equal(page.nextCursor, null);
 });
 
-test("чужие отклики не попадают в страницу", () => {
-  const mine = newUser("mine@test.dev");
-  const other = newUser("other@test.dev");
+test('чужие отклики не попадают в страницу', () => {
+  const mine = newUser('mine@test.dev');
+  const other = newUser('other@test.dev');
   seed(mine, 3, false);
   seed(other, 10, false);
 
   const page = listApplicationsPage(mine, 50);
-  assert.equal(page.items.length, 3, "должны видны только свои отклики");
+  assert.equal(page.items.length, 3, 'должны видны только свои отклики');
 });
 
-test("limit ограничивается сверху и снизу", () => {
-  const uid = newUser("page6@test.dev");
+test('limit ограничивается сверху и снизу', () => {
+  const uid = newUser('page6@test.dev');
   seed(uid, 3, false);
   assert.ok(listApplicationsPage(uid, 0).items.length <= 1);
   assert.ok(listApplicationsPage(uid, 9999).items.length <= 200);

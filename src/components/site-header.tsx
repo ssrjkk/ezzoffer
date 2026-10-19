@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 /*
  * Шапка.
@@ -18,18 +18,22 @@ import { useEffect, useState } from "react";
  */
 
 const nav = [
-  { href: "/#how-it-work", label: "Как это работает" },
-  { href: "/pricing", label: "Тарифы" },
-  { href: "/jobs", label: "Вакансии" },
-  { href: "/resume-examples", label: "Примеры резюме" },
-  { href: "/internships", label: "Стажировки" },
-  { href: "/blog", label: "Блог" },
-  { href: "/faq", label: "FAQ" },
+  { href: '/#how-it-work', label: 'Как это работает' },
+  { href: '/pricing', label: 'Тарифы' },
+  { href: '/jobs', label: 'Вакансии' },
+  { href: '/resume-examples', label: 'Примеры резюме' },
+  { href: '/internships', label: 'Стажировки' },
+  { href: '/blog', label: 'Блог' },
+  { href: '/faq', label: 'FAQ' },
 ];
 
-export function Logo({ className = "" }: { className?: string }) {
+export function Logo({ className = '' }: { className?: string }) {
   return (
-    <Link href="/" className={`flex items-center gap-2.5 ${className}`} aria-label="EZOffer — на главную">
+    <Link
+      href="/"
+      className={`flex items-center gap-2.5 ${className}`}
+      aria-label="EZOffer — на главную"
+    >
       <span className="grid size-8 shrink-0 place-items-center rounded-sm bg-ink">
         <svg viewBox="0 0 24 24" fill="none" className="size-4 text-paper" aria-hidden>
           <path d="M13 2 4.5 13.5h6L11 22l8.5-11.5h-6L13 2Z" fill="currentColor" />
@@ -46,7 +50,7 @@ export function SiteHeader() {
   const pathname = usePathname();
 
   useEffect(() => {
-    fetch("/api/auth/me", { cache: "no-store" })
+    fetch('/api/auth/me', { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => setUser(d?.user ?? null))
       .catch(() => setUser(null));
@@ -54,19 +58,27 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-line bg-bg">
-      <div className="container-x flex h-14 items-center justify-between gap-4 md:h-16">
+      {/*
+        pt под safe-area, а не только h.
+
+        Шапка липкая и есть на каждой странице. В iOS standalone и под челкой
+        `sticky top-0` прижимает её к самому краю, и логотип уезжает под
+        строку состояния. `env(safe-area-inset-top)` равен нулю везде, где
+        выреза нет, поэтому на обычных экранах вид не меняется.
+      */}
+      <div className="container-x flex min-h-14 items-center justify-between gap-4 pt-[env(safe-area-inset-top)] md:min-h-16">
         <Logo />
 
         <nav className="hidden items-center gap-6 lg:flex" aria-label="Основная навигация">
           {nav.map((item) => {
-            const active = item.href !== "/#how-it-work" && pathname === item.href;
+            const active = item.href !== '/#how-it-work' && pathname === item.href;
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                aria-current={active ? "page" : undefined}
+                aria-current={active ? 'page' : undefined}
                 className={`relative py-2 font-mono text-xs uppercase tracking-[0.1em] transition-colors ${
-                  active ? "text-accent" : "text-muted hover:text-ink"
+                  active ? 'text-accent' : 'text-muted hover:text-ink'
                 }`}
               >
                 {item.label}
@@ -88,7 +100,10 @@ export function SiteHeader() {
             </Link>
           ) : (
             <>
-              <Link href="/login" className="hidden text-sm font-medium text-muted transition-colors hover:text-ink sm:block">
+              <Link
+                href="/login"
+                className="hidden text-sm font-medium text-muted transition-colors hover:text-ink sm:block"
+              >
                 Войти
               </Link>
               <Link
@@ -102,15 +117,21 @@ export function SiteHeader() {
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
-            className="grid size-9 place-items-center rounded-sm border border-line-strong lg:hidden"
+            className="grid size-11 place-items-center rounded-sm border border-line-strong lg:hidden"
             aria-expanded={open}
-            aria-label={open ? "Закрыть меню" : "Открыть меню"}
+            aria-label={open ? 'Закрыть меню' : 'Открыть меню'}
           >
             <span className="sr-only">Меню</span>
             <div className="flex w-4 flex-col gap-1">
-              <span className={`h-px w-full bg-ink transition-transform ${open ? "translate-y-[3px] rotate-45" : ""}`} />
-              <span className={`h-px w-full bg-ink transition-opacity ${open ? "opacity-0" : ""}`} />
-              <span className={`h-px w-full bg-ink transition-transform ${open ? "-translate-y-[3px] -rotate-45" : ""}`} />
+              <span
+                className={`h-px w-full bg-ink transition-transform ${open ? 'translate-y-[3px] rotate-45' : ''}`}
+              />
+              <span
+                className={`h-px w-full bg-ink transition-opacity ${open ? 'opacity-0' : ''}`}
+              />
+              <span
+                className={`h-px w-full bg-ink transition-transform ${open ? '-translate-y-[3px] -rotate-45' : ''}`}
+              />
             </div>
           </button>
         </div>

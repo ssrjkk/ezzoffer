@@ -30,9 +30,20 @@ COPY --from=builder /app/scripts ./scripts
 # проект. Локальные данные — единственное, что здесь опасно: ezoffer.db с
 # хэшами паролей и OAuth-токенами. Данные приходят только из volume, поэтому
 # содержимое /app/data не важно, а исходники и тесты просто не нужны в образе.
-RUN rm -rf /app/data ./src ./tests \
+# deploy-out/pages-out вычищаются по той же причине, что и data: Turbopack
+# разворачивает в standalone весь проект, до которого дотягивается трассировка,
+# а предыдущий deploy-out содержит data/ezoffer.db внутри себя. Поэтому `rm -rf
+# /app/data` недостаточно: база лежит не там, а на уровень глубже, и имя
+# каталога при следующей сборке может измениться. После удаления — проверка
+# остатка, чтобы пропуск нельзя было не заметить: образ уедет на сервер.
+RUN rm -rf /app/data ./src ./tests ./deploy-out ./pages-out \
  && mkdir -p /app/data \
- && chown -R appuser:appuser /app/data
+ && chown -R appuser:appuser /app/data \
+ && if find /app -name 'ezoffer.db*' -print -quit | grep -q .; then \
+      echo 'В образе осталась база данных — сборка прервана'; \
+      find /app -name 'ezoffer.db*' -exec ls -l {} \; ; \
+      exit 1; \
+    fi
 
 # Шрифт с кириллицей для PDF-экспорта. Копируется явно: outputFileTracingIncludes
 # не годится — он разворачивает в трассировку весь проект целиком.

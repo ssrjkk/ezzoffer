@@ -1,5 +1,5 @@
-import { db, type User } from "./db";
-import { isPlanActive, planDailyLimit } from "./plans";
+import { db, type User } from './db';
+import { isPlanActive, planDailyLimit } from './plans';
 
 export type Stats = {
   sent: number;
@@ -48,15 +48,15 @@ export function getStats(userId: number): Stats {
   const today = (
     db
       .prepare(
-        "SELECT COUNT(*) AS c FROM applications WHERE user_id = ? AND sent_at >= ? AND withdrawn = 0",
+        'SELECT COUNT(*) AS c FROM applications WHERE user_id = ? AND sent_at >= ? AND withdrawn = 0',
       )
       .get(userId, todayStart.getTime()) as { c: number }
   ).c;
 
-  const user = db.prepare("SELECT * FROM users WHERE id = ?").get(userId) as User;
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as User;
   const activeSearches = (
     db
-      .prepare("SELECT COUNT(*) AS c FROM searches WHERE user_id = ? AND active = 1")
+      .prepare('SELECT COUNT(*) AS c FROM searches WHERE user_id = ? AND active = 1')
       .get(userId) as { c: number }
   ).c;
 
@@ -77,19 +77,20 @@ export function getStats(userId: number): Stats {
   let hint: string | null = null;
   if (sent === 0) {
     hint = active
-      ? "Откликов ещё нет. Откройте раздел «Вакансии», чтобы отправить первый отклик или запустить автопоиск."
-      : "Активируйте пробный период, чтобы отправлять отклики и видеть статистику.";
+      ? 'Откликов ещё нет. Откройте раздел «Вакансии», чтобы отправить первый отклик или запустить автопоиск.'
+      : 'Активируйте пробный период, чтобы отправлять отклики и видеть статистику.';
   } else if (sent >= 10 && viewRate < 40) {
-    hint = "Просмотров мало — пора усилить резюме и ключевые навыки под вакансии.";
+    hint = 'Просмотров мало — пора усилить резюме и ключевые навыки под вакансии.';
   } else if (viewed >= 10 && respondRate < 35) {
-    hint = "Резюме смотрят, но HR не отвечают — добавьте цифры и результаты в разделы опыта.";
+    hint = 'Резюме смотрят, но HR не отвечают — добавьте цифры и результаты в разделы опыта.';
   } else if (responded >= 10 && inviteRate < 20) {
-    hint = "Отклики доходят, но приглашений мало — проверьте сопроводительное письмо и зарплатные ожидания.";
+    hint =
+      'Отклики доходят, но приглашений мало — проверьте сопроводительное письмо и зарплатные ожидания.';
   } else if (sent >= 1) {
-    hint = "Воронка в норме. Держите темп: чем больше откликов — тем выше шанс оффера.";
+    hint = 'Воронка в норме. Держите темп: чем больше откликов — тем выше шанс оффера.';
   }
 
-  const series: Stats["series"] = [];
+  const series: Stats['series'] = [];
   for (let d = 6; d >= 0; d--) {
     const dayStart = new Date(todayStart);
     dayStart.setDate(dayStart.getDate() - d);
@@ -109,7 +110,7 @@ export function getStats(userId: number): Stats {
       viewed: number;
       invited: number;
     };
-    const label = dayStart.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit" });
+    const label = dayStart.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
     series.push({
       label,
       sent: Number(row.sent),

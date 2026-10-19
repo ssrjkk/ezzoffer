@@ -1,11 +1,16 @@
-import { NextResponse } from "next/server";
-import { requireUser, unauthorized } from "@/lib/api";
-import { db } from "@/lib/db";
-import { issueLinkCode, telegramConfigured, telegramWebhookSecret, unlinkChat } from "@/lib/telegram";
-import { NO_STORE_HEADERS } from "@/lib/http";
-import { rateLimit } from "@/lib/rate-limit";
+import { NextResponse } from 'next/server';
+import { requireUser, unauthorized } from '@/lib/api';
+import { db } from '@/lib/db';
+import {
+  issueLinkCode,
+  telegramConfigured,
+  telegramWebhookSecret,
+  unlinkChat,
+} from '@/lib/telegram';
+import { NO_STORE_HEADERS } from '@/lib/http';
+import { rateLimit } from '@/lib/rate-limit';
 
-export const dynamic = "force-dynamic";
+export const dynamic = 'force-dynamic';
 
 /**
  * Привязка Telegram-чата.
@@ -35,9 +40,8 @@ export async function GET() {
   const user = await requireUser();
   if (!user) return unauthorized();
 
-  const fresh = db.prepare("SELECT telegram_chat_id FROM users WHERE id = ?").get(user.id) as
-    | { telegram_chat_id: string | null }
-    | undefined;
+  const fresh = db.prepare('SELECT telegram_chat_id FROM users WHERE id = ?').get(user.id) as
+    { telegram_chat_id: string | null } | undefined;
   if (!fresh) return unauthorized();
 
   return Response.json(
@@ -61,7 +65,7 @@ export async function POST() {
 
   if (!botReady()) {
     return NextResponse.json(
-      { error: "Бот не настроен на сервере: нужны TELEGRAM_BOT_TOKEN и TELEGRAM_WEBHOOK_SECRET" },
+      { error: 'Бот не настроен на сервере: нужны TELEGRAM_BOT_TOKEN и TELEGRAM_WEBHOOK_SECRET' },
       { status: 503 },
     );
   }
@@ -69,16 +73,13 @@ export async function POST() {
   const limiter = rateLimit(`telegram-code:${user.id}`, CODE_LIMIT);
   if (!limiter.allowed) {
     return NextResponse.json(
-      { error: "Слишком много запросов кода. Подождите несколько минут." },
-      { status: 429, headers: { "Retry-After": String(limiter.retryAfterSeconds) } },
+      { error: 'Слишком много запросов кода. Подождите несколько минут.' },
+      { status: 429, headers: { 'Retry-After': String(limiter.retryAfterSeconds) } },
     );
   }
 
   const code = issueLinkCode(user.id);
-  return Response.json(
-    { code, codeTtlMinutes: 15 },
-    { status: 201, headers: NO_STORE_HEADERS },
-  );
+  return Response.json({ code, codeTtlMinutes: 15 }, { status: 201, headers: NO_STORE_HEADERS });
 }
 
 /** Отвязать чат. */
@@ -86,11 +87,10 @@ export async function DELETE() {
   const user = await requireUser();
   if (!user) return unauthorized();
 
-  const fresh = db.prepare("SELECT telegram_chat_id FROM users WHERE id = ?").get(user.id) as
-    | { telegram_chat_id: string | null }
-    | undefined;
+  const fresh = db.prepare('SELECT telegram_chat_id FROM users WHERE id = ?').get(user.id) as
+    { telegram_chat_id: string | null } | undefined;
   if (!fresh) return unauthorized();
 
-  const removed = unlinkChat(fresh.telegram_chat_id ?? "");
+  const removed = unlinkChat(fresh.telegram_chat_id ?? '');
   return Response.json({ ok: true, removed: removed > 0 });
 }

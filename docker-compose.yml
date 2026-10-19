@@ -4,7 +4,7 @@ services:
     container_name: ezoffer
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - '3000:3000'
     environment:
       - SITE_URL=https://ezoffer.ru
       - PORT=3000

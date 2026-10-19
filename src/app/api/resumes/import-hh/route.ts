@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
-import { requireUser, unauthorized } from "@/lib/api";
-import { getValidHhToken } from "@/lib/hh-oauth";
-import { listHhResumes } from "@/lib/hh-resumes";
-import { NO_STORE_HEADERS } from "@/lib/http";
+import { NextResponse } from 'next/server';
+import { requireUser, unauthorized } from '@/lib/api';
+import { getValidHhToken } from '@/lib/hh-oauth';
+import { listHhResumes } from '@/lib/hh-resumes';
+import { NO_STORE_HEADERS } from '@/lib/http';
 
 /**
  * Список резюме пользователя на hh.ru — для выбора при импорте.
@@ -19,7 +19,7 @@ export async function GET() {
   const token = (await getValidHhToken(user))?.token;
   if (!token) {
     return NextResponse.json(
-      { error: "Аккаунт hh.ru не привязан", resumes: [] },
+      { error: 'Аккаунт hh.ru не привязан', resumes: [] },
       { status: 403, headers: NO_STORE_HEADERS },
     );
   }

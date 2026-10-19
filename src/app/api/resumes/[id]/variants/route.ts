@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
-import { requireUser, unauthorized } from "@/lib/api";
-import { parseParamId, NO_STORE_HEADERS } from "@/lib/http";
-import { createVariant, getResumeForUser, compareVariants } from "@/lib/resume-variants";
+import { NextResponse } from 'next/server';
+import { requireUser, unauthorized } from '@/lib/api';
+import { parseParamId, NO_STORE_HEADERS } from '@/lib/http';
+import { createVariant, getResumeForUser, compareVariants } from '@/lib/resume-variants';
 
 /**
  * GET /api/resumes/[id]/variants — группа вариантов и честное сравнение.
@@ -16,13 +16,16 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
 
   const { id: rawId } = await ctx.params;
   const id = parseParamId(rawId);
-  if (id === null) return NextResponse.json({ error: "Некорректный id" }, { status: 400 });
+  if (id === null) return NextResponse.json({ error: 'Некорректный id' }, { status: 400 });
 
   const resume = getResumeForUser(user.id, id);
-  if (!resume) return NextResponse.json({ error: "Резюме не найдено" }, { status: 404 });
+  if (!resume) return NextResponse.json({ error: 'Резюме не найдено' }, { status: 404 });
 
   if (!resume.variant_group) {
-    return Response.json({ group: null, variants: [], comparison: null }, { headers: NO_STORE_HEADERS });
+    return Response.json(
+      { group: null, variants: [], comparison: null },
+      { headers: NO_STORE_HEADERS },
+    );
   }
 
   const comparison = compareVariants(user.id, resume.variant_group);
@@ -48,15 +51,12 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
 
   const { id: rawId } = await ctx.params;
   const id = parseParamId(rawId);
-  if (id === null) return NextResponse.json({ error: "Некорректный id" }, { status: 400 });
+  if (id === null) return NextResponse.json({ error: 'Некорректный id' }, { status: 400 });
 
   const variant = createVariant(user.id, id);
   if (!variant) {
-    return NextResponse.json({ error: "Резюме не найдено" }, { status: 404 });
+    return NextResponse.json({ error: 'Резюме не найдено' }, { status: 404 });
   }
 
-  return Response.json(
-    { resume: variant },
-    { status: 201, headers: NO_STORE_HEADERS },
-  );
+  return Response.json({ resume: variant }, { status: 201, headers: NO_STORE_HEADERS });
 }

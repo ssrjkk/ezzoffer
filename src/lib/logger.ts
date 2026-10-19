@@ -12,22 +12,22 @@
  * node:fs в Edge-бандл по цепочке импортов, даже если код не выполняется.
  */
 
-type Level = "error" | "info";
+type Level = 'error' | 'info';
 
 export type LogMeta = Record<string, unknown>;
 
 /** Файловые логи — только в production и только в Node. */
 function fileLoggingEnabled(): boolean {
-  return process.env.NODE_ENV === "production" && typeof process.versions?.node === "string";
+  return process.env.NODE_ENV === 'production' && typeof process.versions?.node === 'string';
 }
 
 function silent(): boolean {
-  return process.env.EZOFFER_SILENT === "1";
+  return process.env.EZOFFER_SILENT === '1';
 }
 
 export function formatLine(level: Level, scope: string, message: string, meta?: LogMeta): string {
   const ts = new Date().toISOString();
-  const suffix = meta && Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : "";
+  const suffix = meta && Object.keys(meta).length > 0 ? ` ${JSON.stringify(meta)}` : '';
   return `[${ts}] [${level}] ${scope}: ${message}${suffix}`;
 }
 
@@ -52,7 +52,7 @@ async function getFileLogger(): Promise<FileLogger | null> {
     return fileLogger;
   }
   try {
-    const mod = (await import("./log-file")) as typeof import("./log-file");
+    const mod = (await import('./log-file')) as typeof import('./log-file');
     fileLogger = { writeLine: mod.writeLogLine };
   } catch {
     fileLogger = null;
@@ -75,14 +75,14 @@ export function writeToFile(line: string): void {
 
 export function logError(scope: string, err: unknown, meta?: LogMeta): void {
   if (silent()) return;
-  const line = formatLine("error", scope, errorMessage(err), meta);
+  const line = formatLine('error', scope, errorMessage(err), meta);
   console.error(line);
   writeToFile(line);
 }
 
 export function logInfo(scope: string, message: string, meta?: LogMeta): void {
   if (silent()) return;
-  const line = formatLine("info", scope, message, meta);
+  const line = formatLine('info', scope, message, meta);
   console.log(line);
   writeToFile(line);
 }

@@ -1,11 +1,11 @@
-import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import Link from "next/link";
-import { jobs } from "@/lib/data";
-import { LevelPill } from "@/components/home/jobs-preview";
-import { JsonLd } from "@/components/json-ld";
+import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
+import Link from 'next/link';
+import { jobs } from '@/lib/data';
+import { LevelPill } from '@/components/home/jobs-preview';
+import { JsonLd } from '@/components/json-ld';
 
-const siteUrl = process.env.SITE_URL ?? "https://ezoffer.ru";
+const siteUrl = process.env.SITE_URL ?? 'https://ezoffer.ru';
 
 // SSG: дата фиксируется на момент сборки — корректно для статических страниц.
 const nowIso = new Date().toISOString();
@@ -13,7 +13,7 @@ const validIso = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
 function salaryRange(text: string) {
   const match = text.match(/от\s*([\d\s]+)/);
-  return match ? parseInt(match[1].replace(/\s/g, ""), 10) : null;
+  return match ? parseInt(match[1].replace(/\s/g, ''), 10) : null;
 }
 
 /**
@@ -39,13 +39,7 @@ function List({ items }: { items: string[] }) {
   );
 }
 
-function Block({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function Block({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="border-t-2 border-ink pt-5">
       <h2 className="font-serif text-xl leading-snug text-ink md:text-2xl">{title}</h2>
@@ -65,7 +59,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const job = jobs.find((j) => j.slug === slug);
-  if (!job) return { title: "Вакансия не найдена" };
+  if (!job) return { title: 'Вакансия не найдена' };
   return {
     title: job.title,
     description: `${job.title} — ${job.company}, ${job.salary}, ${job.format}. Откликнемся за вас в EZOffer.`,
@@ -77,32 +71,34 @@ export default async function JobPage({ params }: { params: Promise<{ slug: stri
   const job = jobs.find((j) => j.slug === slug);
   if (!job) notFound();
 
-  const related = jobs.filter((j) => j.category === job.category && j.slug !== job.slug).slice(0, 3);
+  const related = jobs
+    .filter((j) => j.category === job.category && j.slug !== job.slug)
+    .slice(0, 3);
   const minSalary = salaryRange(job.salary);
 
   return (
     <div className="container-x py-12 md:py-16">
       <JsonLd
         data={{
-          "@context": "https://schema.org",
-          "@type": "JobPosting",
+          '@context': 'https://schema.org',
+          '@type': 'JobPosting',
           title: job.title,
           url: `${siteUrl}/jobs/${job.slug}`,
-          description: `${job.about}\n\n${job.responsibilities.join("\n")}`,
+          description: `${job.about}\n\n${job.responsibilities.join('\n')}`,
           datePosted: nowIso,
           validThrough: validIso,
-          employmentType: "FULL_TIME",
-          hiringOrganization: { "@type": "Organization", name: job.company },
+          employmentType: 'FULL_TIME',
+          hiringOrganization: { '@type': 'Organization', name: job.company },
           jobLocation: {
-            "@type": "Place",
-            address: { "@type": "PostalAddress", addressLocality: job.city, addressCountry: "RU" },
+            '@type': 'Place',
+            address: { '@type': 'PostalAddress', addressLocality: job.city, addressCountry: 'RU' },
           },
           ...(minSalary
             ? {
                 baseSalary: {
-                  "@type": "MonetaryAmount",
-                  currency: "RUB",
-                  value: { "@type": "QuantitativeValue", minValue: minSalary, unitText: "MONTH" },
+                  '@type': 'MonetaryAmount',
+                  currency: 'RUB',
+                  value: { '@type': 'QuantitativeValue', minValue: minSalary, unitText: 'MONTH' },
                 },
               }
             : {}),

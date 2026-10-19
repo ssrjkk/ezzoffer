@@ -1,5 +1,5 @@
-import test, { before, beforeEach } from "node:test";
-import assert from "node:assert/strict";
+import test, { before, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
 
 /**
  * Пробелы в навыках.
@@ -15,25 +15,25 @@ import assert from "node:assert/strict";
  * TypeScript такое не ловит, линтер — только как неиспользуемый параметр.
  */
 
-type Database = ReturnType<typeof import("../src/lib/db").createDatabase>;
+type Database = ReturnType<typeof import('../src/lib/db').createDatabase>;
 
 let db: Database;
-let gaps: typeof import("../src/lib/skill-gaps");
-let bot: typeof import("../src/lib/telegram-bot");
+let gaps: typeof import('../src/lib/skill-gaps');
+let bot: typeof import('../src/lib/telegram-bot');
 let resetCatalogCache: () => void;
 
 before(async () => {
-  process.env.EZOFFER_DB_PATH = ":memory:";
-  process.env.EZOFFER_SILENT = "1";
-  db = (await import("../src/lib/db")).db;
-  gaps = await import("../src/lib/skill-gaps");
-  bot = await import("../src/lib/telegram-bot");
-  resetCatalogCache = (await import("../src/lib/vacancies")).resetCatalogCache;
+  process.env.EZOFFER_DB_PATH = ':memory:';
+  process.env.EZOFFER_SILENT = '1';
+  db = (await import('../src/lib/db')).db;
+  gaps = await import('../src/lib/skill-gaps');
+  bot = await import('../src/lib/telegram-bot');
+  resetCatalogCache = (await import('../src/lib/vacancies')).resetCatalogCache;
 });
 
 beforeEach(() => {
   db.exec(
-    "DELETE FROM bookmarks; DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies;",
+    'DELETE FROM bookmarks; DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies;',
   );
   resetCatalogCache();
 });
@@ -71,174 +71,180 @@ function seedApplication(userId: number, slug: string, response: string): void {
 
 function seedSearch(userId: number, title: string, keywords: string): void {
   db.prepare(
-    "INSERT INTO searches (user_id, title, keywords, active, started_at, created_at) VALUES (?, ?, ?, 1, ?, ?)",
+    'INSERT INTO searches (user_id, title, keywords, active, started_at, created_at) VALUES (?, ?, ?, 1, ?, ?)',
   ).run(userId, title, keywords, Date.now(), Date.now());
 }
 
-test("отказ поднимает навык выше просто частого", () => {
-  seedUser(1, "a@example.test");
-  seedResume(1, "JavaScript, React");
+test('отказ поднимает навык выше просто частого', () => {
+  seedUser(1, 'a@example.test');
+  seedResume(1, 'JavaScript, React');
 
   // Redis — частое требование, но отказов на него нет: с ним и так всё в порядке.
   for (let i = 0; i < 6; i++) {
-    seedVacancy(`hh-redis-${i}`, "Разработчик", "Компания", "Обязательно: Redis, Kafka");
-    seedApplication(1, `hh-redis-${i}`, "invite");
+    seedVacancy(`hh-redis-${i}`, 'Разработчик', 'Компания', 'Обязательно: Redis, Kafka');
+    seedApplication(1, `hh-redis-${i}`, 'invite');
   }
   // Docker — редкое требование, но три отказа подряд.
   for (let i = 0; i < 3; i++) {
-    seedVacancy(`hh-docker-${i}`, "Разработчик", "Компания", "Обязательно: Docker, PostgreSQL");
-    seedApplication(1, `hh-docker-${i}`, "decline");
+    seedVacancy(`hh-docker-${i}`, 'Разработчик', 'Компания', 'Обязательно: Docker, PostgreSQL');
+    seedApplication(1, `hh-docker-${i}`, 'decline');
   }
 
   const report = gaps.computeSkillGaps(1);
   const order = report.gaps.map((g) => g.skill);
-  const docker = order.indexOf("Docker");
-  const redis = order.indexOf("Redis");
+  const docker = order.indexOf('Docker');
+  const redis = order.indexOf('Redis');
 
   assert.notEqual(docker, -1, `Docker не попал в список: ${JSON.stringify(order)}`);
   assert.notEqual(redis, -1, `Redis не попал в список: ${JSON.stringify(order)}`);
   assert.ok(
     docker < redis,
-    `Docker должен стоять выше Redis, хотя встречается реже: порядок ${order.join(", ")}`,
+    `Docker должен стоять выше Redis, хотя встречается реже: порядок ${order.join(', ')}`,
   );
 });
 
-test("навык, который уже есть в резюме, в пробелы не попадает", () => {
-  seedUser(1, "a@example.test");
-  seedResume(1, "JavaScript, React, TypeScript, PostgreSQL");
-  seedVacancy("hh-one", "Разработчик", "Компания", "Требуется: React, TypeScript, PostgreSQL, Kubernetes");
-  seedApplication(1, "hh-one", "decline");
+test('навык, который уже есть в резюме, в пробелы не попадает', () => {
+  seedUser(1, 'a@example.test');
+  seedResume(1, 'JavaScript, React, TypeScript, PostgreSQL');
+  seedVacancy(
+    'hh-one',
+    'Разработчик',
+    'Компания',
+    'Требуется: React, TypeScript, PostgreSQL, Kubernetes',
+  );
+  seedApplication(1, 'hh-one', 'decline');
 
   const report = gaps.computeSkillGaps(1);
   const listed = report.gaps.map((g) => g.skill);
 
-  for (const covered of ["React", "TypeScript", "PostgreSQL"]) {
+  for (const covered of ['React', 'TypeScript', 'PostgreSQL']) {
     assert.ok(!listed.includes(covered), `${covered} есть в резюме, но попал в пробелы`);
   }
-  assert.ok(listed.includes("Kubernetes"), "Kubernetes в резюме нет и должен попасть");
+  assert.ok(listed.includes('Kubernetes'), 'Kubernetes в резюме нет и должен попасть');
   assert.ok(
-    report.covered.includes("React"),
+    report.covered.includes('React'),
     `закрытые навыки должны быть видны: ${JSON.stringify(report.covered)}`,
   );
 });
 
-test("подбор отсекает и чужие вакансии, и навыки, уже закрытые резюме", () => {
-  seedUser(1, "a@example.test");
-  seedResume(1, "JavaScript, React");
-  seedSearch(1, "Go-разработчик", "golang");
-  seedVacancy("hh-go-1", "Go-разработчик в банк", "Банк", "Требуется: Go, PostgreSQL, Docker");
+test('подбор отсекает и чужие вакансии, и навыки, уже закрытые резюме', () => {
+  seedUser(1, 'a@example.test');
+  seedResume(1, 'JavaScript, React');
+  seedSearch(1, 'Go-разработчик', 'golang');
+  seedVacancy('hh-go-1', 'Go-разработчик в банк', 'Банк', 'Требуется: Go, PostgreSQL, Docker');
   // Подходит под поиск, но требует React — он в резюме есть, пробелом быть не может.
-  seedVacancy("hh-go-2", "Go-разработчик в сервис", "Сервис", "Требуется: Go, Redis, React");
+  seedVacancy('hh-go-2', 'Go-разработчик в сервис', 'Сервис', 'Требуется: Go, Redis, React');
   // Совсем не подходит: дизайнерская вакансия в каталоге есть, к поиску отношения не имеет.
-  seedVacancy("hh-other", "Дизайнер интерфейсов", "Студия", "Требуется: Figma, Terraform");
+  seedVacancy('hh-other', 'Дизайнер интерфейсов', 'Студия', 'Требуется: Figma, Terraform');
 
   const report = gaps.computeSkillGaps(1);
   const listed = report.gaps.map((g) => g.skill);
 
-  assert.ok(listed.includes("Docker"), `Docker не найден: ${JSON.stringify(listed)}`);
-  assert.ok(listed.includes("Redis"), `Redis не найден: ${JSON.stringify(listed)}`);
+  assert.ok(listed.includes('Docker'), `Docker не найден: ${JSON.stringify(listed)}`);
+  assert.ok(listed.includes('Redis'), `Redis не найден: ${JSON.stringify(listed)}`);
   assert.ok(
-    !listed.includes("Terraform"),
+    !listed.includes('Terraform'),
     `ваканция вне подбора попала в пробелы: ${JSON.stringify(listed)}`,
   );
   assert.ok(
-    !listed.includes("React"),
+    !listed.includes('React'),
     `React есть в резюме, но попал в пробелы: ${JSON.stringify(listed)}`,
   );
-  const docker = report.gaps.find((g) => g.skill === "Docker")!;
+  const docker = report.gaps.find((g) => g.skill === 'Docker')!;
   assert.ok(
     docker.inTarget > 0,
     `в подборе Docker считается как требование: ${JSON.stringify(docker)}`,
   );
   /*
-   * Счётчик «вакансий, где нужен навык, которого нет в резюме» — тоже проверка
-   * на попадание закрытых навыков. Он идёт по всем inTarget, а не по gaps,
-   * поэтому внутренняя проверка не дублирует внешнюю: снаружи отсекается
-   * навык из резюме, здесь — его вклад в число.
+   * targetedVacancies — число ВАКАНСИЙ в подборе, а не упоминаний навыков.
    *
-   * Go (2 вакансии) + PostgreSQL + Docker + Redis = 5. React в резюме, его в
-   * счётчик не входит.
+   * Раньше здесь ожидалось 5: Go (2 вакансии) + PostgreSQL + Docker + Redis —
+   * то есть считались упоминания, а называлось «вакансиями». Правильное
+   * значение — 2: hh-go-1 и hh-go-2. hh-other в подбор не входит.
    */
   assert.equal(
     report.basis.targetedVacancies,
-    5,
-    `в счётчик попали навыки, уже закрытые резюме: ${JSON.stringify(report.basis)}`,
+    2,
+    `считаются вакансии, а не упоминания навыков: ${JSON.stringify(report.basis)}`,
   );
 });
 
-test("список принадлежит своему человеку: чужие отклики и резюме не видны", () => {
-  seedUser(1, "a@example.test");
-  seedUser(2, "b@example.test");
-  seedResume(1, "JavaScript");
-  seedResume(2, "JavaScript, React, TypeScript");
+test('список принадлежит своему человеку: чужие отклики и резюме не видны', () => {
+  seedUser(1, 'a@example.test');
+  seedUser(2, 'b@example.test');
+  seedResume(1, 'JavaScript');
+  seedResume(2, 'JavaScript, React, TypeScript');
 
-  seedVacancy("hh-mine", "Разработчик", "Моя", "Требуется: Docker, Redis");
-  seedVacancy("hh-theirs", "Разработчик", "Чужая", "Требуется: Kubernetes, Terraform");
-  seedApplication(1, "hh-mine", "decline");
-  seedApplication(2, "hh-theirs", "decline");
+  seedVacancy('hh-mine', 'Разработчик', 'Моя', 'Требуется: Docker, Redis');
+  seedVacancy('hh-theirs', 'Разработчик', 'Чужая', 'Требуется: Kubernetes, Terraform');
+  seedApplication(1, 'hh-mine', 'decline');
+  seedApplication(2, 'hh-theirs', 'decline');
 
   const first = gaps.computeSkillGaps(1).gaps.map((g) => g.skill);
   const second = gaps.computeSkillGaps(2).gaps.map((g) => g.skill);
 
-  assert.ok(first.includes("Docker"), `у первого должны быть его пробелы: ${JSON.stringify(first)}`);
   assert.ok(
-    !first.includes("Kubernetes"),
+    first.includes('Docker'),
+    `у первого должны быть его пробелы: ${JSON.stringify(first)}`,
+  );
+  assert.ok(
+    !first.includes('Kubernetes'),
     `у первого не должно быть чужих пробелов: ${JSON.stringify(first)}`,
   );
   assert.ok(
-    !second.includes("Docker"),
+    !second.includes('Docker'),
     `у второго не должно быть чужих пробелов: ${JSON.stringify(second)}`,
   );
   assert.ok(
-    second.includes("Kubernetes"),
+    second.includes('Kubernetes'),
     `у второго должны быть его пробелы: ${JSON.stringify(second)}`,
   );
 });
 
-test("без резюме список не выдумывается, а честно говорит, чего не хватает", () => {
-  seedUser(1, "a@example.test");
-  seedVacancy("hh-one", "Разработчик", "Компания", "Требуется: Docker");
-  seedApplication(1, "hh-one", "decline");
+test('без резюме список не выдумывается, а честно говорит, чего не хватает', () => {
+  seedUser(1, 'a@example.test');
+  seedVacancy('hh-one', 'Разработчик', 'Компания', 'Требуется: Docker');
+  seedApplication(1, 'hh-one', 'decline');
 
   const report = gaps.computeSkillGaps(1);
   assert.equal(report.basis.resumeFound, false);
-  assert.equal(report.gaps.length, 0, "без резюме нельзя знать, чего не хватает");
+  assert.equal(report.gaps.length, 0, 'без резюме нельзя знать, чего не хватает');
 
-  const reply = bot.replyFor("навыки", "", { id: 1 } as never);
-  assert.match(reply.text, /резюм/i, `бот должен звать добавить резюме, а не выдумывать список: ${reply.text}`);
+  const reply = bot.replyFor('навыки', '', { id: 1 } as never);
+  assert.match(
+    reply.text,
+    /резюм/i,
+    `бот должен звать добавить резюме, а не выдумывать список: ${reply.text}`,
+  );
 });
 
-test("команда /навыки в боте отдаёт список и ссылку на планы", () => {
-  seedUser(1, "a@example.test");
-  seedResume(1, "JavaScript, React");
-  seedVacancy("hh-one", "Разработчик", "Компания", "Требуется: Docker, PostgreSQL");
-  seedApplication(1, "hh-one", "decline");
+test('команда /навыки в боте отдаёт список и ссылку на планы', () => {
+  seedUser(1, 'a@example.test');
+  seedResume(1, 'JavaScript, React');
+  seedVacancy('hh-one', 'Разработчик', 'Компания', 'Требуется: Docker, PostgreSQL');
+  seedApplication(1, 'hh-one', 'decline');
 
-  const reply = bot.replyFor("навыки", "", { id: 1 } as never);
+  const reply = bot.replyFor('навыки', '', { id: 1 } as never);
   assert.match(reply.text, /Docker/, `в ответе нет пробела: ${reply.text}`);
-  assert.match(reply.text, /\/dashboard\/skills/, "нет ссылки на полный список с планами");
-  assert.ok(reply.keyboard, "нет клавиатуры: из чата нечем вернуться в меню");
+  assert.match(reply.text, /\/dashboard\/skills/, 'нет ссылки на полный список с планами');
+  assert.ok(reply.keyboard, 'нет клавиатуры: из чата нечем вернуться в меню');
   /*
    * Список без «что делать» — это диагноз без лечения: человек узнаёт, чего
    * ему не хватает, и не получает ни первого шага. Для навыка с планом первый
    * шаг обязателен.
    */
-  assert.match(
-    reply.text,
-    /Первым делом: /,
-    `в ответе нет первого шага: ${reply.text}`,
-  );
+  assert.match(reply.text, /Первым делом: /, `в ответе нет первого шага: ${reply.text}`);
   assert.match(reply.text, /Первым делом: [^<\s]/, `шаг не содержит текста: ${reply.text}`);
 });
 
-test("в ответе бота навык не ломает разметку", () => {
-  seedUser(1, "a@example.test");
-  seedResume(1, "JavaScript");
+test('в ответе бота навык не ломает разметку', () => {
+  seedUser(1, 'a@example.test');
+  seedResume(1, 'JavaScript');
   // Название компании попадает в требования — и в строку ответа.
-  seedVacancy("hh-x", "Разработчик", "Ромашка & Co", "Требуется: Docker");
-  seedApplication(1, "hh-x", "decline");
+  seedVacancy('hh-x', 'Разработчик', 'Ромашка & Co', 'Требуется: Docker');
+  seedApplication(1, 'hh-x', 'decline');
 
-  const reply = bot.replyFor("навыки", "", { id: 1 } as never);
+  const reply = bot.replyFor('навыки', '', { id: 1 } as never);
   // HTML-режим: «&» без экранирования ломает разметку Telegram.
   assert.ok(
     !/&(?![a-z]+;|#\d+;)/i.test(reply.text),
@@ -246,19 +252,19 @@ test("в ответе бота навык не ломает разметку", (
   );
 });
 
-test("план есть не у каждого навыка, и это не выдумывается", async () => {
-  const { learningPath, skillsWithPaths } = await import("../src/lib/learning-paths");
-  assert.ok(skillsWithPaths().length >= 10, "планов должно быть достаточно, чтобы быть полезными");
-  assert.ok(learningPath("Docker"), "у Docker должен быть план");
+test('план есть не у каждого навыка, и это не выдумывается', async () => {
+  const { learningPath, skillsWithPaths } = await import('../src/lib/learning-paths');
+  assert.ok(skillsWithPaths().length >= 10, 'планов должно быть достаточно, чтобы быть полезными');
+  assert.ok(learningPath('Docker'), 'у Docker должен быть план');
   assert.equal(
-    learningPath("Какой-то навык из воздуха"),
+    learningPath('Какой-то навык из воздуха'),
     null,
-    "для неизвестного навыка план выдумываться не должен",
+    'для неизвестного навыка план выдумываться не должен',
   );
 });
 
-test("каждый пункт плана проверяем: есть чем понять, что он закрыт", async () => {
-  const { skillsWithPaths, learningPath } = await import("../src/lib/learning-paths");
+test('каждый пункт плана проверяем: есть чем понять, что он закрыт', async () => {
+  const { skillsWithPaths, learningPath } = await import('../src/lib/learning-paths');
   for (const skill of skillsWithPaths()) {
     const path = learningPath(skill)!;
     assert.ok(path.topics.length >= 2, `${skill}: слишком короткий план (${path.topics.length})`);

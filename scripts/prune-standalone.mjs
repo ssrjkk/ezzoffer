@@ -17,15 +17,15 @@
  *
  * Скрипт идемпотентен и ничего не делает, если output не standalone.
  */
-import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { existsSync, readdirSync, rmSync, statSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const standalone = path.join(root, ".next", "standalone");
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const standalone = path.join(root, '.next', 'standalone');
 
-if (!existsSync(path.join(standalone, "server.js"))) {
-  console.log("prune-standalone: .next/standalone не найден, пропуск.");
+if (!existsSync(path.join(standalone, 'server.js'))) {
+  console.log('prune-standalone: .next/standalone не найден, пропуск.');
   process.exit(0);
 }
 
@@ -35,7 +35,7 @@ if (!existsSync(path.join(standalone, "server.js"))) {
 // Каталог .next внутри standalone НЕ трогаем: там лежит скомпилированный сервер
 // (.next/server), без которого server.js не запускается. Удаление даёт
 // "Could not find a production build in the './.next' directory".
-const REMOVABLE = ["data", "src", "tests", "scripts", ".git"];
+const REMOVABLE = ['data', 'src', 'tests', 'scripts', '.git'];
 
 let removed = 0;
 
@@ -55,7 +55,7 @@ for (const name of REMOVABLE) {
 }
 
 if (removed === 0) {
-  console.log("prune-standalone: удалять нечего.");
+  console.log('prune-standalone: удалять нечего.');
 } else {
   const entries = readdirSync(standalone).length;
   console.log(`prune-standalone: удалено каталогов ${removed} (${entries} осталось в standalone).`);

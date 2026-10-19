@@ -1,17 +1,17 @@
-import { jobs } from "../data";
-import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
+import { jobs } from '../data';
+import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from './types';
 
 function parseSalaryMin(text: string): number | null {
   const m = text.match(/от\s*([\d\s]+)/);
   if (!m) return null;
-  const n = parseInt(m[1].replace(/\s/g, ""), 10);
+  const n = parseInt(m[1].replace(/\s/g, ''), 10);
   return Number.isFinite(n) ? n : null;
 }
 
 export function localVacancy(job: (typeof jobs)[number]): Vacancy {
   return {
     slug: job.slug,
-    source: "local",
+    source: 'local',
     source_id: job.slug,
     title: job.title,
     company: job.company,
@@ -22,7 +22,7 @@ export function localVacancy(job: (typeof jobs)[number]): Vacancy {
     format: job.format,
     city: job.city,
     posted: job.posted,
-        published_at: null,
+    published_at: null,
     category: job.category,
     about: job.about,
     responsibilities: job.responsibilities,
@@ -39,22 +39,20 @@ export function allLocalVacancies(): Vacancy[] {
 }
 
 export const localProvider: VacancyProvider = {
-  source: "local",
-  label: "EZOffer",
+  source: 'local',
+  label: 'EZOffer',
   isAvailable: () => true,
   async fetchVacancies(query: VacancyQuery): Promise<VacancyFetchResult> {
     let list = allLocalVacancies();
     if (query.text) {
       const t = query.text.toLowerCase();
-      list = list.filter((v) =>
-        `${v.title} ${v.company} ${v.category}`.toLowerCase().includes(t),
-      );
+      list = list.filter((v) => `${v.title} ${v.company} ${v.category}`.toLowerCase().includes(t));
     }
     if (query.city) {
       const c = query.city.toLowerCase();
       list = list.filter((v) => v.city.toLowerCase().includes(c));
     }
     if (query.limit && query.limit > 0) list = list.slice(0, query.limit);
-    return { vacancies: list, provider: "local", ok: true };
+    return { vacancies: list, provider: 'local', ok: true };
   },
 };

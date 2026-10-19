@@ -1,5 +1,5 @@
-import type { Vacancy } from "./vacancies/types";
-import { extractSkills } from "./skills";
+import type { Vacancy } from './vacancies/types';
+import { extractSkills } from './skills';
 
 /**
  * Скоринг вакансии по резюме.
@@ -90,17 +90,17 @@ function extractExperienceYears(text: string): number {
  */
 function extractLevel(text: string): string {
   const lower = text.toLowerCase();
-  if (/(стаж|intern)/.test(lower)) return "Intern";
-  if (/(младш|junior|джун)/.test(lower)) return "Junior";
-  if (/(ведущ|senior|старш|principal|lead|director|head)/.test(lower)) return "Senior";
-  return "Middle";
+  if (/(стаж|intern)/.test(lower)) return 'Intern';
+  if (/(младш|junior|джун)/.test(lower)) return 'Junior';
+  if (/(ведущ|senior|старш|principal|lead|director|head)/.test(lower)) return 'Senior';
+  return 'Middle';
 }
 
 /** Навыки вакансии с кэшем: объект вакансий переиспользуется между запросами. */
 const vacancySkillsCache = new WeakMap<Vacancy, string[]>();
 
 function vacancyText(v: Vacancy): string {
-  return `${v.title} ${v.category} ${v.about} ${v.requirements.join(" ")} ${v.responsibilities.join(" ")}`;
+  return `${v.title} ${v.category} ${v.about} ${v.requirements.join(' ')} ${v.responsibilities.join(' ')}`;
 }
 
 function vacancySkillsOf(vacancy: Vacancy): string[] {
@@ -147,11 +147,11 @@ export function scoreVacancyForResume(
    */
   let skillFactor: { earned: number; detail: string };
   if (vacancySkills.length === 0) {
-    skillFactor = { earned: WEIGHTS.skills * 0.6, detail: "Вакансия не перечисляет навыки" };
+    skillFactor = { earned: WEIGHTS.skills * 0.6, detail: 'Вакансия не перечисляет навыки' };
   } else {
     const coverage = matchedSkills.length / vacancySkills.length;
     // Базовые навыки считаем «дешёвыми»: они есть почти у всех.
-    const BASIC = new Set(["Git", "SQL", "Linux", "HTML", "CSS", "English", "Английский"]);
+    const BASIC = new Set(['Git', 'SQL', 'Linux', 'HTML', 'CSS', 'English', 'Английский']);
     const rarityBonus =
       matchedSkills.filter((s) => !BASIC.has(s)).length /
       Math.max(1, Math.max(...matchedSkills.map((s) => (BASIC.has(s) ? 1 : 2))));
@@ -161,12 +161,12 @@ export function scoreVacancyForResume(
       earned: Math.round(ratio * WEIGHTS.skills),
       detail:
         matchedSkills.length === 0
-          ? "Ни один навык вакансии не найден в резюме"
+          ? 'Ни один навык вакансии не найден в резюме'
           : `Закрыто ${matchedSkills.length} из ${vacancySkills.length} навыков`,
     };
   }
   factors.push({
-    label: "Навыки",
+    label: 'Навыки',
     earned: skillFactor.earned,
     max: WEIGHTS.skills,
     detail: skillFactor.detail,
@@ -186,10 +186,9 @@ export function scoreVacancyForResume(
   const rLevel = LEVEL_ORDER[resumeLevel] ?? 2;
   const vLevel = LEVEL_ORDER[vacancyLevel] ?? 2;
   const gap = vLevel - rLevel;
-  const levelFactor =
-    gap <= 0 ? 1 : gap === 1 ? 0.45 : gap === 2 ? 0.15 : 0;
+  const levelFactor = gap <= 0 ? 1 : gap === 1 ? 0.45 : gap === 2 ? 0.15 : 0;
   factors.push({
-    label: "Уровень",
+    label: 'Уровень',
     earned: Math.round(levelFactor * WEIGHTS.level),
     max: WEIGHTS.level,
     detail:
@@ -211,7 +210,7 @@ export function scoreVacancyForResume(
   const resumeYears = extractExperienceYears(resumeContent);
   const expFactor =
     vacancyYears === 0
-      ? { ratio: 1, detail: "Требования к опыту не указаны" }
+      ? { ratio: 1, detail: 'Требования к опыту не указаны' }
       : resumeYears >= vacancyYears
         ? { ratio: 1, detail: `Опыт ${resumeYears} г. закрывает требование ${vacancyYears} г.` }
         : {
@@ -219,7 +218,7 @@ export function scoreVacancyForResume(
             detail: `Опыта ${resumeYears} г., требуется ${vacancyYears} г.`,
           };
   factors.push({
-    label: "Опыт",
+    label: 'Опыт',
     earned: Math.round(expFactor.ratio * WEIGHTS.experience),
     max: WEIGHTS.experience,
     detail: expFactor.detail,
@@ -232,18 +231,18 @@ export function scoreVacancyForResume(
    * не указана — фактор нейтрален, а не нулевой: отсутствие цифры не
    * означает «зарплата плохая».
    */
-  let salaryFactor = { ratio: 1 as number, detail: "Зарплата в вакансии не указана" };
+  let salaryFactor = { ratio: 1 as number, detail: 'Зарплата в вакансии не указана' };
   if (salaryExpectation && salaryExpectation > 0 && vacancy.salary_min) {
     salaryFactor =
       vacancy.salary_min >= salaryExpectation
-        ? { ratio: 1, detail: `${vacancy.salary_min.toLocaleString("ru-RU")} ₽ — не ниже ожиданий` }
+        ? { ratio: 1, detail: `${vacancy.salary_min.toLocaleString('ru-RU')} ₽ — не ниже ожиданий` }
         : {
             ratio: Math.max(0, 1 - (salaryExpectation - vacancy.salary_min) / salaryExpectation),
-            detail: `${vacancy.salary_min.toLocaleString("ru-RU")} ₽ против ожиданий ${salaryExpectation.toLocaleString("ru-RU")} ₽`,
+            detail: `${vacancy.salary_min.toLocaleString('ru-RU')} ₽ против ожиданий ${salaryExpectation.toLocaleString('ru-RU')} ₽`,
           };
   }
   factors.push({
-    label: "Зарплата",
+    label: 'Зарплата',
     earned: Math.round(salaryFactor.ratio * WEIGHTS.salary),
     max: WEIGHTS.salary,
     detail: salaryFactor.detail,
@@ -269,7 +268,9 @@ export function rankVacanciesForResume(
   // Навыки резюме одинаковы для всех вакансий: считаем один раз и передаём дальше.
   const resumeSkills = extractSkills(`${resumeTitle} ${resumeContent}`);
   return vacancies
-    .map((v) => scoreVacancyForResume(v, resumeContent, resumeTitle, resumeSkills, salaryExpectation))
+    .map((v) =>
+      scoreVacancyForResume(v, resumeContent, resumeTitle, resumeSkills, salaryExpectation),
+    )
     .sort((a, b) => b.score - a.score);
 }
 
@@ -319,21 +320,23 @@ export function getRecommendations(
 
   if (allMissing.size > 0) {
     const ranked = [...allMissing].sort((a, b) => b.length - a.length).slice(0, 5);
-    recommendations.push(`Чаще всего не хватает: ${ranked.join(", ")}`);
+    recommendations.push(`Чаще всего не хватает: ${ranked.join(', ')}`);
   }
 
   // Совет про цифры остаётся: это не про длину, а про конкретику.
   const hasNumbers = /\d+\s*(%|лет|год|k|K|млн|тыс)/.test(resumeContent);
   if (!hasNumbers) {
-    recommendations.push("Добавьте достижения с цифрами: «сократил время на 30%», «команда из 5 человек»");
+    recommendations.push(
+      'Добавьте достижения с цифрами: «сократил время на 30%», «команда из 5 человек»',
+    );
   }
 
   if (!/github|gitlab/i.test(resumeContent)) {
-    recommendations.push("Добавьте ссылку на GitHub/GitLab");
+    recommendations.push('Добавьте ссылку на GitHub/GitLab');
   }
 
   if (!/английск|english/i.test(resumeContent)) {
-    recommendations.push("Укажите уровень английского — на нём отсеивают до 20% вакансий");
+    recommendations.push('Укажите уровень английского — на нём отсеивают до 20% вакансий');
   }
 
   return recommendations;

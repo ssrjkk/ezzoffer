@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { Badge, btnGhost } from "@/components/dashboard/ui";
+import { useState } from 'react';
+import { Badge, btnGhost } from '@/components/dashboard/ui';
 
 /**
  * A/B-варианты резюме: создать редакцию и честно сравнить.
@@ -40,10 +40,10 @@ export function VariantPanel({ resumeId }: { resumeId: number }) {
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
-    const res = await fetch(`/api/resumes/${resumeId}/variants`, { cache: "no-store" });
+    const res = await fetch(`/api/resumes/${resumeId}/variants`, { cache: 'no-store' });
     if (!res.ok) {
       const d = await res.json().catch(() => ({}));
-      setError(d.error ?? "Не удалось загрузить варианты");
+      setError(d.error ?? 'Не удалось загрузить варианты');
       return;
     }
     const data = await res.json();
@@ -60,15 +60,15 @@ export function VariantPanel({ resumeId }: { resumeId: number }) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch(`/api/resumes/${resumeId}/variants`, { method: "POST" });
+      const res = await fetch(`/api/resumes/${resumeId}/variants`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error ?? "Не удалось создать вариант");
+        setError(data.error ?? 'Не удалось создать вариант');
         return;
       }
       await load();
     } catch {
-      setError("Не удалось создать вариант: нет связи с сервером");
+      setError('Не удалось создать вариант: нет связи с сервером');
     } finally {
       setBusy(false);
     }
@@ -76,8 +76,12 @@ export function VariantPanel({ resumeId }: { resumeId: number }) {
 
   return (
     <div className="mt-3">
-      <button type="button" className="text-xs text-muted underline" onClick={() => void reveal()}>
-        {open ? "Скрыть варианты" : "Варианты резюме (A/B)"}
+      <button
+        type="button"
+        className="-my-2 inline-flex min-h-11 items-center text-xs text-muted underline"
+        onClick={() => void reveal()}
+      >
+        {open ? 'Скрыть варианты' : 'Варианты резюме (A/B)'}
       </button>
 
       {open && (
@@ -86,8 +90,8 @@ export function VariantPanel({ resumeId }: { resumeId: number }) {
 
           {variants !== null && variants.length === 0 && (
             <p className="text-sm text-muted">
-              Это резюме ещё не вариантировалось. Создайте вторую редакцию, чтобы было
-              что сравнивать.
+              Это резюме ещё не вариантировалось. Создайте вторую редакцию, чтобы было что
+              сравнивать.
             </p>
           )}
 
@@ -125,12 +129,12 @@ export function VariantPanel({ resumeId }: { resumeId: number }) {
               onClick={() => void addVariant()}
               className={`mt-3 ${btnGhost}`}
             >
-              {busy ? "Создаём…" : "Создать вариант"}
+              {busy ? 'Создаём…' : 'Создать вариант'}
             </button>
           )}
 
-          <p role="alert" className={error ? "mt-2 text-sm text-danger" : "sr-only"}>
-            {error ?? ""}
+          <p role="alert" className={error ? 'mt-2 text-sm text-danger' : 'sr-only'}>
+            {error ?? ''}
           </p>
         </div>
       )}

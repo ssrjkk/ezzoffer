@@ -17,12 +17,24 @@
  *
  * Запуск: node scripts/export-pages.mjs [каталог]
  */
-import { cpSync, mkdirSync, readdirSync, statSync, writeFileSync, existsSync, readFileSync, rmSync } from "node:fs";
-import path from "node:path";
+import {
+  cpSync,
+  mkdirSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+  existsSync,
+  readFileSync,
+  rmSync,
+} from 'node:fs';
+import path from 'node:path';
 
-const root = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1")), "..");
-const outDir = path.resolve(process.argv[2] ?? path.join(root, "pages-out"));
-const appDir = path.join(root, ".next", "server", "app");
+const root = path.resolve(
+  path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')),
+  '..',
+);
+const outDir = path.resolve(process.argv[2] ?? path.join(root, 'pages-out'));
+const appDir = path.join(root, '.next', 'server', 'app');
 
 /**
  * Маршруты, которые на Pages показывать нельзя.
@@ -32,24 +44,31 @@ const appDir = path.join(root, ".next", "server", "app");
  * которые на статике всё равно упрутся в /api и получат 404. Их вырезаем
  * явно, чтобы в меню не было ссылок в никуда.
  */
-const EXCLUDE = new Set(["login", "signup", "forgot-password", "reset-password", "dashboard", "api"]);
+const EXCLUDE = new Set([
+  'login',
+  'signup',
+  'forgot-password',
+  'reset-password',
+  'dashboard',
+  'api',
+]);
 
 if (!existsSync(appDir)) {
-  console.error("Нет .next/server/app — сначала npm run build");
+  console.error('Нет .next/server/app — сначала npm run build');
   process.exit(1);
 }
 
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
-const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 let pages = 0;
 
 /** index.html → out/index.html; blog/x.html → out/blog/x/index.html */
 function writePage(route, file) {
   const dir = route ? path.join(outDir, route) : outDir;
   mkdirSync(dir, { recursive: true });
-  cpSync(file, path.join(dir, "index.html"));
+  cpSync(file, path.join(dir, 'index.html'));
   pages++;
 }
 
@@ -57,7 +76,7 @@ function writePage(route, file) {
 function walk(dir, route) {
   for (const entry of readdirSync(dir)) {
     const full = path.join(dir, entry);
-    if (entry.startsWith("_") || entry.startsWith(".")) continue; // служебное: _app, _not-found-скелет
+    if (entry.startsWith('_') || entry.startsWith('.')) continue; // служебное: _app, _not-found-скелет
 
     if (statSync(full).isDirectory()) {
       walk(full, route ? `${route}/${entry}` : entry);
@@ -66,26 +85,26 @@ function walk(dir, route) {
 
     // Имя маршрута — БЕЗ .html. С ним в пути получался каталог «статья.html»,
     // и blog/kak-nastroit-autootkliki и blog/skolko-otklikov разъезжались.
-    const clean = entry.replace(/\.html$/, "");
-    if (!entry.endsWith(".html") || EXCLUDE.has(clean)) continue;
+    const clean = entry.replace(/\.html$/, '');
+    if (!entry.endsWith('.html') || EXCLUDE.has(clean)) continue;
     // Корневой index.html кладём в корень, а не в каталог index/ — иначе
     // главная страница сайта просто не находится.
-    const target = route ? `${route}/${clean}` : clean === "index" ? "" : clean;
+    const target = route ? `${route}/${clean}` : clean === 'index' ? '' : clean;
     writePage(target, full);
   }
 }
 
-walk(appDir, "");
+walk(appDir, '');
 
 // Ассеты Next и файлы из public/.
-const staticDir = path.join(root, ".next", "static");
+const staticDir = path.join(root, '.next', 'static');
 if (existsSync(staticDir)) {
-  const dest = path.join(outDir, "_next", "static");
+  const dest = path.join(outDir, '_next', 'static');
   mkdirSync(path.dirname(dest), { recursive: true });
   cpSync(staticDir, dest, { recursive: true });
 }
-if (existsSync(path.join(root, "public"))) {
-  cpSync(path.join(root, "public"), outDir, { recursive: true });
+if (existsSync(path.join(root, 'public'))) {
+  cpSync(path.join(root, 'public'), outDir, { recursive: true });
 }
 
 /*
@@ -93,30 +112,37 @@ if (existsSync(path.join(root, "public"))) {
  * Jekyll, который начинает обработку с подчёркивания — и каталог _next
  * молча исчезает вместе со всем CSS и скриптами. Страница открывается белой.
  */
-writeFileSync(path.join(outDir, ".nojekyll"), "");
+writeFileSync(path.join(outDir, '.nojekyll'), '');
 
 /*
  * 404. GitHub Pages отдаёт 404.html при любом несовпавшем пути. Копия
  * пререндеренной страницы «не найдено» — лучше, чем стандартная страница
  * GitHub, и сохраняет оформление сайта.
  */
-const notFound = path.join(appDir, "_not-found.html");
+const notFound = path.join(appDir, '_not-found.html');
 if (existsSync(notFound)) {
-  cpSync(notFound, path.join(outDir, "404.html"));
+  cpSync(notFound, path.join(outDir, '404.html'));
 }
 
 // robots.txt: статическая копия указывает на основной домен, а не на страницу проекта.
-const robots = path.join(outDir, "robots.txt");
+const robots = path.join(outDir, 'robots.txt');
 if (existsSync(robots)) {
-  const body = readFileSync(robots, "utf8")
-    .replace(/^Sitemap:.*$/m, `Sitemap: ${process.env.SITE_URL ?? "https://ezoffer.ru"}/sitemap.xml`)
-    .replace(/^Disallow: \/dashboard.*$/m, "Disallow: /\nDisallow: /api/");
+  const body = readFileSync(robots, 'utf8')
+    .replace(
+      /^Sitemap:.*$/m,
+      `Sitemap: ${process.env.SITE_URL ?? 'https://ezoffer.ru'}/sitemap.xml`,
+    )
+    .replace(/^Disallow: \/dashboard.*$/m, 'Disallow: /\nDisallow: /api/');
   writeFileSync(robots, body);
 }
 
 const bytes = readdirSync(outDir).length;
 console.log(`Готово: ${outDir}`);
-console.log(`  страниц ${pages}, каталогов верхнего уровня ${bytes}, basePath «${basePath || "—"}»`);
+console.log(
+  `  страниц ${pages}, каталогов верхнего уровня ${bytes}, basePath «${basePath || '—'}»`,
+);
 if (basePath) {
-  console.log(`  ВНИМАНИЕ: префикс /${basePath.replace(/^\//, "")} — публиковать нужно из репозитория с этим именем.`);
+  console.log(
+    `  ВНИМАНИЕ: префикс /${basePath.replace(/^\//, '')} — публиковать нужно из репозитория с этим именем.`,
+  );
 }

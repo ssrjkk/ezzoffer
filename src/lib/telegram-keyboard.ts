@@ -1,4 +1,4 @@
-import type { InlineKeyboard } from "./telegram";
+import type { InlineKeyboard } from './telegram';
 
 /**
  * Клавиатуры бота.
@@ -31,16 +31,16 @@ export function mainKeyboard(): InlineKeyboard {
   return {
     inline_keyboard: [
       [
-        { text: "Подбор вакансий", data: "menu:search" },
-        { text: "Статистика", data: "menu:stats" },
+        { text: 'Подбор вакансий', data: 'menu:search' },
+        { text: 'Статистика', data: 'menu:stats' },
       ],
       [
-        { text: "Собеседование", data: "menu:interview" },
-        { text: "Избранное", data: "menu:bookmarks" },
+        { text: 'Собеседование', data: 'menu:interview' },
+        { text: 'Избранное', data: 'menu:bookmarks' },
       ],
       [
-        { text: "Пауза", data: "menu:pause" },
-        { text: "Помощь", data: "menu:help" },
+        { text: 'Пауза', data: 'menu:pause' },
+        { text: 'Помощь', data: 'menu:help' },
       ],
     ],
   };
@@ -51,23 +51,23 @@ export function commandKeyboard(): InlineKeyboard {
   return {
     inline_keyboard: [
       [
-        { text: "Подбор вакансий", data: "menu:search" },
-        { text: "Статистика", data: "menu:stats" },
+        { text: 'Подбор вакансий', data: 'menu:search' },
+        { text: 'Статистика', data: 'menu:stats' },
       ],
       [
-        { text: "Собеседование", data: "menu:interview" },
-        { text: "Избранное", data: "menu:bookmarks" },
+        { text: 'Собеседование', data: 'menu:interview' },
+        { text: 'Избранное', data: 'menu:bookmarks' },
       ],
       [
-        { text: "Пауза", data: "menu:pause" },
-        { text: "Продолжить", data: "menu:resume" },
+        { text: 'Пауза', data: 'menu:pause' },
+        { text: 'Продолжить', data: 'menu:resume' },
       ],
-      [{ text: "Открыть кабинет", url: dashboardUrl() }],
+      [{ text: 'Открыть кабинет', url: dashboardUrl() }],
     ],
   };
 }
 
-const DASHBOARD = (process.env.SITE_URL?.trim() || "").replace(/\/+$/, "");
+const DASHBOARD = (process.env.SITE_URL?.trim() || '').replace(/\/+$/, '');
 
 /** Ссылка на кабинет. Без SITE_URL кнопку не показываем: битая ссылка хуже её отсутствия. */
 function dashboardUrl(): string {
@@ -77,10 +77,10 @@ function dashboardUrl(): string {
 /** Кнопка отклика на каждую вакансию плюс дополнительные ряды. */
 export function keyboardFor(
   vacancies: readonly { title: string; company: string }[],
-  extra: InlineKeyboard["inline_keyboard"][number][] = [],
+  extra: InlineKeyboard['inline_keyboard'][number][] = [],
 ): InlineKeyboard | undefined {
   if (vacancies.length === 0 && extra.length === 0) return undefined;
-  const rows: InlineKeyboard["inline_keyboard"] = [
+  const rows: InlineKeyboard['inline_keyboard'] = [
     ...vacancies.map((v, i) => [
       {
         text: `${i + 1}. ${fit(`${v.title} — ${v.company}`, 32)}`,
@@ -103,13 +103,13 @@ export function keyboardFor(
  */
 export const DYNAMIC_LABELS = {
   /** Ещё страница вопросов на собеседовании. */
-  interviewMore: "Ещё вопросы",
+  interviewMore: 'Ещё вопросы',
   /** Ещё страница избранного. */
-  bookmarksMore: "Ещё",
+  bookmarksMore: 'Ещё',
   /** Откликнуться на отложенную вакансию. */
   bookmarkApply: (n: number) => `Откликнуться на №${n}`,
   /** Убрать из избранного. */
-  bookmarkRemove: "Убрать",
+  bookmarkRemove: 'Убрать',
 } as const;
 
 /** Все подписи, которые бот способен отправить: для сверки с демонстрацией. */

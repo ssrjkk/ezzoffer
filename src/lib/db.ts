@@ -1,30 +1,39 @@
-﻿import Database from "better-sqlite3";
-import path from "node:path";
-import { mkdirSync } from "node:fs";
-import { logInfo } from "./logger";
-import { migrateApplicationsResumeId, addNotifiedAtColumn, migrateApplicationsOrigin, migrateUserMode, migrateResumeVariants, migratePayments, migrateOauthAccounts } from "./db-migrations";
-import { envStr } from "./env";
+﻿import Database from 'better-sqlite3';
+import path from 'node:path';
+import { mkdirSync } from 'node:fs';
+import { logInfo } from './logger';
+import {
+  migrateApplicationsResumeId,
+  addNotifiedAtColumn,
+  migrateApplicationsOrigin,
+  migrateUserMode,
+  migrateResumeVariants,
+  migratePayments,
+  migrateOauthAccounts,
+  migrateSecretColumns,
+} from './db-migrations';
+import { envStr } from './env';
 
 /**
- * в•ЁРЇв•¤Р“в•¤Р’в•¤Рњ в•Ёв•‘ в•¤Р”в•Ёв–‘в•Ёв•Јв•Ёв•—в•¤Р“ в•ЁРЎв•ЁР¤.
+ * ╨Я╤Г╤В╤М ╨║ ╤Д╨░╨╣╨╗╤Г ╨С╨Ф.
  *
- * в•ЁРЄв•Ёв•›в•Ёв•ќв•Ёв”ђв•Ёв•›в•Ёв•њв•Ёв•Ўв•Ёв•њв•¤Р’в•¤Р› в•¤Р‘в•Ёв•›в•Ёв–’в•Ёв••в•¤Рђв•Ёв–‘в•¤Рћв•¤Р’в•¤Р‘в•¤Рџ в•Ёв–“ в•¤Рђв•Ёв–‘в•Ёв•њв•¤Р’в•Ёв–‘в•Ёв•Јв•Ёв•ќв•Ёв•Ў в•Ёв•њв•Ёв–‘в•Ёв•ќв•Ёв•Ўв•¤Рђв•Ёв•Ўв•Ёв•њв•Ёв•њв•Ёв•›, в•Ёв”ђв•Ёв•› в•¤Р—в•Ёв–‘в•¤Р‘в•¤Р’в•¤Рџв•Ёв•ќ: Turbopack
- * в•¤Р‘в•¤Р’в•Ёв–‘в•¤Р’в•Ёв••в•¤Р—в•Ёв•Ўв•¤Р‘в•Ёв•‘в•Ёв•• в•Ёв–‘в•Ёв•њв•Ёв–‘в•Ёв•—в•Ёв••в•Ёв•–в•Ёв••в•¤Рђв•¤Р“в•Ёв•Ўв•¤Р’ path.join(cwd, "data", "ezoffer.db") в•Ёв•• в•Ёв–“в•Ёв•‘в•Ёв•—в•¤Рћв•¤Р—в•Ёв–‘в•Ёв•—
- * в•Ёв•—в•Ёв•›в•Ёв•‘в•Ёв–‘в•Ёв•—в•¤Рњв•Ёв•њв•¤Р“в•¤Рћ ezoffer.db (в•¤Р•в•¤Рќв•¤Рв•Ёв•• в•Ёв”ђв•Ёв–‘в•¤Рђв•Ёв•›в•Ёв•—в•Ёв•Ўв•Ёв•Ј, OAuth-в•¤Р’в•Ёв•›в•Ёв•‘в•Ёв•Ўв•Ёв•њв•¤Р›) в•Ёв–“ .next/standalone в•Ёв••
- * Docker-в•Ёв•›в•Ёв–’в•¤Рђв•Ёв–‘в•Ёв•–. в•ЁР¤в•Ёв••в•Ёв•њв•Ёв–‘в•Ёв•ќв•Ёв••в•¤Р—в•Ёв•Ўв•¤Р‘в•Ёв•‘в•Ёв–‘в•¤Рџ в•¤Р‘в•Ёв–’в•Ёв•›в•¤Рђв•Ёв•‘в•Ёв–‘ в•Ёв”¤в•Ёв•Ўв•Ёв•—в•Ёв–‘в•Ёв•Ўв•¤Р’ в•Ёв”ђв•¤Р“в•¤Р’в•¤Рњ в•Ёв•њв•Ёв•Ўв•Ёв”ђв•¤Рђв•Ёв•›в•Ёв•–в•¤Рђв•Ёв–‘в•¤Р—в•Ёв•њв•¤Р›в•Ёв•ќ в•Ёв”¤в•Ёв•—в•¤Рџ в•Ёв–‘в•Ёв•њв•Ёв–‘в•Ёв•—в•Ёв••в•Ёв•–в•Ёв–‘в•¤Р’в•Ёв•›в•¤Рђв•Ёв–‘,
- * в•Ёв”ђв•Ёв•›в•¤Рќв•¤Р’в•Ёв•›в•Ёв•ќв•¤Р“ tracing в•Ёв•њв•Ёв•Ў в•Ёв•ќв•Ёв•›в•Ёв•ўв•Ёв•Ўв•¤Р’ в•Ёв–“в•¤Р›в•Ёв–“в•Ёв•Ўв•¤Р‘в•¤Р’в•Ёв•• в•¤Р‘в•¤Р’в•Ёв–‘в•¤Р’в•Ёв••в•¤Р—в•Ёв•Ўв•¤Р‘в•Ёв•‘в•Ёв••в•Ёв•Ј в•Ёв”ђв•¤Р“в•¤Р’в•¤Рњ в•Ёв•‘ в•Ёв”¤в•Ёв–‘в•Ёв•њв•Ёв•њв•¤Р›в•Ёв•ќ.
+ * ╨Ъ╨╛╨╝╨┐╨╛╨╜╨╡╨╜╤В╤Л ╤Б╨╛╨▒╨╕╤А╨░╤О╤В╤Б╤П ╨▓ ╤А╨░╨╜╤В╨░╨╣╨╝╨╡ ╨╜╨░╨╝╨╡╤А╨╡╨╜╨╜╨╛, ╨┐╨╛ ╤З╨░╤Б╤В╤П╨╝: Turbopack
+ * ╤Б╤В╨░╤В╨╕╤З╨╡╤Б╨║╨╕ ╨░╨╜╨░╨╗╨╕╨╖╨╕╤А╤Г╨╡╤В path.join(cwd, "data", "ezoffer.db") ╨╕ ╨▓╨║╨╗╤О╤З╨░╨╗
+ * ╨╗╨╛╨║╨░╨╗╤М╨╜╤Г╤О ezoffer.db (╤Е╤Н╤И╨╕ ╨┐╨░╤А╨╛╨╗╨╡╨╣, OAuth-╤В╨╛╨║╨╡╨╜╤Л) ╨▓ .next/standalone ╨╕
+ * Docker-╨╛╨▒╤А╨░╨╖. ╨Ф╨╕╨╜╨░╨╝╨╕╤З╨╡╤Б╨║╨░╤П ╤Б╨▒╨╛╤А╨║╨░ ╨┤╨╡╨╗╨░╨╡╤В ╨┐╤Г╤В╤М ╨╜╨╡╨┐╤А╨╛╨╖╤А╨░╤З╨╜╤Л╨╝ ╨┤╨╗╤П ╨░╨╜╨░╨╗╨╕╨╖╨░╤В╨╛╤А╨░,
+ * ╨┐╨╛╤Н╤В╨╛╨╝╤Г tracing ╨╜╨╡ ╨╝╨╛╨╢╨╡╤В ╨▓╤Л╨▓╨╡╤Б╤В╨╕ ╤Б╤В╨░╤В╨╕╤З╨╡╤Б╨║╨╕╨╣ ╨┐╤Г╤В╤М ╨║ ╨┤╨░╨╜╨╜╤Л╨╝.
  *
- * в•ЁРЇв•¤Р“в•¤Р‘в•¤Р’в•Ёв–‘в•¤Рџ в•¤Р‘в•¤Р’в•¤Рђв•Ёв•›в•Ёв•‘в•Ёв–‘ в•Ёв–“ env (в•¤Р—в•Ёв–‘в•¤Р‘в•¤Р’в•Ёв–‘в•¤Рџ в•Ёв”ђв•Ёв•›в•¤Р‘в•Ёв•—в•Ёв•Ў в•Ёв•‘в•Ёв•›в•Ёв”ђв•Ёв••в•¤Рђв•Ёв•›в•Ёв–“в•Ёв–‘в•Ёв•њв•Ёв••в•¤Рџ .env.example, в•Ёв”‚в•Ёв”¤в•Ёв•Ў в•Ёв”ђв•Ёв•Ўв•¤Рђв•Ёв•Ўв•Ёв•ќв•Ёв•Ўв•Ёв•њв•Ёв•њв•Ёв–‘в•¤Рџ
- * в•Ёв•›в•Ёв–’в•¤Рљв•¤Рџв•Ёв–“в•Ёв•—в•Ёв•Ўв•Ёв•њв•Ёв–‘ в•Ёв”ђв•¤Р“в•¤Р‘в•¤Р’в•Ёв•›в•Ёв•Ј) в•Ёв•њв•Ёв•Ў в•Ёв”¤в•Ёв•›в•Ёв•—в•Ёв•ўв•Ёв•њв•Ёв–‘ в•Ёв”ђв•¤Рђв•Ёв•Ўв•Ёв–“в•¤Рђв•Ёв–‘в•¤Р™в•Ёв–‘в•¤Р’в•¤Рњв•¤Р‘в•¤Рџ в•Ёв–“ в•Ёв”ђв•¤Р“в•¤Р’в•¤Рњ "" С‚РђР¤ better-sqlite3 в•Ёв•›в•¤Р’в•Ёв•‘в•¤Рђв•¤Р›в•Ёв•— в•Ёв–’в•¤Р›
- * в•Ёв–“в•¤Рђв•Ёв•Ўв•Ёв•ќв•Ёв•Ўв•Ёв•њв•Ёв•њв•¤Р“в•¤Рћ в•ЁРЎв•ЁР¤ в•Ёв–“ в•Ёв”ђв•Ёв–‘в•Ёв•ќв•¤Рџв•¤Р’в•Ёв••, в•Ёв•• в•Ёв–“в•¤Р‘в•Ёв•Ў в•Ёв”¤в•Ёв–‘в•Ёв•њв•Ёв•њв•¤Р›в•Ёв•Ў в•Ёв”ђв•¤Рђв•Ёв•›в•Ёв”ђв•Ёв–‘в•Ёв•—в•Ёв•• в•Ёв–’в•¤Р› в•Ёв”ђв•¤Рђв•Ёв•• в•¤Рђв•Ёв•Ўв•¤Р‘в•¤Р’в•Ёв–‘в•¤Рђв•¤Р’в•Ёв•Ў.
+ * ╨Я╤Г╤Б╤В╨░╤П ╤Б╤В╤А╨╛╨║╨░ ╨▓ env (╤З╨░╤Б╤В╨░╤П ╨┐╨╛╤Б╨╗╨╡ ╨║╨╛╨┐╨╕╤А╨╛╨▓╨░╨╜╨╕╤П .env.example, ╨│╨┤╨╡ ╨┐╨╡╤А╨╡╨╝╨╡╨╜╨╜╨░╤П
+ * ╨╛╨▒╤К╤П╨▓╨╗╨╡╨╜╨░ ╨┐╤Г╤Б╤В╨╛╨╣) ╨╜╨╡ ╨┤╨╛╨╗╨╢╨╜╨░ ╨┐╤А╨╡╨▓╤А╨░╤Й╨░╤В╤М╤Б╤П ╨▓ ╨┐╤Г╤В╤М "" тАФ better-sqlite3 ╨╛╤В╨║╤А╤Л╨╗ ╨▒╤Л
+ * ╨▓╤А╨╡╨╝╨╡╨╜╨╜╤Г╤О ╨С╨Ф ╨▓ ╨┐╨░╨╝╤П╤В╨╕, ╨╕ ╨▓╤Б╨╡ ╨┤╨░╨╜╨╜╤Л╨╡ ╨┐╤А╨╛╨┐╨░╨╗╨╕ ╨▒╤Л ╨┐╤А╨╕ ╤А╨╡╤Б╤В╨░╤А╤В╨╡.
  */
 export function resolveDbPath(
   env: Record<string, string | undefined>,
   cwd: string = process.cwd(),
 ): string {
-  const configured = envStr(env, "EZOFFER_DB_PATH", "");
+  const configured = envStr(env, 'EZOFFER_DB_PATH', '');
   if (configured) return configured;
-  const parts = ["data", "ezoffer.db"];
+  const parts = ['data', 'ezoffer.db'];
   return path.join(cwd, ...parts);
 }
 
@@ -52,6 +61,7 @@ CREATE TABLE IF NOT EXISTS users (
   autoapply_block_reason TEXT NOT NULL DEFAULT '',
   email_verified INTEGER NOT NULL DEFAULT 0,
   email_verification_token TEXT,
+  email_verification_expires INTEGER,
   password_reset_token TEXT,
   password_reset_expires INTEGER,
   mode TEXT NOT NULL DEFAULT 'demo' CHECK (mode IN ('demo','live'))
@@ -63,8 +73,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at INTEGER NOT NULL
 );
 
--- в•ЁРів•Ёв–’в•Ёв•›в•¤Рђв•Ёв•‘в•Ёв–‘ в•Ёв”ђв•¤Рђв•Ёв•›в•¤Р‘в•¤Рђв•Ёв•›в•¤Р—в•Ёв•Ўв•Ёв•њв•Ёв•њв•¤Р›в•¤Р• в•¤Р‘в•Ёв•Ўв•¤Р‘в•¤Р‘в•Ёв••в•Ёв•Ј в•Ёв••в•Ёв”¤в•¤РЎв•¤Р’ в•Ёв”ђв•Ёв•› expires_at, в•Ёв–‘ в•Ёв”ђв•Ёв•›в•Ёв••в•¤Р‘в•Ёв•‘ в•Ёв–‘в•Ёв•‘в•¤Р’в•Ёв••в•Ёв–“в•Ёв•њв•Ёв•›в•Ёв•Ј в•¤Р‘в•Ёв•Ўв•¤Р‘в•¤Р‘в•Ёв••в•Ёв•• С‚РђР¤ в•Ёв”ђв•Ёв•›
--- token (PK). в•ЁРЎв•Ёв•Ўв•Ёв•– в•¤Рќв•¤Р’в•Ёв••в•¤Р• в•Ёв••в•Ёв•њв•Ёв”¤в•Ёв•Ўв•Ёв•‘в•¤Р‘в•Ёв•›в•Ёв–“ purgeExpiredAuthRows в•¤Р‘в•Ёв•‘в•Ёв–‘в•Ёв•њв•Ёв••в•¤Рђв•Ёв•›в•Ёв–“в•Ёв–‘в•Ёв•— в•Ёв–“в•¤Р‘в•¤Рћ в•¤Р’в•Ёв–‘в•Ёв–’в•Ёв•—в•Ёв••в•¤Р–в•¤Р“.
+-- ╨г╨▒╨╛╤А╨║╨░ ╨┐╤А╨╛╤Б╤А╨╛╤З╨╡╨╜╨╜╤Л╤Е ╤Б╨╡╤Б╤Б╨╕╨╣ ╨╕╨┤╤С╤В ╨┐╨╛ expires_at, ╨░ ╨┐╨╛╨╕╤Б╨║ ╨░╨║╤В╨╕╨▓╨╜╨╛╨╣ ╤Б╨╡╤Б╤Б╨╕╨╕ тАФ ╨┐╨╛
+-- token (PK). ╨С╨╡╨╖ ╤Н╤В╨╕╤Е ╨╕╨╜╨┤╨╡╨║╤Б╨╛╨▓ purgeExpiredAuthRows ╤Б╨║╨░╨╜╨╕╤А╨╛╨▓╨░╨╗ ╨▓╤Б╤О ╤В╨░╨▒╨╗╨╕╤Ж╤Г.
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 
@@ -95,7 +105,7 @@ CREATE TABLE IF NOT EXISTS resumes (
   years_label TEXT NOT NULL DEFAULT '',
   ai_improved INTEGER NOT NULL DEFAULT 0,
   hh_id TEXT,
-  -- Р“СЂСѓРїРїР° A/B-РІР°СЂРёР°РЅС‚РѕРІ; NULL вЂ” РѕР±С‹С‡РЅРѕРµ СЂРµР·СЋРјРµ (migrateResumeVariants).
+  -- Группа A/B-вариантов; NULL — обычное резюме (migrateResumeVariants).
   variant_group TEXT,
   variant_label TEXT,
   created_at INTEGER NOT NULL,
@@ -147,9 +157,9 @@ CREATE TABLE IF NOT EXISTS applications (
   notified_at INTEGER
 );
 
--- РЎРѕР±С‹С‚РёСЏ РІРѕСЂРѕРЅРєРё (Р¤Р°Р·Р° 3 РїРѕР»СЊР·СѓРµС‚СЃСЏ СЌС‚РѕР№ С‚Р°Р±Р»РёС†РµР№ РєР°Рє Р¶СѓСЂРЅР°Р»РѕРј С‚РѕР»СЊРєРѕ РґР»СЏ
--- РґРѕР±Р°РІР»РµРЅРёСЏ; РїРёСЃР°С‚РµР»РµР№ РїРѕРєР° РЅРµС‚ вЂ” С‚Р°Р±Р»РёС†Р° СЃРѕР·РґР°С‘С‚СЃСЏ Р·Р°СЂР°РЅРµРµ, С‡С‚РѕР±С‹ РЅРµ
--- РїРµСЂРµСЃРѕР±РёСЂР°С‚СЊ РµС‘ СЂР°РґРё РєРѕР»РѕРЅРєРё origin РїРѕР·Р¶Рµ).
+-- События воронки (Фаза 3 пользуется этой таблицей как журналом только для
+-- добавления; писателей пока нет — таблица создаётся заранее, чтобы не
+-- пересобирать её ради колонки origin позже).
 CREATE TABLE IF NOT EXISTS events (
   id INTEGER PRIMARY KEY,
   user_id INTEGER NOT NULL,
@@ -205,11 +215,11 @@ CREATE TABLE IF NOT EXISTS vacancies (
   contact_phone TEXT,
   published_at INTEGER,
   /**
-   * Р—Р°РЅСЏС‚РѕСЃС‚СЊ РєР°Рє РµС‘ РѕС‚РґР°Р»Р° РїР»РѕС‰Р°РґРєР°.
+   * Занятость как её отдала площадка.
    *
-   * РҐСЂР°РЅРёС‚СЃСЏ РґРѕСЃР»РѕРІРЅРѕ (В«Р’СЂРµРјРµРЅРЅР°СЏ СЂР°Р±РѕС‚Р°В», В«РќРµРїРѕР»РЅС‹Р№ СЂР°Р±РѕС‡РёР№ РґРµРЅСЊВ», В«part-timeВ»):
-   * РїРµСЂРµРІРѕРґРёС‚СЊ РµС‘ РІ В«РїРѕРґСЂР°Р±РѕС‚РєР°В» РїСЂРё Р·Р°РіСЂСѓР·РєРµ РЅРµР»СЊР·СЏ вЂ” СЂРµС€РµРЅРёРµ РїСЂРёРЅРёРјР°РµС‚СЃСЏ РїСЂРё
-   * РїРѕРєР°Р·Рµ, Рё РїРµСЂРµРІРѕРґ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РІРёРґРµРЅ Рё РїСЂРѕРІРµСЂСЏРµРј.
+   * Хранится дословно («Временная работа», «Неполный рабочий день», «part-time»):
+   * переводить её в «подработка» при загрузке нельзя — решение принимается при
+   * показе, и перевод должен быть виден и проверяем.
    */
   employment TEXT,
   fetched_at INTEGER NOT NULL
@@ -217,8 +227,8 @@ CREATE TABLE IF NOT EXISTS vacancies (
 
 CREATE INDEX IF NOT EXISTS idx_vacancies_source ON vacancies(source);
 
--- в•ЁР¤в•Ёв•›в•Ёв”ђв•Ёв•›в•Ёв•—в•Ёв•њв•Ёв••в•¤Р’в•Ёв•Ўв•Ёв•—в•¤Рњв•Ёв•њв•¤Р›в•Ёв•Ў в•Ёв••в•Ёв•њв•Ёв”¤в•Ёв•Ўв•Ёв•‘в•¤Р‘в•¤Р› в•Ёв”¤в•Ёв•—в•¤Рџ в•Ёв–“в•¤Р›в•Ёв–’в•Ёв•›в•¤Рђв•Ёв•›в•Ёв•‘, в•Ёв•‘в•Ёв•›в•¤Р’в•Ёв•›в•¤Рђв•¤Р›в•Ёв•Ў в•Ёв••в•Ёв”¤в•¤Р“в•¤Р’ в•Ёв”ђв•Ёв•› в•¤Р‘в•Ёв•›в•¤Р‘в•¤Р’в•Ёв–‘в•Ёв–“в•Ёв•њв•Ёв•›в•Ёв•ќв•¤Р“ в•Ёв•‘в•Ёв•—в•¤Рћв•¤Р—в•¤Р“.
--- в•ЁРЎв•Ёв•Ўв•Ёв•– в•Ёв•њв•Ёв••в•¤Р• purgeExpiredAuthRows в•Ёв•• todayCount в•¤Р‘в•Ёв•‘в•Ёв–‘в•Ёв•њв•Ёв••в•¤Рђв•Ёв•›в•Ёв–“в•Ёв–‘в•Ёв•—в•Ёв•• в•¤Р’в•Ёв–‘в•Ёв–’в•Ёв•—в•Ёв••в•¤Р–в•¤Р“ в•¤Р–в•Ёв•Ўв•Ёв•—в•Ёв••в•Ёв•‘в•Ёв•›в•Ёв•ќ.
+-- ╨Ф╨╛╨┐╨╛╨╗╨╜╨╕╤В╨╡╨╗╤М╨╜╤Л╨╡ ╨╕╨╜╨┤╨╡╨║╤Б╤Л ╨┤╨╗╤П ╨▓╤Л╨▒╨╛╤А╨╛╨║, ╨║╨╛╤В╨╛╤А╤Л╨╡ ╨╕╨┤╤Г╤В ╨┐╨╛ ╤Б╨╛╤Б╤В╨░╨▓╨╜╨╛╨╝╤Г ╨║╨╗╤О╤З╤Г.
+-- ╨С╨╡╨╖ ╨╜╨╕╤Е purgeExpiredAuthRows ╨╕ todayCount ╤Б╨║╨░╨╜╨╕╤А╨╛╨▓╨░╨╗╨╕ ╤В╨░╨▒╨╗╨╕╤Ж╤Г ╤Ж╨╡╨╗╨╕╨║╨╛╨╝.
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_oauth_states_expires ON oauth_states(expires_at);
@@ -230,19 +240,26 @@ CREATE INDEX IF NOT EXISTS idx_letters_user ON letters(user_id);
 `;
 
 export function createDatabase(filePath: string): Database.Database {
-  if (filePath !== ":memory:") mkdirSync(path.dirname(filePath), { recursive: true });
+  if (filePath !== ':memory:') mkdirSync(path.dirname(filePath), { recursive: true });
   const instance = new Database(filePath, { timeout: 10_000 });
-  if (filePath !== ":memory:") {
+  if (filePath !== ':memory:') {
     try {
-      instance.pragma("journal_mode = WAL");
+      instance.pragma('journal_mode = WAL');
     } catch (err) {
-      logInfo("db", "WAL в•Ёв•њв•Ёв•Ўв•Ёв”¤в•Ёв•›в•¤Р‘в•¤Р’в•¤Р“в•Ёв”ђв•Ёв•Ўв•Ёв•њ, в•Ёв••в•¤Р‘в•Ёв”ђв•Ёв•›в•Ёв•—в•¤Рњв•Ёв•–в•¤Р“в•Ёв•Ўв•Ёв•ќ в•Ёв”¤в•Ёв•Ўв•¤Р”в•Ёв•›в•Ёв•—в•¤Р’в•Ёв•њв•¤Р›в•Ёв•Ј в•¤Рђв•Ёв•Ўв•Ёв•ўв•Ёв••в•Ёв•ќ в•Ёв•ўв•¤Р“в•¤Рђв•Ёв•њв•Ёв–‘в•Ёв•—в•Ёв–‘", { error: String(err) });
+      logInfo(
+        'db',
+        'WAL ╨╜╨╡╨┤╨╛╤Б╤В╤Г╨┐╨╡╨╜, ╨╕╤Б╨┐╨╛╨╗╤М╨╖╤Г╨╡╨╝ ╨┤╨╡╤Д╨╛╨╗╤В╨╜╤Л╨╣ ╤А╨╡╨╢╨╕╨╝ ╨╢╤Г╤А╨╜╨░╨╗╨░',
+        { error: String(err) },
+      );
     }
   }
-  instance.pragma("foreign_keys = ON");
+  instance.pragma('foreign_keys = ON');
   instance.exec(SCHEMA_SQL);
   migrate(instance);
-  logInfo("db", filePath === ":memory:" ? "в•Ёв•›в•¤Р’в•Ёв•‘в•¤Рђв•¤Р›в•¤Р’в•Ёв–‘ in-memory в•ЁРЎв•ЁР¤" : `в•Ёв•›в•¤Р’в•Ёв•‘в•¤Рђв•¤Р›в•¤Р’в•Ёв–‘ в•ЁРЎв•ЁР¤: ${filePath}`);
+  logInfo(
+    'db',
+    filePath === ':memory:' ? '╨╛╤В╨║╤А╤Л╤В╨░ in-memory ╨С╨Ф' : `╨╛╤В╨║╤А╤Л╤В╨░ ╨С╨Ф: ${filePath}`,
+  );
   return instance;
 }
 
@@ -251,33 +268,44 @@ function columnNames(instance: Database.Database, table: string): Set<string> {
   return new Set(rows.map((r) => r.name));
 }
 
-/** в•ЁРЁв•Ёв”¤в•Ёв•Ўв•Ёв•ќв•Ёв”ђв•Ёв•›в•¤Р’в•Ёв•Ўв•Ёв•њв•¤Р’в•Ёв•њв•¤Р›в•Ёв•Ў в•Ёв•ќв•Ёв••в•Ёв”‚в•¤Рђв•Ёв–‘в•¤Р–в•Ёв••в•Ёв•• в•Ёв”¤в•Ёв•—в•¤Рџ в•¤Р‘в•¤Р“в•¤Р™в•Ёв•Ўв•¤Р‘в•¤Р’в•Ёв–“в•¤Р“в•¤Рћв•¤Р™в•Ёв••в•¤Р• в•ЁРЎв•ЁР¤ (CREATE TABLE IF NOT EXISTS в•Ёв•њв•Ёв•Ў в•Ёв”¤в•Ёв•›в•Ёв–’в•Ёв–‘в•Ёв–“в•Ёв•—в•¤Рџв•Ёв•Ўв•¤Р’ в•Ёв•‘в•Ёв•›в•Ёв•—в•Ёв•›в•Ёв•њв•Ёв•‘в•Ёв••). */
+/** ╨Ш╨┤╨╡╨╝╨┐╨╛╤В╨╡╨╜╤В╨╜╤Л╨╡ ╨╝╨╕╨│╤А╨░╤Ж╨╕╨╕ ╨┤╨╗╤П ╤Б╤Г╤Й╨╡╤Б╤В╨▓╤Г╤О╤Й╨╕╤Е ╨С╨Ф (CREATE TABLE IF NOT EXISTS ╨╜╨╡ ╨┤╨╛╨▒╨░╨▓╨╗╤П╨╡╤В ╨║╨╛╨╗╨╛╨╜╨║╨╕). */
 function migrate(instance: Database.Database): void {
-  const userCols = columnNames(instance, "users");
+  const userCols = columnNames(instance, 'users');
   const additions: [string, string][] = [];
-  if (!userCols.has("hh_token")) additions.push(["hh_token", "TEXT"]);
-  if (!userCols.has("hh_token_expires_at")) additions.push(["hh_token_expires_at", "INTEGER"]);
-  if (!userCols.has("hh_refresh_token")) additions.push(["hh_refresh_token", "TEXT"]);
-  if (!userCols.has("hh_resume_id")) additions.push(["hh_resume_id", "TEXT"]);
-  if (!userCols.has("telegram_chat_id")) additions.push(["telegram_chat_id", "TEXT"]);
-  if (!userCols.has("autoapply_paused")) additions.push(["autoapply_paused", "INTEGER NOT NULL DEFAULT 0"]);
-  // Р‘Р»РѕРєРёСЂРѕРІРєР° Р°РєРєР°СѓРЅС‚Р° РїР»РѕС‰Р°РґРєРѕР№: РїРµСЂРµР¶РёРІР°РµС‚ РїРµСЂРµР·Р°РїСѓСЃРє, РёРЅР°С‡Рµ СЃРµСЂРІРёСЃ
-  // СЃРЅРѕРІР° РїРѕС€С‘Р» Р±С‹ РѕС‚РєР»РёРєР°С‚СЊСЃСЏ РІ Р°РєРєР°СѓРЅС‚, РєРѕС‚РѕСЂС‹Р№ hh С‚РѕР»СЊРєРѕ С‡С‚Рѕ РѕС‚РєР»РѕРЅРёР».
-  if (!userCols.has("autoapply_blocked_until")) additions.push(["autoapply_blocked_until", "INTEGER NOT NULL DEFAULT 0"]);
-  if (!userCols.has("autoapply_block_reason")) additions.push(["autoapply_block_reason", "TEXT NOT NULL DEFAULT ''"]);
-  if (!userCols.has("email_verified")) additions.push(["email_verified", "INTEGER NOT NULL DEFAULT 0"]);
-  if (!userCols.has("email_verification_token")) additions.push(["email_verification_token", "TEXT"]);
-  if (!userCols.has("password_reset_token")) additions.push(["password_reset_token", "TEXT"]);
-  if (!userCols.has("password_reset_expires")) additions.push(["password_reset_expires", "INTEGER"]);
+  if (!userCols.has('hh_token')) additions.push(['hh_token', 'TEXT']);
+  if (!userCols.has('hh_token_expires_at')) additions.push(['hh_token_expires_at', 'INTEGER']);
+  if (!userCols.has('hh_refresh_token')) additions.push(['hh_refresh_token', 'TEXT']);
+  if (!userCols.has('hh_resume_id')) additions.push(['hh_resume_id', 'TEXT']);
+  if (!userCols.has('telegram_chat_id')) additions.push(['telegram_chat_id', 'TEXT']);
+  if (!userCols.has('autoapply_paused'))
+    additions.push(['autoapply_paused', 'INTEGER NOT NULL DEFAULT 0']);
+  // Блокировка аккаунта площадкой: переживает перезапуск, иначе сервис
+  // снова пошёл бы откликаться в аккаунт, который hh только что отклонил.
+  if (!userCols.has('autoapply_blocked_until'))
+    additions.push(['autoapply_blocked_until', 'INTEGER NOT NULL DEFAULT 0']);
+  if (!userCols.has('autoapply_block_reason'))
+    additions.push(['autoapply_block_reason', "TEXT NOT NULL DEFAULT ''"]);
+  if (!userCols.has('email_verified'))
+    additions.push(['email_verified', 'INTEGER NOT NULL DEFAULT 0']);
+  if (!userCols.has('email_verification_token'))
+    additions.push(['email_verification_token', 'TEXT']);
+  // Срок жизни ссылки подтверждения: без него токен вечен, и письмо годичной
+  // давности подтверждает ящик, который за это время мог сменить владельца.
+  if (!userCols.has('email_verification_expires'))
+    additions.push(['email_verification_expires', 'INTEGER']);
+  if (!userCols.has('password_reset_token')) additions.push(['password_reset_token', 'TEXT']);
+  if (!userCols.has('password_reset_expires'))
+    additions.push(['password_reset_expires', 'INTEGER']);
   /*
-   * РћР¶РёРґР°РЅРёСЏ РїРѕ Р·Р°СЂРїР»Р°С‚Рµ Рё РіРѕСЂРѕРґСѓ.
+   * Ожидания по зарплате и городу.
    *
-   * NULL Рё 0 вЂ” СЂР°Р·РЅС‹Рµ РІРµС‰Рё, Рё СЂР°Р·Р»РёС‡РёРµ Р·РґРµСЃСЊ СЃСѓС‰РµСЃС‚РІРµРЅРЅРѕРµ: В«С…РѕС‡Сѓ РѕС‚ 0В» РЅРµ
-   * Р·РЅР°С‡РёС‚ РЅРёС‡РµРіРѕ, Р° В«С…РѕС‡Сѓ РѕС‚ 150000В» РѕС‚СЃРµРєР°РµС‚ РІР°РєР°РЅСЃРёРё РґРµС€РµРІР»Рµ. РџРѕСЌС‚РѕРјСѓ
-   * РїСѓСЃС‚РѕРµ Р·РЅР°С‡РµРЅРёРµ С…СЂР°РЅРёС‚СЃСЏ РєР°Рє NULL, Рё РїРѕРґР±РѕСЂ РЅРµ РїСЂРёРјРµРЅСЏРµС‚ С„РёР»СЊС‚СЂ.
+   * NULL и 0 — разные вещи, и различие здесь существенное: «хочу от 0» не
+   * значит ничего, а «хочу от 150000» отсекает вакансии дешевле. Поэтому
+   * пустое значение хранится как NULL, и подбор не применяет фильтр.
    */
-  if (!userCols.has("salary_expectation")) additions.push(["salary_expectation", "INTEGER"]);
-  if (!userCols.has("city_preference")) additions.push(["city_preference", "TEXT NOT NULL DEFAULT ''"]);
+  if (!userCols.has('salary_expectation')) additions.push(['salary_expectation', 'INTEGER']);
+  if (!userCols.has('city_preference'))
+    additions.push(['city_preference', "TEXT NOT NULL DEFAULT ''"]);
   for (const [name, type] of additions) {
     instance.exec(`ALTER TABLE users ADD COLUMN ${name} ${type}`);
   }
@@ -285,72 +313,73 @@ function migrate(instance: Database.Database): void {
   migrateResumeVariants(instance);
   migratePayments(instance);
   migrateOauthAccounts(instance);
-  const appCols = columnNames(instance, "applications");
-  const vacancyCols = columnNames(instance, "vacancies");
-  const resumeCols = columnNames(instance, "resumes");
-  if (!appCols.has("message")) {
+  migrateSecretColumns(instance);
+  const appCols = columnNames(instance, 'applications');
+  const vacancyCols = columnNames(instance, 'vacancies');
+  const resumeCols = columnNames(instance, 'resumes');
+  if (!appCols.has('message')) {
     instance.exec("ALTER TABLE applications ADD COLUMN message TEXT NOT NULL DEFAULT ''");
   }
   /*
-   * Р”Р°С‚Р° РїСѓР±Р»РёРєР°С†РёРё: Р±РµР· РЅРµС‘ РЅРµРІРѕР·РјРѕР¶РЅРѕ РѕС‚Р»РёС‡РёС‚СЊ СЃРІРµР¶СѓСЋ РІР°РєР°РЅСЃРёСЋ РѕС‚ РЅРµРґРµР»СЊРЅРѕР№
-   * РґР°РІРЅРѕСЃС‚Рё, Р° РѕС‚РєР»РёРє РЅР° Р·Р°РєСЂС‹С‚СѓСЋ С‚СЂР°С‚РёС‚ СЃР»РѕС‚ РґРЅРµРІРЅРѕРіРѕ Р»РёРјРёС‚Р°.
+   * Дата публикации: без неё невозможно отличить свежую вакансию от недельной
+   * давности, а отклик на закрытую тратит слот дневного лимита.
    */
   /*
-   * Р—Р°РЅСЏС‚РѕСЃС‚СЊ РѕС‚ РїР»РѕС‰Р°РґРєРё.
+   * Занятость от площадки.
    *
-   * Р‘РµР· РЅРµС‘ СЂРµР¶РёРј СЂР°Р±РѕС‚С‹ РїСЂРёС€Р»РѕСЃСЊ Р±С‹ РІС‹РІРѕРґРёС‚СЊ РёР· С‚РµРєСЃС‚Р° РІР°РєР°РЅСЃРёРё, С…РѕС‚СЏ Сѓ
-   * GeekJob РїРѕР»Рµ `jobFormat.parttime`, Р° Сѓ Р Р°Р±РѕС‚С‹ Р РѕСЃСЃРёРё вЂ” `employment` Рё
-   * `schedule` СѓР¶Рµ РѕС‚РґР°СЋС‚СЃСЏ РіРѕС‚РѕРІС‹РјРё Р·РЅР°С‡РµРЅРёСЏРјРё.
+   * Без неё режим работы пришлось бы выводить из текста вакансии, хотя у
+   * GeekJob поле `jobFormat.parttime`, а у Работы России — `employment` и
+   * `schedule` уже отдаются готовыми значениями.
    *
-   * РџСЂРѕРІРµСЂРєР° РѕР±СЏР·Р°С‚РµР»СЊРЅР°: РєРѕР»РѕРЅРєР° СѓР¶Рµ РµСЃС‚СЊ РІ CREATE TABLE, Рё ALTER Р±РµР· РЅРµС‘
-   * РїР°РґР°РµС‚ РЅР° В«duplicate column nameВ» вЂ” С‚Рѕ РµСЃС‚СЊ РЅР° Р»СЋР±РѕР№ СЃРІРµР¶РµР№ Р±Р°Р·Рµ, Р° РЅРµ
-   * С‚РѕР»СЊРєРѕ РЅР° СЃС‚Р°СЂРѕР№.
+   * Проверка обязательна: колонка уже есть в CREATE TABLE, и ALTER без неё
+   * падает на «duplicate column name» — то есть на любой свежей базе, а не
+   * только на старой.
    */
-  if (!vacancyCols.has("employment")) {
-    instance.exec("ALTER TABLE vacancies ADD COLUMN employment TEXT");
+  if (!vacancyCols.has('employment')) {
+    instance.exec('ALTER TABLE vacancies ADD COLUMN employment TEXT');
   }
-  if (!vacancyCols.has("published_at")) {
-    instance.exec("ALTER TABLE vacancies ADD COLUMN published_at INTEGER");
-    instance.exec("ALTER TABLE vacancies ADD COLUMN employment TEXT");
+  if (!vacancyCols.has('published_at')) {
+    instance.exec('ALTER TABLE vacancies ADD COLUMN published_at INTEGER');
+    instance.exec('ALTER TABLE vacancies ADD COLUMN employment TEXT');
   }
   /*
-   * РџСЂРёРІСЏР·РєР° СЂРµР·СЋРјРµ Рє СЂРµР·СЋРјРµ РЅР° hh.
+   * Привязка резюме к резюме на hh.
    *
-   * Р‘РµР· РЅРµС‘ СЂРµР·СЋРјРµ РІ РЅР°С€РµР№ Р±Р°Р·Рµ Рё СЂРµР·СЋРјРµ, РєРѕС‚РѕСЂРѕРµ СѓС…РѕРґРёС‚ РІ РѕС‚РєР»РёРєРµ, вЂ” СЂР°Р·РЅС‹Рµ
-   * РІРµС‰Рё: РїРѕРґР±РѕСЂ С€С‘Р» РїРѕ Р»РѕРєР°Р»СЊРЅРѕРјСѓ СЂРµР·СЋРјРµ, Р° РѕС‚РїСЂР°РІР»СЏР»РѕСЃСЊ users.hh_resume_id.
-   * РЎ РЅРµСЃРєРѕР»СЊРєРёРјРё СЂРµР·СЋРјРµ СЌС‚Рѕ РѕР·РЅР°С‡Р°Р»Рѕ, С‡С‚Рѕ СЃРёСЃС‚РµРјР° РѕС†РµРЅРёРІР°РµС‚ РІР°РєР°РЅСЃРёСЋ РїРѕ РѕРґРЅРѕРјСѓ
-   * СЂРµР·СЋРјРµ, Р° РѕС‚РїСЂР°РІР»СЏРµС‚ РґСЂСѓРіРѕРµ, Рё С‡РµР»РѕРІРµРє РѕР± СЌС‚РѕРј РЅРµ Р·РЅР°РµС‚.
+   * Без неё резюме в нашей базе и резюме, которое уходит в отклике, — разные
+   * вещи: подбор шёл по локальному резюме, а отправлялось users.hh_resume_id.
+   * С несколькими резюме это означало, что система оценивает вакансию по одному
+   * резюме, а отправляет другое, и человек об этом не знает.
    *
-   * NULL вЂ” РЅРµ РѕС€РёР±РєР°, Р° РѕР±С‹С‡РЅРѕРµ СЃРѕСЃС‚РѕСЏРЅРёРµ СЂРµР·СЋРјРµ, СЃРѕР·РґР°РЅРЅРѕРіРѕ РІСЂСѓС‡РЅСѓСЋ: РµРіРѕ
-   * РјРѕР¶РЅРѕ РѕС†РµРЅРёРІР°С‚СЊ Рё РёСЃРїРѕР»СЊР·РѕРІР°С‚СЊ РІ РїРёСЃСЊРјРµ, РЅРѕ РѕС‚РїСЂР°РІРёС‚СЊ РЅР° hh РЅРµР»СЊР·СЏ.
+   * NULL — не ошибка, а обычное состояние резюме, созданного вручную: его
+   * можно оценивать и использовать в письме, но отправить на hh нельзя.
    */
-  if (!resumeCols.has("hh_id")) {
-    instance.exec("ALTER TABLE resumes ADD COLUMN hh_id TEXT");
+  if (!resumeCols.has('hh_id')) {
+    instance.exec('ALTER TABLE resumes ADD COLUMN hh_id TEXT');
   }
-  // РћРґРЅРѕ Рё С‚Рѕ Р¶Рµ СЂРµР·СЋРјРµ СЃ hh РЅРµ РґРѕР»Р¶РЅРѕ РёРјРїРѕСЂС‚РёСЂРѕРІР°С‚СЊСЃСЏ РґРІР°Р¶РґС‹: РёРЅР°С‡Рµ РІ
-  // РїРѕРґР±РѕСЂРµ РїРѕСЏРІСЏС‚СЃСЏ РґРІР° РѕРґРёРЅР°РєРѕРІС‹С… РєР°РЅРґРёРґР°С‚Р°, Р° РІ РёРЅС‚РµСЂС„РµР№СЃРµ вЂ” РїСѓС‚Р°РЅРёС†Р°.
+  // Одно и то же резюме с hh не должно импортироваться дважды: иначе в
+  // подборе появятся два одинаковых кандидата, а в интерфейсе — путаница.
   instance.exec(
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_resumes_hh ON resumes(user_id, hh_id) WHERE hh_id IS NOT NULL",
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_resumes_hh ON resumes(user_id, hh_id) WHERE hh_id IS NOT NULL',
   );
-  if (!appCols.has("external_url")) {
-    instance.exec("ALTER TABLE applications ADD COLUMN external_url TEXT");
+  if (!appCols.has('external_url')) {
+    instance.exec('ALTER TABLE applications ADD COLUMN external_url TEXT');
   }
   /*
- * РџРѕСЂСЏРґРѕРє РѕР±СЏР·Р°С‚РµР»РµРЅ.
- *
- * РњРёРіСЂР°С†РёСЏ resume_id РїРµСЂРµСЃРѕР±РёСЂР°РµС‚ С‚Р°Р±Р»РёС†Сѓ Рё РїРµСЂРµРЅРѕСЃРёС‚ notified_at, РїРѕСЌС‚РѕРјСѓ
- * РєРѕР»РѕРЅРєР° РґРѕР»Р¶РЅР° СЃСѓС‰РµСЃС‚РІРѕРІР°С‚СЊ Р”Рћ РЅРµС‘. РќР°РѕР±РѕСЂРѕС‚ РїРѕР»СѓС‡Р°РµС‚СЃСЏ РѕС€РёР±РєР°
- * В«no such column: notified_atВ» РЅР° Р»СЋР±РѕР№ СЃРІРµР¶РµР№ Р±Р°Р·Рµ: РІ CREATE TABLE РµС‘ РµС‰С‘
- * РЅРµС‚, Р° РїРµСЂРµРЅРѕСЃ СѓР¶Рµ С‡РёС‚Р°РµС‚.
- */
-addNotifiedAtColumn(instance);
-migrateApplicationsOrigin(instance);
-migrateApplicationsResumeId(instance);
-  // РР·Р±СЂР°РЅРЅРѕРµ: СѓРЅРёРєР°Р»СЊРЅРѕСЃС‚СЊ РїРѕ (РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ, РІР°РєР°РЅСЃРёСЏ) РІС‹СЂР°Р¶РµРЅР° РІ СЃР°РјРѕР№
-  // С‚Р°Р±Р»РёС†Рµ вЂ” РёРЅР°С‡Рµ РїРѕРІС‚РѕСЂРЅРѕРµ РЅР°Р¶Р°С‚РёРµ В«РІ РёР·Р±СЂР°РЅРЅРѕРµВ» РїР»РѕРґРёР»Рѕ Р±С‹ РґСѓР±Р»Рё, Рё РІ
-  // СЃРїРёСЃРєРµ РѕРґРЅР° РІР°РєР°РЅСЃРёСЏ РїРѕСЏРІР»СЏР»Р°СЃСЊ Р±С‹ РґРІР°Р¶РґС‹.
+   * Порядок обязателен.
+   *
+   * Миграция resume_id пересобирает таблицу и переносит notified_at, поэтому
+   * колонка должна существовать ДО неё. Наоборот получается ошибка
+   * «no such column: notified_at» на любой свежей базе: в CREATE TABLE её ещё
+   * нет, а перенос уже читает.
+   */
+  addNotifiedAtColumn(instance);
+  migrateApplicationsOrigin(instance);
+  migrateApplicationsResumeId(instance);
+  // Избранное: уникальность по (пользователь, вакансия) выражена в самой
+  // таблице — иначе повторное нажатие «в избранное» плодило бы дубли, и в
+  // списке одна вакансия появлялась бы дважды.
   instance.exec(
-    "CREATE UNIQUE INDEX IF NOT EXISTS idx_bookmarks_user_job ON bookmarks(user_id, job_slug)",
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_bookmarks_user_job ON bookmarks(user_id, job_slug)',
   );
 }
 
@@ -373,27 +402,27 @@ export type User = {
   hh_resume_id: string | null;
   telegram_chat_id: string | null;
   autoapply_paused: number;
-  /** Р”Рѕ РєР°РєРѕРіРѕ РјРѕРјРµРЅС‚Р° hh РѕРіСЂР°РЅРёС‡РёР» Р°РєРєР°СѓРЅС‚ (0 вЂ” РѕРіСЂР°РЅРёС‡РµРЅРёСЏ РЅРµС‚). */
+  /** До какого момента hh ограничил аккаунт (0 — ограничения нет). */
   autoapply_blocked_until: number;
   autoapply_block_reason: string;
   email_verified: number;
   email_verification_token: string | null;
+  email_verification_expires: number | null;
   password_reset_token: string | null;
   password_reset_expires: number | null;
-  /** РћР¶РёРґР°РЅРёРµ РїРѕ Р·Р°СЂРїР»Р°С‚Рµ; null вЂ” РЅРµ Р·Р°РґР°РЅРѕ, С„РёР»СЊС‚СЂ РїРѕ Р·Р°СЂРїР»Р°С‚Рµ РЅРµ РїСЂРёРјРµРЅСЏРµС‚СЃСЏ. */
+  /** Ожидание по зарплате; null — не задано, фильтр по зарплате не применяется. */
   salary_expectation: number | null;
-  /** РџСЂРµРґРїРѕС‡С‚РёС‚РµР»СЊРЅС‹Р№ РіРѕСЂРѕРґ; РїСѓСЃС‚Р°СЏ СЃС‚СЂРѕРєР° вЂ” РЅРµ Р·Р°РґР°РЅ. */
+  /** Предпочтительный город; пустая строка — не задан. */
   city_preference: string;
-  /** demo вЂ” РѕР±С‹С‡РЅС‹Р№ СЂРµР¶РёРј, live вЂ” hh РїРѕРґРєР»СЋС‡С‘РЅ Рё С‡РµР»РѕРІРµРє СЏРІРЅРѕ СЃРѕРіР»Р°СЃРёР»СЃСЏ. */
-  mode: "demo" | "live";
+  /** demo — обычный режим, live — hh подключён и человек явно согласился. */
+  mode: 'demo' | 'live';
 };
 
 export function getUserById(id: number): User | undefined {
-  return db.prepare("SELECT * FROM users WHERE id = ?").get(id) as User | undefined;
+  return db.prepare('SELECT * FROM users WHERE id = ?').get(id) as User | undefined;
 }
 
 export function getUserByEmail(email: string): User | undefined {
-  return db
-    .prepare("SELECT * FROM users WHERE email = ?")
-    .get(email.toLowerCase().trim()) as User | undefined;
+  return db.prepare('SELECT * FROM users WHERE email = ?').get(email.toLowerCase().trim()) as
+    User | undefined;
 }

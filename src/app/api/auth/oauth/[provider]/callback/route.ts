@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server";
-import { requireUser, unauthorized } from "@/lib/api";
-import { authMethod, normalizeIdentity } from "@/lib/auth-methods";
-import { consumeState, parseProviderResponse, emailVerifiedFrom } from "@/lib/auth/oauth";
-import { db } from "@/lib/db";
-import { createSession } from "@/lib/auth";
-import { NO_STORE_HEADERS } from "@/lib/http";
-import { isHttpsRequest } from "@/lib/auth";
-import { SESSION_COOKIE } from "@/lib/auth";
+import { NextResponse } from 'next/server';
+import { requireUser, unauthorized } from '@/lib/api';
+import { authMethod, normalizeIdentity } from '@/lib/auth-methods';
+import { consumeState, parseProviderResponse, emailVerifiedFrom } from '@/lib/auth/oauth';
+import { db } from '@/lib/db';
+import { createSession } from '@/lib/auth';
+import { NO_STORE_HEADERS } from '@/lib/http';
+import { isHttpsRequest } from '@/lib/auth';
+import { SESSION_COOKIE } from '@/lib/auth';
 
 /**
  * GET /api/auth/oauth/[provider]/callback — возврат от внешнего сервиса.
@@ -30,32 +30,32 @@ export async function GET(request: Request, ctx: { params: Promise<{ provider: s
 
   const { provider } = await ctx.params;
   if (!authMethod(provider)) {
-    return NextResponse.json({ error: "Способ входа неизвестен" }, { status: 404 });
+    return NextResponse.json({ error: 'Способ входа неизвестен' }, { status: 404 });
   }
 
   const url = new URL(request.url);
-  const state = url.searchParams.get("state") ?? "";
+  const state = url.searchParams.get('state') ?? '';
   const stateUserId = consumeState(state);
   // Код одноразовый: повторный возврат с той же ссылкой не пройдёт.
   if (stateUserId !== user.id) {
     return NextResponse.json(
-      { error: "Код возврата недействителен или уже использован. Начните вход заново." },
+      { error: 'Код возврата недействителен или уже использован. Начните вход заново.' },
       { status: 401 },
     );
   }
 
-  const hash = url.searchParams.get("hash") ?? "";
+  const hash = url.searchParams.get('hash') ?? '';
   const identity = parseProviderResponse(provider, hash);
   if (!identity) {
     return NextResponse.json(
-      { error: "Провайдер не подтвердил вход. Попробуйте ещё раз." },
+      { error: 'Провайдер не подтвердил вход. Попробуйте ещё раз.' },
       { status: 401 },
     );
   }
 
   if (!emailVerifiedFrom({ email: identity.email, verified: identity.verified })) {
     return NextResponse.json(
-      { error: "Провайдер не подтвердил адрес почты — аккаунт на таком адресе мы не заводим." },
+      { error: 'Провайдер не подтвердил адрес почты — аккаунт на таком адресе мы не заводим.' },
       { status: 403 },
     );
   }
@@ -67,7 +67,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ provider: s
     name: identity.name,
   });
   if (!normalized) {
-    return NextResponse.json({ error: "Провайдер вернул данные непригодного вида" }, { status: 502 });
+    return NextResponse.json(
+      { error: 'Провайдер вернул данные непригодного вида' },
+      { status: 502 },
+    );
   }
 
   /*
@@ -77,11 +80,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ provider: s
    * привязки того же адреса дважды.
    */
   const already = db
-    .prepare("SELECT id FROM users WHERE email = ? AND id != ?")
+    .prepare('SELECT id FROM users WHERE email = ? AND id != ?')
     .get(normalized.email, user.id) as { id: number } | undefined;
   if (already) {
     return NextResponse.json(
-      { error: "Этот адрес уже привязан к другому аккаунту" },
+      { error: 'Этот адрес уже привязан к другому аккаунту' },
       { status: 409 },
     );
   }
@@ -95,16 +98,17 @@ export async function GET(request: Request, ctx: { params: Promise<{ provider: s
   // Сессия уже есть, но ротация обязательна: привязка внешнего аккаунта —
   // это изменение привилегий, и старый токен лучше не оставлять в ссылке.
   const session = createSession(user.id);
-  const res = NextResponse.redirect(new URL("/dashboard/settings", url.origin), 303);
-  if (isHttpsRequest(request)) res.cookies.set(SESSION_COOKIE, session.token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: true,
-    path: "/",
-    expires: new Date(session.expiresAt),
-  });
+  const res = NextResponse.redirect(new URL('/dashboard/settings', url.origin), 303);
+  if (isHttpsRequest(request))
+    res.cookies.set(SESSION_COOKIE, session.token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: true,
+      path: '/',
+      expires: new Date(session.expiresAt),
+    });
   else {
-    res.headers.set("Cache-Control", NO_STORE_HEADERS["Cache-Control"] ?? "no-store");
+    res.headers.set('Cache-Control', NO_STORE_HEADERS['Cache-Control'] ?? 'no-store');
   }
   return res;
 }

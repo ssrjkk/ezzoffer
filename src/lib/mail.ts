@@ -1,6 +1,6 @@
-import { createTransport, type Transporter } from "nodemailer";
-import { envOpt } from "./env";
-import { logInfo } from "./logger";
+import { createTransport, type Transporter } from 'nodemailer';
+import { envOpt } from './env';
+import { logInfo } from './logger';
 
 /**
  * Отправка писем.
@@ -27,19 +27,19 @@ export type MailMessage = {
 let transporter: Transporter | null | undefined;
 
 export function mailConfigured(): boolean {
-  return Boolean(envOpt(process.env, "SMTP_HOST"));
+  return Boolean(envOpt(process.env, 'SMTP_HOST'));
 }
 
 function getTransporter(): Transporter | null {
   if (transporter !== undefined) return transporter;
-  const host = envOpt(process.env, "SMTP_HOST");
+  const host = envOpt(process.env, 'SMTP_HOST');
   if (!host) {
     transporter = null;
     return transporter;
   }
-  const port = Number(envOpt(process.env, "SMTP_PORT") ?? "587");
-  const user = envOpt(process.env, "SMTP_USER");
-  const pass = envOpt(process.env, "SMTP_PASSWORD");
+  const port = Number(envOpt(process.env, 'SMTP_PORT') ?? '587');
+  const user = envOpt(process.env, 'SMTP_USER');
+  const pass = envOpt(process.env, 'SMTP_PASSWORD');
 
   transporter = createTransport({
     host,
@@ -55,7 +55,9 @@ function getTransporter(): Transporter | null {
 }
 
 function fromAddress(): string {
-  return envOpt(process.env, "SMTP_FROM") ?? envOpt(process.env, "SMTP_USER") ?? "no-reply@ezoffer.ru";
+  return (
+    envOpt(process.env, 'SMTP_FROM') ?? envOpt(process.env, 'SMTP_USER') ?? 'no-reply@ezoffer.ru'
+  );
 }
 
 /**
@@ -65,15 +67,15 @@ function fromAddress(): string {
 export async function sendMail(message: MailMessage): Promise<boolean> {
   const mailer = getTransporter();
   if (!mailer) {
-    logInfo("mail", "SMTP не настроен, письмо не отправлено", { to: message.to });
+    logInfo('mail', 'SMTP не настроен, письмо не отправлено', { to: message.to });
     return false;
   }
   try {
     await mailer.sendMail({ from: fromAddress(), ...message });
-    logInfo("mail", "письмо отправлено", { to: message.to, subject: message.subject });
+    logInfo('mail', 'письмо отправлено', { to: message.to, subject: message.subject });
     return true;
   } catch (err) {
-    logInfo("mail", `ошибка отправки: ${err instanceof Error ? err.message : "unknown"}`, {
+    logInfo('mail', `ошибка отправки: ${err instanceof Error ? err.message : 'unknown'}`, {
       to: message.to,
     });
     return false;
@@ -82,5 +84,5 @@ export async function sendMail(message: MailMessage): Promise<boolean> {
 
 /** Публичная база приложения для ссылок в письмах. */
 export function siteUrl(): string {
-  return envOpt(process.env, "SITE_URL") ?? "http://localhost:3000";
+  return envOpt(process.env, 'SITE_URL') ?? 'http://localhost:3000';
 }

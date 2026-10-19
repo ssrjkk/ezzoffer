@@ -1,8 +1,8 @@
-import { db } from "./db";
-import { extractSkills, skillCategory, type SkillCategory } from "./skills";
-import { getCatalog } from "./vacancies";
-import { matchesSearch, type SearchRow } from "./matcher";
-import type { Vacancy } from "./vacancies/types";
+import { db } from './db';
+import { extractSkills, skillCategory, type SkillCategory } from './skills';
+import { getCatalog } from './vacancies';
+import { matchesSearch, type SearchRow } from './matcher';
+import type { Vacancy } from './vacancies/types';
 
 /**
  * Пробелы в навыках.
@@ -58,7 +58,7 @@ type AppRow = { job_slug: string; response: string; sent_at: number };
 
 /** Требования вакансии как набор навыков из словаря. */
 function requiredSkills(v: Vacancy): string[] {
-  const parts = [v.title, v.about, ...(v.requirements ?? [])].join(" ");
+  const parts = [v.title, v.about, ...(v.requirements ?? [])].join(' ');
   return extractSkills(parts);
 }
 
@@ -72,9 +72,7 @@ function requiredSkills(v: Vacancy): string[] {
  */
 function resumeSkills(userId: number): Set<string> {
   const row = db
-    .prepare(
-      "SELECT content FROM resumes WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1",
-    )
+    .prepare('SELECT content FROM resumes WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1')
     .get(userId) as { content: string } | undefined;
   return new Set(row ? extractSkills(row.content) : []);
 }
@@ -85,7 +83,7 @@ function resumeSkills(userId: number): Set<string> {
  * Формулировки без числа бесполезны: «уделите внимание этому навыку» не
  * отличает «давно пора» от «так, на будущее».
  */
-function reasonFor(gap: Pick<SkillGap, "demanded" | "declinedWith" | "inTarget">): string {
+function reasonFor(gap: Pick<SkillGap, 'demanded' | 'declinedWith' | 'inTarget'>): string {
   const { demanded, declinedWith, inTarget } = gap;
 
   if (declinedWith >= 3 && declinedWith / Math.max(1, demanded) >= 0.5) {
@@ -110,7 +108,11 @@ export function computeSkillGaps(userId: number, limit = 8): SkillGapsReport {
    * резюме, которого у него нет. Это выдумка с цифрами, хуже отсутствия раздела.
    */
   if (mine.size === 0) {
-    return { gaps: [], covered: [], basis: { applications: 0, targetedVacancies: 0, resumeFound: false } };
+    return {
+      gaps: [],
+      covered: [],
+      basis: { applications: 0, targetedVacancies: 0, resumeFound: false },
+    };
   }
 
   const apps = db
@@ -132,7 +134,7 @@ export function computeSkillGaps(userId: number, limit = 8): SkillGapsReport {
     const vacancy = catalog.get(app.job_slug);
     if (!vacancy) continue;
     const skills = requiredSkills(vacancy);
-    const isDecline = app.response === "decline";
+    const isDecline = app.response === 'decline';
 
     for (const skill of skills) {
       demanded.set(skill, (demanded.get(skill) ?? 0) + 1);
@@ -151,11 +153,22 @@ export function computeSkillGaps(userId: number, limit = 8): SkillGapsReport {
    * потому что выглядела как фильтр.
    */
   const inTarget = new Map<string, number>();
+  /*
+   * Число целевых вакансий считается отдельно от упоминаний навыков.
+   *
+   * Раньше basis.targetedVacancies собирался как сумма значений inTarget — то
+   * есть считались УПОМИНАНИЯ навыков, а называлось это «вакансиями». Пять
+   * вакансий с десятью навыками давали «целевых вакансий: 50», и человек
+   * читал это как размер своего подбора. Теперь множество slug — отдельно,
+   * счётчики навыков — отдельно.
+   */
+  const targetedSlugs = new Set<string>();
   for (const search of db
-    .prepare("SELECT * FROM searches WHERE user_id = ? AND active = 1")
+    .prepare('SELECT * FROM searches WHERE user_id = ? AND active = 1')
     .all(userId) as SearchRow[]) {
     for (const v of catalog.values()) {
       if (!matchesSearch(v, search)) continue;
+      targetedSlugs.add(v.slug);
       for (const skill of requiredSkills(v)) {
         if (mine.has(skill)) continue;
         inTarget.set(skill, (inTarget.get(skill) ?? 0) + 1);
@@ -175,7 +188,13 @@ export function computeSkillGaps(userId: number, limit = 8): SkillGapsReport {
     // собрано ровно из demanded и inTarget, так что оба нуля невозможны.
     // Мутатор с её удалением это подтвердил — код был недостижим.
 
-    const base = { skill, category: skillCategory(skill) ?? "other", demanded: d, declinedWith: dec, inTarget: t };
+    const base = {
+      skill,
+      category: skillCategory(skill) ?? 'other',
+      demanded: d,
+      declinedWith: dec,
+      inTarget: t,
+    };
     /*
      * Давление считается из отказов и из вакансий подбора, а не из «популярности».
      * Взвешено так, чтобы отказ всегда был важнее одного упоминания: скилл, на
@@ -194,7 +213,7 @@ export function computeSkillGaps(userId: number, limit = 8): SkillGapsReport {
     covered: [...covered].sort((a, b) => a.localeCompare(b)),
     basis: {
       applications: apps.length,
-      targetedVacancies: [...inTarget.values()].reduce((a, b) => a + b, 0),
+      targetedVacancies: targetedSlugs.size,
       resumeFound: mine.size > 0,
     },
   };

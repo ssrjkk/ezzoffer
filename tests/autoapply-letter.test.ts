@@ -1,5 +1,5 @@
-import test, { before, beforeEach } from "node:test";
-import assert from "node:assert/strict";
+import test, { before, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
 
 /**
  * Автоотклик отправляет сопроводительное письмо.
@@ -17,9 +17,11 @@ import assert from "node:assert/strict";
  * данных: автоотклик → hhProvider.apply → httpFetch → fetch.
  */
 
-type Database = ReturnType<typeof import("../src/lib/db").createDatabase>;
+type Database = ReturnType<typeof import('../src/lib/db').createDatabase>;
 let db: Database;
-let runAutoApply: (opts?: { pacing?: Partial<import("../src/lib/anti-ban").PacingConfig> }) => Promise<import("../src/lib/autoapply").AutoApplyRun>;
+let runAutoApply: (opts?: {
+  pacing?: Partial<import('../src/lib/anti-ban').PacingConfig>;
+}) => Promise<import('../src/lib/autoapply').AutoApplyRun>;
 let resetPacing: () => void;
 let resetCatalogCache: () => void;
 
@@ -31,14 +33,27 @@ let resetCatalogCache: () => void;
  * считается непригодной. Фикстура без даты прошла бы только потому, что
  * фильтра ещё не было, и тесты перестали бы проверять то, что заявляют.
  */
-function seedVacancy(slug: string, title: string, skills: string[], publishedAt: number = Date.now()) {
+function seedVacancy(
+  slug: string,
+  title: string,
+  skills: string[],
+  publishedAt: number = Date.now(),
+) {
   db.prepare(
     `INSERT INTO vacancies (slug, source, source_id, title, company, salary, salary_min, salary_max,
       level, format, city, posted, category, about, responsibilities, requirements, bonus,
       source_url, contact_email, contact_phone, published_at, fetched_at)
      VALUES (?, 'hh', ?, ?, 'Тест', '200000', 200000, 250000, 'Middle', 'Удалённо', 'Москва',
       'сегодня', 'Разработка', ?, '[]', ?, '[]', NULL, NULL, NULL, ?, ?)`,
-  ).run(slug, slug.replace("hh-", ""), title, `Требуются: ${skills.join(", ")}`, JSON.stringify(skills), publishedAt, Date.now());
+  ).run(
+    slug,
+    slug.replace('hh-', ''),
+    title,
+    `Требуются: ${skills.join(', ')}`,
+    JSON.stringify(skills),
+    publishedAt,
+    Date.now(),
+  );
   /*
    * Сброс кэша каталога — обязателен, а не гигиена.
    *
@@ -54,22 +69,22 @@ function seedVacancy(slug: string, title: string, skills: string[], publishedAt:
 }
 
 before(async () => {
-  process.env.EZOFFER_DB_PATH = ":memory:";
-  process.env.EZOFFER_SILENT = "1";
+  process.env.EZOFFER_DB_PATH = ':memory:';
+  process.env.EZOFFER_SILENT = '1';
   // Паузер анти-бана разрешает отправку только в «рабочие часы» часового
   // пояса раннера (09:00–20:00). Ночной прогон в другом поясе обнулял
   // applied — suite падал от расписания, а не от кода. Окно раздвигаем
   // здесь: само расписание отдельно и явно проверяет anti-ban.test.ts.
-  process.env.AUTOAPPLY_WORK_START = "1";
-  process.env.AUTOAPPLY_WORK_END = "24";
-  const dbMod = await import("../src/lib/db");
+  process.env.AUTOAPPLY_WORK_START = '1';
+  process.env.AUTOAPPLY_WORK_END = '24';
+  const dbMod = await import('../src/lib/db');
   db = dbMod.db;
-  const aa = await import("../src/lib/autoapply");
+  const aa = await import('../src/lib/autoapply');
   // Часы прогона фиксированы: см. helpers/run-autoapply — иначе ночью
   // паузер не отправляет, и тесты падали по настенным часам.
-  runAutoApply = (await import("./helpers/run-autoapply")).runAutoApply;
+  runAutoApply = (await import('./helpers/run-autoapply')).runAutoApply;
   resetPacing = aa.resetPacing;
-  const vacancies = await import("../src/lib/vacancies");
+  const vacancies = await import('../src/lib/vacancies');
   resetCatalogCache = vacancies.resetCatalogCache;
 });
 
@@ -88,7 +103,7 @@ before(async () => {
  */
 beforeEach(() => {
   db.exec(
-    "DELETE FROM applications; DELETE FROM letters; DELETE FROM resumes; DELETE FROM searches; DELETE FROM users; DELETE FROM vacancies;",
+    'DELETE FROM applications; DELETE FROM letters; DELETE FROM resumes; DELETE FROM searches; DELETE FROM users; DELETE FROM vacancies;',
   );
   resetCatalogCache();
   resetPacing();
@@ -104,12 +119,14 @@ function seedUser(options: {
   /** Общее hh_resume_id на уровне аккаунта — запасной источник отправки. */
   accountResumeId?: string | null;
 }): number {
-  const accountResume = options.accountResumeId === undefined ? "res123" : options.accountResumeId;
+  const accountResume = options.accountResumeId === undefined ? 'res123' : options.accountResumeId;
   const uid = Number(
     db
       .prepare(
-        `INSERT INTO users (email, password_hash, plan, plan_expires_at, created_at, hh_token, hh_resume_id)
-         VALUES (?, 'h', 'pro', ?, ?, 'user-token', ?)`,
+        // mode='live' обязателен: в demo-режиме автоотклик не отправляет ничего,
+        // и тест письма проверял бы пустоту вместо самого письма.
+        `INSERT INTO users (email, password_hash, plan, plan_expires_at, created_at, hh_token, hh_resume_id, mode)
+         VALUES (?, 'h', 'pro', ?, ?, 'user-token', ?, 'live')`,
       )
       .run(
         `u${Math.random().toString(36).slice(2)}@example.com`,
@@ -123,21 +140,22 @@ function seedUser(options: {
     `INSERT INTO resumes (user_id, title, content, hh_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
   ).run(
     uid,
-    "Frontend Developer",
-    options.resume ?? "Опыт 5 лет. React, TypeScript, Next.js.",
+    'Frontend Developer',
+    options.resume ?? 'Опыт 5 лет. React, TypeScript, Next.js.',
     options.resumeHhId ?? null,
     Date.now(),
     Date.now(),
   );
 
   for (const l of options.letters ?? []) {
-    db.prepare("INSERT INTO letters (user_id, title, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
-      .run(uid, l.title, l.content, Date.now(), Date.now());
+    db.prepare(
+      'INSERT INTO letters (user_id, title, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
+    ).run(uid, l.title, l.content, Date.now(), Date.now());
   }
 
   db.prepare(
     `INSERT INTO searches (user_id, title, keywords, active, started_at, created_at) VALUES (?, ?, ?, 1, ?, ?)`,
-  ).run(uid, "s", options.keywords ?? "react", Date.now(), Date.now());
+  ).run(uid, 's', options.keywords ?? 'react', Date.now(), Date.now());
 
   return uid;
 }
@@ -151,25 +169,26 @@ function seedUser(options: {
  * `respond` позволяет задать ответ платформы — для проверки того, что отказ
  * по закрытой вакансии не включает backoff, нужно, чтобы hh реально вернул 404.
  */
-function interceptApplies(
-  respond?: (vacancyId: string) => { status: number; body: string },
-): { bodies: Record<string, unknown>[]; restore: () => void } {
+function interceptApplies(respond?: (vacancyId: string) => { status: number; body: string }): {
+  bodies: Record<string, unknown>[];
+  restore: () => void;
+} {
   const bodies: Record<string, unknown>[] = [];
   const saved = globalThis.fetch;
 
   globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
     const u = String(url);
-    if (u.includes("/token")) {
+    if (u.includes('/token')) {
       return {
         ok: true,
         status: 200,
-        text: async () => JSON.stringify({ access_token: "user-token", expires_in: 3600 }),
+        text: async () => JSON.stringify({ access_token: 'user-token', expires_in: 3600 }),
       } as unknown as Response;
     }
-    if (u.includes("/negotiations")) {
-      const parsed = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+    if (u.includes('/negotiations')) {
+      const parsed = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
       bodies.push(parsed);
-      const reply = respond?.(String(parsed.vacancy_id ?? ""));
+      const reply = respond?.(String(parsed.vacancy_id ?? ''));
       if (reply) {
         return {
           /*
@@ -183,34 +202,43 @@ function interceptApplies(
           text: async () => reply.body,
         } as unknown as Response;
       }
-      return { ok: true, status: 200, text: async () => "{}" } as unknown as Response;
+      return { ok: true, status: 200, text: async () => '{}' } as unknown as Response;
     }
-    return { ok: true, status: 200, text: async () => JSON.stringify({ items: [] }) } as unknown as Response;
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ items: [] }),
+    } as unknown as Response;
   }) as typeof globalThis.fetch;
 
-  return { bodies, restore: () => { globalThis.fetch = saved; } };
+  return {
+    bodies,
+    restore: () => {
+      globalThis.fetch = saved;
+    },
+  };
 }
 
-test("отклик уходит с письмом, а не без него", async () => {
+test('отклик уходит с письмом, а не без него', async () => {
   const uid = seedUser({
     letters: [
-      { title: "Фронтенд", content: "Пишу на React и TypeScript, Next.js в продакшене." },
-      { title: "Бэкенд", content: "Python, Django, PostgreSQL, микросервисы." },
+      { title: 'Фронтенд', content: 'Пишу на React и TypeScript, Next.js в продакшене.' },
+      { title: 'Бэкенд', content: 'Python, Django, PostgreSQL, микросервисы.' },
     ],
   });
-  seedVacancy("hh-react-1", "React-разработчик", ["React", "TypeScript"]);
+  seedVacancy('hh-react-1', 'React-разработчик', ['React', 'TypeScript']);
 
   const net = interceptApplies();
   try {
     resetPacing();
     const result = await runAutoApply();
-    assert.ok(result.applied > 0, "отклик не отправлен");
+    assert.ok(result.applied > 0, 'отклик не отправлен');
 
-    assert.equal(net.bodies.length, result.applied, "число запросов не совпало с числом откликов");
+    assert.equal(net.bodies.length, result.applied, 'число запросов не совпало с числом откликов');
 
     for (const body of net.bodies) {
-      assert.equal(typeof body.message, "string", "в теле отклика нет поля message");
-      const message = String(body.message ?? "");
+      assert.equal(typeof body.message, 'string', 'в теле отклика нет поля message');
+      const message = String(body.message ?? '');
       assert.ok(
         message.trim().length > 40,
         `письмо пустое или слишком короткое: ${JSON.stringify(message.slice(0, 60))}`,
@@ -218,75 +246,78 @@ test("отклик уходит с письмом, а не без него", asy
     }
 
     const row = db
-      .prepare("SELECT message, letter_id FROM applications WHERE user_id = ?")
+      .prepare('SELECT message, letter_id FROM applications WHERE user_id = ?')
       .get(uid) as { message: string; letter_id: number | null };
-    assert.ok(row.message.length > 40, "письмо не сохранено в applications");
-    assert.ok(row.letter_id, "письмо не связано с откликом через letter_id");
+    assert.ok(row.message.length > 40, 'письмо не сохранено в applications');
+    assert.ok(row.letter_id, 'письмо не связано с откликом через letter_id');
   } finally {
     net.restore();
   }
 });
 
-test("выбирается письмо, релевантное вакансии", async () => {
+test('выбирается письмо, релевантное вакансии', async () => {
   seedUser({
     letters: [
-      { title: "Фронтенд", content: "Пишу на React и TypeScript, Next.js в продакшене." },
-      { title: "Бэкенд", content: "Python, Django, PostgreSQL, микросервисы и очереди." },
+      { title: 'Фронтенд', content: 'Пишу на React и TypeScript, Next.js в продакшене.' },
+      { title: 'Бэкенд', content: 'Python, Django, PostgreSQL, микросервисы и очереди.' },
     ],
-    keywords: "react",
+    keywords: 'react',
   });
-  seedVacancy("hh-react-2", "React-разработчик", ["React", "TypeScript"]);
+  seedVacancy('hh-react-2', 'React-разработчик', ['React', 'TypeScript']);
 
   const net = interceptApplies();
   try {
     resetPacing();
     await runAutoApply();
-    assert.equal(net.bodies.length, 1, "ожидался один отклик");
-    const message = String(net.bodies[0]!.message ?? "");
+    assert.equal(net.bodies.length, 1, 'ожидался один отклик');
+    const message = String(net.bodies[0]!.message ?? '');
     assert.match(message, /React|TypeScript/i, `выбрано не то письмо: ${message.slice(0, 120)}`);
-    assert.doesNotMatch(message, /Django|PostgreSQL/i, "выбрано письмо про бэкенд");
+    assert.doesNotMatch(message, /Django|PostgreSQL/i, 'выбрано письмо про бэкенд');
   } finally {
     net.restore();
   }
 });
 
-test("без сохранённых писем отклик всё равно уходит — с шаблоном", async () => {
-  const uid = seedUser({ letters: [], keywords: "react" });
-  seedVacancy("hh-react-3", "React-разработчик", ["React"]);
+test('без сохранённых писем отклик всё равно уходит — с шаблоном', async () => {
+  const uid = seedUser({ letters: [], keywords: 'react' });
+  seedVacancy('hh-react-3', 'React-разработчик', ['React']);
 
   const net = interceptApplies();
   try {
     resetPacing();
     await runAutoApply();
-    assert.equal(net.bodies.length, 1, "отклик не отправлен без писем");
-    const message = String(net.bodies[0]!.message ?? "");
-    assert.ok(message.length > 40, "шаблонное письмо не подставлено");
-    assert.match(message, /React/i, "в шаблонном письме нет названия вакансии");
+    assert.equal(net.bodies.length, 1, 'отклик не отправлен без писем');
+    const message = String(net.bodies[0]!.message ?? '');
+    assert.ok(message.length > 40, 'шаблонное письмо не подставлено');
+    assert.match(message, /React/i, 'в шаблонном письме нет названия вакансии');
 
-    const row = db.prepare("SELECT message, letter_id FROM applications WHERE user_id = ?").get(uid) as {
+    const row = db
+      .prepare('SELECT message, letter_id FROM applications WHERE user_id = ?')
+      .get(uid) as {
       message: string;
       letter_id: number | null;
     };
-    assert.ok(row.message.length > 40, "письмо не сохранено");
-    assert.equal(row.letter_id, null, "шаблонное письмо не должно притворяться сохранённым");
+    assert.ok(row.message.length > 40, 'письмо не сохранено');
+    assert.equal(row.letter_id, null, 'шаблонное письмо не должно притворяться сохранённым');
   } finally {
     net.restore();
   }
 });
 
-test("отклик содержит достижение с цифрой из резюме", async () => {
+test('отклик содержит достижение с цифрой из резюме', async () => {
   seedUser({
     letters: [],
-    keywords: "react",
-    resume: "Разработчик\nОпыт 5 лет\nСократил время загрузки приложения на 40%, LCP с 4.2с до 1.6с",
+    keywords: 'react',
+    resume:
+      'Разработчик\nОпыт 5 лет\nСократил время загрузки приложения на 40%, LCP с 4.2с до 1.6с',
   });
-  seedVacancy("hh-react-4", "React-разработчик", ["React"]);
+  seedVacancy('hh-react-4', 'React-разработчик', ['React']);
 
   const net = interceptApplies();
   try {
     resetPacing();
     await runAutoApply();
-    const message = String(net.bodies[0]?.message ?? "");
+    const message = String(net.bodies[0]?.message ?? '');
     assert.match(
       message,
       /40%|1\.6с|загрузк/i,
@@ -297,17 +328,17 @@ test("отклик содержит достижение с цифрой из р
   }
 });
 
-test("в статистике видно, сколько откликов ушло с письмом", async () => {
-  seedUser({ letters: [], keywords: "react" });
-  seedVacancy("hh-react-5", "React-разработчик", ["React"]);
+test('в статистике видно, сколько откликов ушло с письмом', async () => {
+  seedUser({ letters: [], keywords: 'react' });
+  seedVacancy('hh-react-5', 'React-разработчик', ['React']);
 
   const net = interceptApplies();
   try {
     resetPacing();
     const result = await runAutoApply();
-    assert.ok(result.applied > 0, "отклик не отправлен");
-    assert.equal(result.withLetter, result.applied, "письмо не учтено в статистике прогона");
-    assert.equal(result.withoutLetter, 0, "отклик без письма при наличии шаблона");
+    assert.ok(result.applied > 0, 'отклик не отправлен');
+    assert.equal(result.withLetter, result.applied, 'письмо не учтено в статистике прогона');
+    assert.equal(result.withoutLetter, 0, 'отклик без письма при наличии шаблона');
   } finally {
     net.restore();
   }
@@ -328,7 +359,7 @@ test("в статистике видно, сколько откликов ушл
  * паузу, которая замедляет все последующие отклики. То есть одна запись,
  * пролежавшая в каталоге неделю, отравляла прогон целиком.
  */
-test("на устаревшие вакансии отклик не уходит", async () => {
+test('на устаревшие вакансии отклик не уходит', async () => {
   /*
    * Изолируем прогон двумя приёмами, и оба важны.
    *
@@ -343,7 +374,7 @@ test("на устаревшие вакансии отклик не уходит"
    *    попав на первую вакансию. Пауза здесь не про скорость теста, а про то,
    *    чтобы прогон увидел все три вакансии.
    */
-  seedUser({ letters: [], keywords: "Terraform" });
+  seedUser({ letters: [], keywords: 'Terraform' });
   const now = Date.now();
   const day = 86_400_000;
   /*
@@ -359,23 +390,24 @@ test("на устаревшие вакансии отклик не уходит"
    * Устаревшая вакансия идёт первой специально: тогда без фильтра отклик уйдёт
    * на неё и тест покраснеет.
    */
-  seedVacancy("hh-tf-stale", "Terraform-разработчик", ["Terraform"], now - 5 * day);
-  seedVacancy("hh-tf-old", "Terraform-разработчик", ["Terraform"], now - 30 * day);
-  seedVacancy("hh-tf-fresh", "Terraform-разработчик", ["Terraform"], now - 2 * 3_600_000);
+  seedVacancy('hh-tf-stale', 'Terraform-разработчик', ['Terraform'], now - 5 * day);
+  seedVacancy('hh-tf-old', 'Terraform-разработчик', ['Terraform'], now - 30 * day);
+  seedVacancy('hh-tf-fresh', 'Terraform-разработчик', ['Terraform'], now - 2 * 3_600_000);
 
   const net = interceptApplies();
   try {
     resetPacing();
-    const result = await runAutoApply({ pacing: { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0 } });
+    const result = await runAutoApply({
+      pacing: { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0 },
+    });
 
     const sent = net.bodies.map((b) => String(b.vacancy_id));
-    assert.deepEqual(
-      sent,
-      ["tf-fresh"],
-      `отклик ушёл не туда: ${sent.join(", ") || "(ничего)"}`,
+    assert.deepEqual(sent, ['tf-fresh'], `отклик ушёл не туда: ${sent.join(', ') || '(ничего)'}`);
+    assert.equal(result.applied, 1, 'число откликов не совпало с числом запросов');
+    assert.ok(
+      result.skipped >= 2,
+      `устаревшие вакансии не попали в пропущенные: ${result.skipped}`,
     );
-    assert.equal(result.applied, 1, "число откликов не совпало с числом запросов");
-    assert.ok(result.skipped >= 2, `устаревшие вакансии не попали в пропущенные: ${result.skipped}`);
   } finally {
     net.restore();
   }
@@ -397,28 +429,39 @@ test("на устаревшие вакансии отклик не уходит"
  * закрытой вакансии следующая отправка всё равно происходит. Первая вакансия
  * получает 404, вторая должна получить отклик.
  */
-test("отказ по закрытой вакансии не останавливает отправку", async () => {
-  seedUser({ letters: [], keywords: "Kubernetes" });
+test('отказ по закрытой вакансии не останавливает отправку', async () => {
+  seedUser({ letters: [], keywords: 'Kubernetes' });
   const now = Date.now();
-  seedVacancy("hh-k8s-dead", "Kubernetes-инженер", ["Kubernetes"], now - 3_600_000);
-  seedVacancy("hh-k8s-live", "Kubernetes-инженер", ["Kubernetes"], now - 2 * 3_600_000);
+  seedVacancy('hh-k8s-dead', 'Kubernetes-инженер', ['Kubernetes'], now - 3_600_000);
+  seedVacancy('hh-k8s-live', 'Kubernetes-инженер', ['Kubernetes'], now - 2 * 3_600_000);
 
   // Закрытой отвечаем только первая вакансия.
   const net = interceptApplies((id) =>
-    id === "k8s-dead" ? { status: 404, body: '{"message":"vacancy not found"}' } : { status: 200, body: "{}" },
+    id === 'k8s-dead'
+      ? { status: 404, body: '{"message":"vacancy not found"}' }
+      : { status: 200, body: '{}' },
   );
   try {
     resetPacing();
-    const result = await runAutoApply({ pacing: { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0 } });
+    const result = await runAutoApply({
+      pacing: { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0 },
+    });
 
     const sent = net.bodies.map((b) => String(b.vacancy_id));
-    assert.ok(sent.includes("k8s-dead"), `закрытая вакансия не была опробована: ${sent.join(", ")}`);
     assert.ok(
-      sent.includes("k8s-live"),
-      `после отказа по закрытой вакансии прогон остановился вместо того, чтобы отправить следующую: ${sent.join(", ")}`,
+      sent.includes('k8s-dead'),
+      `закрытая вакансия не была опробована: ${sent.join(', ')}`,
     );
-    assert.equal(result.applied, 1, "вторая вакансия не получила отклик");
-    assert.notEqual(result.pausedFor, "backoff", `включён backoff на закрытой вакансии: ${result.pausedFor}`);
+    assert.ok(
+      sent.includes('k8s-live'),
+      `после отказа по закрытой вакансии прогон остановился вместо того, чтобы отправить следующую: ${sent.join(', ')}`,
+    );
+    assert.equal(result.applied, 1, 'вторая вакансия не получила отклик');
+    assert.notEqual(
+      result.pausedFor,
+      'backoff',
+      `включён backoff на закрытой вакансии: ${result.pausedFor}`,
+    );
   } finally {
     net.restore();
   }
@@ -430,19 +473,21 @@ test("отказ по закрытой вакансии не останавли�
  *
  * 429 означает «платформа тормозит», и замедлиться здесь правильно.
  */
-test("настоящий отказ платформы включает backoff", async () => {
-  seedUser({ letters: [], keywords: "Elixir" });
+test('настоящий отказ платформы включает backoff', async () => {
+  seedUser({ letters: [], keywords: 'Elixir' });
   const now = Date.now();
-  seedVacancy("hh-ex-1", "Elixir-разработчик", ["Elixir"], now - 3_600_000);
-  seedVacancy("hh-ex-2", "Elixir-разработчик", ["Elixir"], now - 2 * 3_600_000);
+  seedVacancy('hh-ex-1', 'Elixir-разработчик', ['Elixir'], now - 3_600_000);
+  seedVacancy('hh-ex-2', 'Elixir-разработчик', ['Elixir'], now - 2 * 3_600_000);
 
   const net = interceptApplies(() => ({ status: 429, body: '{"message":"too many requests"}' }));
   try {
     resetPacing();
-    const result = await runAutoApply({ pacing: { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0 } });
+    const result = await runAutoApply({
+      pacing: { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0 },
+    });
 
     assert.equal(result.failed, 1, `отказ не учтён как неудачный: ${JSON.stringify(result)}`);
-    assert.equal(result.applied, 0, "отклик засчитан при отказе платформы");
+    assert.equal(result.applied, 0, 'отклик засчитан при отказе платформы');
     /*
      * Проверяется, что вторая вакансия не была опробована: после 429 пауза
      * включена и прогон обязан остановиться. Считаем фактические запросы, а не
@@ -451,10 +496,10 @@ test("настоящий отказ платформы включает backoff"
      */
     const sent = net.bodies.map((b) => String(b.vacancy_id));
     assert.ok(
-      !sent.includes("ex-2"),
-      `после 429 прогон пошёл к следующей вакансии вместо паузы: ${sent.join(", ")}`,
+      !sent.includes('ex-2'),
+      `после 429 прогон пошёл к следующей вакансии вместо паузы: ${sent.join(', ')}`,
     );
-    assert.equal(result.pausedFor, "backoff", `на 429 пауза не включена: ${result.pausedFor}`);
+    assert.equal(result.pausedFor, 'backoff', `на 429 пауза не включена: ${result.pausedFor}`);
   } finally {
     net.restore();
   }
@@ -473,7 +518,7 @@ test("настоящий отказ платформы включает backoff"
  * Проверяется поведением, а не строчкой кода: с большой паузой прогон делает
  * один отклик, с нулевой — все подходящие.
  */
-test("переданная пауза влияет на число откликов за тик", async () => {
+test('переданная пауза влияет на число откликов за тик', async () => {
   /*
    * Один пользователь, две вакансии, один прогон.
    *
@@ -484,21 +529,27 @@ test("переданная пауза влияет на число отклик�
    * проверяется на одном прогоне с одной вакансией сверх.
    */
   const now = Date.now();
-  seedUser({ letters: [], keywords: "Erlang" });
-  seedVacancy("hh-er-1", "Erlang-разработчик", ["Erlang"], now - 3_600_000);
-  seedVacancy("hh-er-2", "Erlang-разработчик", ["Erlang"], now - 2 * 3_600_000);
+  seedUser({ letters: [], keywords: 'Erlang' });
+  seedVacancy('hh-er-1', 'Erlang-разработчик', ['Erlang'], now - 3_600_000);
+  seedVacancy('hh-er-2', 'Erlang-разработчик', ['Erlang'], now - 2 * 3_600_000);
 
   const net = interceptApplies();
   try {
     resetPacing();
-    const slow = await runAutoApply({ pacing: { minDelayMs: 600_000, maxDelayMs: 600_000, jitterMinutes: 0 } });
+    const slow = await runAutoApply({
+      pacing: { minDelayMs: 600_000, maxDelayMs: 600_000, jitterMinutes: 0 },
+    });
     assert.equal(slow.applied, 1, `длинная пауза не ограничила тик: ${JSON.stringify(slow)}`);
 
     // Тот же набор, но нулевая пауза: обходится ограничение тика.
-    db.prepare("DELETE FROM applications").run();
+    db.prepare('DELETE FROM applications').run();
     resetPacing();
     const fast = await runAutoApply({ pacing: { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0 } });
-    assert.equal(fast.applied, 2, `нулевая пауза не пропустила второй отклик: ${JSON.stringify(fast)}`);
+    assert.equal(
+      fast.applied,
+      2,
+      `нулевая пауза не пропустила второй отклик: ${JSON.stringify(fast)}`,
+    );
   } finally {
     net.restore();
   }
@@ -515,48 +566,64 @@ test("переданная пауза влияет на число отклик�
  * Проверяется по телу запроса: resume_id обязан совпадать с резюме, которое
  * подобрано под конкретную вакансию.
  */
-test("на вакансию уходит подходящее резюме, а не одно на всё", async () => {
+test('на вакансию уходит подходящее резюме, а не одно на всё', async () => {
   const uid = seedUser({
     letters: [],
-    keywords: "React или Python",
-    resumeHhId: "hh-front",
+    keywords: 'React или Python',
+    resumeHhId: 'hh-front',
     accountResumeId: null,
     // Своё достижение с цифрой: письмо строится по строке резюме с числом,
     // и по нему видно, ЧЬЕ резюме использовалось.
-    resume: "React-разработчик. Сократил LCP с 4.2с до 1.6с на каталоге.",
+    resume: 'React-разработчик. Сократил LCP с 4.2с до 1.6с на каталоге.',
   });
   db.prepare(
     `INSERT INTO resumes (user_id, title, content, hh_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
   ).run(
     uid,
-    "Python Developer",
-    "Python-разработчик. Перевёл отчётность на PostgreSQL, сократил время сбора с 40с до 3с.",
-    "hh-back",
+    'Python Developer',
+    'Python-разработчик. Перевёл отчётность на PostgreSQL, сократил время сбора с 40с до 3с.',
+    'hh-back',
     Date.now() - 60_000,
     Date.now() - 60_000,
   );
   const now = Date.now();
   // Бэкенд вставлен первым: при старой сортировке он и получил бы приоритет.
-  seedVacancy("hh-tf-back", "Python-разработчик", ["Python", "Django", "PostgreSQL"], now - 2 * 3_600_000);
-  seedVacancy("hh-tf-front", "React-разработчик", ["React", "TypeScript", "Next.js"], now - 3_600_000);
+  seedVacancy(
+    'hh-tf-back',
+    'Python-разработчик',
+    ['Python', 'Django', 'PostgreSQL'],
+    now - 2 * 3_600_000,
+  );
+  seedVacancy(
+    'hh-tf-front',
+    'React-разработчик',
+    ['React', 'TypeScript', 'Next.js'],
+    now - 3_600_000,
+  );
 
   const net = interceptApplies();
   try {
     resetPacing();
-    const result = await runAutoApply({ pacing: { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0 } });
+    const result = await runAutoApply({
+      pacing: { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0 },
+    });
     assert.equal(result.applied, 2, `ожидалось два отклика: ${JSON.stringify(result)}`);
 
     const by = new Map(net.bodies.map((b) => [String(b.vacancy_id), String(b.resume_id)]));
-    assert.equal(by.get("tf-front"), "hh-front", `на фронтенд ушло не то резюме: ${by.get("tf-front")}`);
-    assert.equal(by.get("tf-back"), "hh-back", `на бэкенд ушло не то резюме: ${by.get("tf-back")}`);
+    assert.equal(
+      by.get('tf-front'),
+      'hh-front',
+      `на фронтенд ушло не то резюме: ${by.get('tf-front')}`,
+    );
+    assert.equal(by.get('tf-back'), 'hh-back', `на бэкенд ушло не то резюме: ${by.get('tf-back')}`);
 
     // И в истории откликов записано то же, что ушло.
     const rows = db
-      .prepare("SELECT job_slug, resume_id FROM applications WHERE user_id = ?")
+      .prepare('SELECT job_slug, resume_id FROM applications WHERE user_id = ?')
       .all(uid) as { job_slug: string; resume_id: string }[];
-    const stored = new Map(rows.map((r) => [r.job_slug.replace("hh-", ""), r.resume_id]));
-    assert.equal(stored.get("tf-front"), "hh-front", "в истории записано другое резюме, чем ушло");
-    assert.equal(stored.get("tf-back"), "hh-back", "в истории записано другое резюме, чем ушло");
+    const stored = new Map(rows.map((r) => [r.job_slug.replace('hh-', ''), r.resume_id]));
+    assert.equal(stored.get('tf-front'), 'hh-front', 'в истории записано другое резюме, чем ушло');
+    assert.equal(stored.get('tf-back'), 'hh-back', 'в истории записано другое резюме, чем ушло');
 
     /*
      * Письмо пишется по тому же резюме, которое ушло.
@@ -566,23 +633,21 @@ test("на вакансию уходит подходящее резюме, а �
      * фронтенд и отправлял резюме, где этого достижения нет. Для человека это
      * выглядит как ложь в заявке: в письме одно, в резюме другое.
      */
-    const letters = new Map(
-      net.bodies.map((b) => [String(b.vacancy_id), String(b.message ?? "")]),
-    );
+    const letters = new Map(net.bodies.map((b) => [String(b.vacancy_id), String(b.message ?? '')]));
     assert.match(
-      letters.get("tf-front") ?? "",
+      letters.get('tf-front') ?? '',
       /1\.6с|4\.2с/,
-      `письмо на фронтенд построено не по фронтендовому резюме: ${(letters.get("tf-front") ?? "").slice(0, 160)}`,
+      `письмо на фронтенд построено не по фронтендовому резюме: ${(letters.get('tf-front') ?? '').slice(0, 160)}`,
     );
     assert.match(
-      letters.get("tf-back") ?? "",
+      letters.get('tf-back') ?? '',
       /40с|3с/,
-      `письмо на бэкенд построено по чужому резюме: ${(letters.get("tf-back") ?? "").slice(0, 160)}`,
+      `письмо на бэкенд построено по чужому резюме: ${(letters.get('tf-back') ?? '').slice(0, 160)}`,
     );
     assert.doesNotMatch(
-      letters.get("tf-back") ?? "",
+      letters.get('tf-back') ?? '',
       /1\.6с/,
-      "в письмо на бэкенд попало достижение из фронтендового резюме",
+      'в письмо на бэкенд попало достижение из фронтендового резюме',
     );
   } finally {
     net.restore();
@@ -597,25 +662,27 @@ test("на вакансию уходит подходящее резюме, а �
  * `hh_resume_id` аккаунта — так продолжают работать люди, у которых резюме
  * заведено вручную.
  */
-test("ручное резюме не уходит на hh вместо привязанного", async () => {
-  const uid = seedUser({ letters: [], keywords: "react", resumeHhId: null });
+test('ручное резюме не уходит на hh вместо привязанного', async () => {
+  const uid = seedUser({ letters: [], keywords: 'react', resumeHhId: null });
   const now = Date.now();
-  seedVacancy("hh-manual-1", "React-разработчик", ["React", "TypeScript"], now - 3_600_000);
+  seedVacancy('hh-manual-1', 'React-разработчик', ['React', 'TypeScript'], now - 3_600_000);
 
   const net = interceptApplies();
   try {
     resetPacing();
-    const result = await runAutoApply({ pacing: { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0 } });
-    assert.ok(result.applied > 0, "отклик не отправлен");
+    const result = await runAutoApply({
+      pacing: { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0 },
+    });
+    assert.ok(result.applied > 0, 'отклик не отправлен');
     for (const body of net.bodies) {
-      const id = String(body.resume_id ?? "");
-      assert.ok(id.length > 0, "в отклике нет resume_id");
+      const id = String(body.resume_id ?? '');
+      assert.ok(id.length > 0, 'в отклике нет resume_id');
       assert.ok(!/^\d+$/.test(id), `в hh ушло локальное id резюме (${id}) — hh его не примет`);
     }
-    const row = db.prepare("SELECT resume_id FROM applications WHERE user_id = ?").get(uid) as {
+    const row = db.prepare('SELECT resume_id FROM applications WHERE user_id = ?').get(uid) as {
       resume_id: string;
     };
-    assert.equal(row.resume_id, "res123", `взято не то резюме: ${row.resume_id}`);
+    assert.equal(row.resume_id, 'res123', `взято не то резюме: ${row.resume_id}`);
   } finally {
     net.restore();
   }
@@ -628,19 +695,19 @@ test("ручное резюме не уходит на hh вместо прив�
  * может быть несколько резюме, и общее — лишь запасной вариант, когда
  * подходящего привязанного нет.
  */
-test("привязанное резюме побеждает общее", async () => {
-  seedUser({ letters: [], keywords: "react", resumeHhId: "hh-linked", accountResumeId: "res123" });
+test('привязанное резюме побеждает общее', async () => {
+  seedUser({ letters: [], keywords: 'react', resumeHhId: 'hh-linked', accountResumeId: 'res123' });
   const now = Date.now();
-  seedVacancy("hh-link-1", "React-разработчик", ["React", "TypeScript"], now - 3_600_000);
+  seedVacancy('hh-link-1', 'React-разработчик', ['React', 'TypeScript'], now - 3_600_000);
 
   const net = interceptApplies();
   try {
     resetPacing();
     await runAutoApply({ pacing: { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0 } });
-    assert.equal(net.bodies.length, 1, "отклик не отправлен");
+    assert.equal(net.bodies.length, 1, 'отклик не отправлен');
     assert.equal(
       String(net.bodies[0]!.resume_id),
-      "hh-linked",
+      'hh-linked',
       `взято общее резюме вместо привязанного: ${net.bodies[0]!.resume_id}`,
     );
   } finally {

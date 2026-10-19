@@ -1,7 +1,7 @@
-import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import Link from "next/link";
-import { resumeExamples } from "@/lib/data";
+import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
+import Link from 'next/link';
+import { resumeExamples } from '@/lib/data';
 
 export function generateStaticParams() {
   return resumeExamples.map((ex) => ({ slug: ex.slug }));
@@ -14,15 +14,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const ex = resumeExamples.find((e) => e.slug === slug);
-  if (!ex) return { title: "Пример не найден" };
+  if (!ex) return { title: 'Пример не найден' };
   return { title: ex.title, description: ex.preview };
 }
 
-export default async function ResumeExamplePage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
+export default async function ResumeExamplePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const ex = resumeExamples.find((e) => e.slug === slug);
   if (!ex) notFound();
@@ -64,7 +60,10 @@ export default async function ResumeExamplePage({
           </p>
           <div className="mt-5">
             {ex.sections.map((s) => (
-              <section key={s.h} className="border-t border-line py-6 first:border-t-2 first:border-ink">
+              <section
+                key={s.h}
+                className="border-t border-line py-6 first:border-t-2 first:border-ink"
+              >
                 <h2 className="font-serif text-lg leading-snug text-ink">{s.h}</h2>
                 <ul className="mt-3">
                   {s.lines.map((l, i) => (
@@ -94,8 +93,8 @@ export default async function ResumeExamplePage({
           <div className="bg-ink px-6 py-7">
             <h2 className="font-serif text-lg leading-snug text-paper">Хотите так же?</h2>
             <p className="mt-2 text-sm leading-relaxed text-paper">
-              Вставьте этот шаблон в кабинет EZOffer, и AI-улучшение доработает формулировки под ваши
-              вакансии.
+              Вставьте этот шаблон в кабинет EZOffer, и AI-улучшение доработает формулировки под
+              ваши вакансии.
             </p>
             <Link
               href="/signup"

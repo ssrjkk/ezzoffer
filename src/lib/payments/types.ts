@@ -7,7 +7,7 @@
  * проверенного кода, и одна из интеграций рано или поздно будет забыта.
  */
 
-export type MethodId = "card" | "sbp" | "crypto_usdt" | (string & {});
+export type MethodId = 'card' | 'sbp' | 'crypto_usdt' | (string & {});
 
 export type CatalogItem = {
   id: string;
@@ -47,6 +47,14 @@ export type VerifiedEvent = {
   amountRub: number;
   method: MethodId;
   paidAt: number;
+  /**
+   * Что случилось: оплата или возврат.
+   *
+   * Возврат отзывает права, а не удаляет платёж: журнал платежей — это
+   * история, она не переписывается. Без этого деньги возвращались, а тариф
+   * оставался — подписка за чужой счёт.
+   */
+  kind: 'paid' | 'refunded';
 };
 
 export type PaymentProvider = {
@@ -56,6 +64,17 @@ export type PaymentProvider = {
   ready: () => boolean;
   /** Почему не готов, для показа в интерфейсе. */
   reason?: () => string | null;
+  /**
+   * Умеет ли выставить счёт (payUrl или адрес).
+   *
+   * Отдельно от ready: способ может принимать вебхуки (подпись настроена), но
+   * не уметь начинать оплату — карточный эквайринг не подключён, и
+   * createIntent вернёт номер счёта, платить по которому некуда. Честный ответ
+   * тогда — 503 с причиной, а не «счёт создан».
+   */
+  canCheckout: () => boolean;
+  /** Почему счёт не выставить, для показа в интерфейсе. */
+  checkoutReason?: () => string | null;
   createIntent: (input: { userId: number; planId: string }) => PaymentIntent;
   /**
    * Проверяет подпись и разбирает событие.

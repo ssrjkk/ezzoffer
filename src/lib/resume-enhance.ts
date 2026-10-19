@@ -1,5 +1,5 @@
-import { jobs } from "./data";
-import { KEYWORDS } from "./resume-enhance-keys";
+import { jobs } from './data';
+import { KEYWORDS } from './resume-enhance-keys';
 
 /**
  * Детект ключевых навыков.
@@ -15,17 +15,46 @@ import { KEYWORDS } from "./resume-enhance-keys";
  * кириллицы и дефисов вроде «ci/cd».
  */
 function hasWord(text: string, alias: string): boolean {
-  const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(`(^|[^a-zA-Zа-яА-ЯёЁ0-9])${escaped}($|[^a-zA-Zа-яА-ЯёЁ0-9])`, "iu").test(text);
+  const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^a-zA-Zа-яА-ЯёЁ0-9])${escaped}($|[^a-zA-Zа-яА-ЯёЁ0-9])`, 'iu').test(text);
 }
 
 export function detectKeywords(content: string): string[] {
   const text = ` ${content.toLowerCase()} `;
   const found = new Map<string, number>();
-  for (const kw of KEYWORDS) {
-    if (kw.aliases.some((a) => hasWord(text, a))) {
-      found.set(kw.label, kw.label.length);
+  /*
+   * Спорный алиас отдаётся самому специфичному владельцу.
+   *
+   * Алиасы «postgresql» и «postgres» входят в наборы сразу двух навыков — SQL
+   * и PostgreSQL. Раньше текст «Опыт: PostgreSQL» давал оба навыка, и список
+   * ключевых слов (всего 9 слотов) забивался дублями: «PostgreSQL, SQL»
+   * вместо одного «PostgreSQL».
+   *
+   * Правило — самый длинный label среди владельцев алиаса: специфичное имя
+   * длиннее общего. «postgresql» и «postgres» уходят в PostgreSQL; «sql» и
+   * «mysql» остаются у SQL, потому что других владельцев у них нет.
+   */
+  const ownerOf = (alias: string): string | null => {
+    const key = alias.toLowerCase();
+    let best: string | null = null;
+    for (const kw of KEYWORDS) {
+      if (!kw.aliases.some((a) => a.toLowerCase() === key)) continue;
+      if (best === null || kw.label.length > best.length) best = kw.label;
     }
+    return best;
+  };
+  const claimed = new Map<string, string>();
+  for (const kw of KEYWORDS) {
+    for (const a of kw.aliases) {
+      if (!hasWord(text, a)) continue;
+      const owner = ownerOf(a) ?? kw.label;
+      // Один алиас — один навык: повторная заявка того же алиаса от общего
+      // навыка после специфичного игнорируется.
+      if (!claimed.has(a.toLowerCase())) claimed.set(a.toLowerCase(), owner);
+    }
+  }
+  for (const label of claimed.values()) {
+    found.set(label, label.length);
   }
   for (const job of jobs) {
     if (found.size >= 8) break;
@@ -57,18 +86,18 @@ export function enhanceResume(content: string) {
   let out = content;
 
   if (!hasOpros) {
-    notes.push("Добавлен раздел «Опыт работы» с акцентом на результаты");
-    tips.push("Описывайте опыт через достижения с цифрами, а не обязанности");
+    notes.push('Добавлен раздел «Опыт работы» с акцентом на результаты');
+    tips.push('Описывайте опыт через достижения с цифрами, а не обязанности');
   }
   if (!hasEducation) {
-    notes.push("Добавлен раздел «Образование»");
-    tips.push("Покажите профильные курсы и сертификаты, не только вуз");
+    notes.push('Добавлен раздел «Образование»');
+    tips.push('Покажите профильные курсы и сертификаты, не только вуз');
   }
 
   const keywords = detectKeywords(content);
   if (!hasSkills && keywords.length) {
-    notes.push(`Сформирован блок «Ключевые навыки»: ${keywords.join(", ")}`);
-    tips.push("Ключевые навыки должны совпадать с формулировками из вакансий");
+    notes.push(`Сформирован блок «Ключевые навыки»: ${keywords.join(', ')}`);
+    tips.push('Ключевые навыки должны совпадать с формулировками из вакансий');
   }
 
   const hasNumbers = /\d/.test(content);
@@ -84,33 +113,33 @@ export function enhanceResume(content: string) {
      * без процентов; если цифры нет, значит результат пока не измерялся, и
      * придумывать его нельзя.
      */
-    notes.push("Не найдено достижений с измеримым результатом");
+    notes.push('Не найдено достижений с измеримым результатом');
     tips.push(
-      "Опишите, что именно изменилось после вашей работы: что стало быстрее, дешевле или надёжнее. Цифру ставьте только настоящую — выдуманная метрика вскрывается на собеседовании вопросом «как считали?» и стоит дороже, чем её отсутствие.",
+      'Опишите, что именно изменилось после вашей работы: что стало быстрее, дешевле или надёжнее. Цифру ставьте только настоящую — выдуманная метрика вскрывается на собеседовании вопросом «как считали?» и стоит дороже, чем её отсутствие.',
     );
   }
 
   if (!/\n{2}/.test(content)) {
-    out = lines.map((l) => (/^[-\u2022•*]/.test(l) ? l : `- ${l}`)).join("\n");
-    notes.push("Списочные пункты преобразованы в читаемые буллеты");
+    out = lines.map((l) => (/^[-\u2022•*]/.test(l) ? l : `- ${l}`)).join('\n');
+    notes.push('Списочные пункты преобразованы в читаемые буллеты');
   }
 
   const sections: string[] = [];
   if (!hasSkills && keywords.length) {
-    sections.push(`Ключевые навыки\n${keywords.map((k) => `- ${k}`).join("\n")}`);
+    sections.push(`Ключевые навыки\n${keywords.map((k) => `- ${k}`).join('\n')}`);
   }
   sections.push(out);
   if (!hasNumbers) {
     sections.push(
       [
-        "Ключевые результаты (замените шаблоны своими цифрами)",
-        "- Ускорил [процесс] на [N]%, сэкономив команде [N] часов в неделю",
-        "- Увеличил [метрику] с [X] до [Y] за [N] месяцев",
-        "- Привёл [проект] к [результат], при бюджете [N]",
-      ].join("\n"),
+        'Ключевые результаты (замените шаблоны своими цифрами)',
+        '- Ускорил [процесс] на [N]%, сэкономив команде [N] часов в неделю',
+        '- Увеличил [метрику] с [X] до [Y] за [N] месяцев',
+        '- Привёл [проект] к [результат], при бюджете [N]',
+      ].join('\n'),
     );
   }
-  out = sections.join("\n\n");
+  out = sections.join('\n\n');
 
   const beforeScore = scoreResume(content, keywords);
 
@@ -141,7 +170,7 @@ export function enhanceResume(content: string) {
  */
 function isSectionHeader(line: string): boolean {
   if (line.length >= 60) return false;
-  const bare = line.replace(/^[-•*•]\s*/, "").trim();
+  const bare = line.replace(/^[-•*•]\s*/, '').trim();
   return /^(опыт|работ|образован|навык|проект|контакт)/i.test(bare);
 }
 

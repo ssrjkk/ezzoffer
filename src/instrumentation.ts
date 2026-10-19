@@ -17,9 +17,9 @@
  */
 
 export async function register(): Promise<void> {
-  if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  if (process.env.NEXT_RUNTIME !== 'nodejs') return;
 
-  const { startNodeRuntime } = await import("@/lib/bootstrap");
+  const { startNodeRuntime } = await import('@/lib/bootstrap');
   await startNodeRuntime();
 }
 
@@ -31,14 +31,12 @@ export function onRequestError(
     headers: Record<string, string | string[] | undefined>;
   }>,
   context: Readonly<{
-    routerKind: "Pages Router" | "App Router";
+    routerKind: 'Pages Router' | 'App Router';
     routePath: string;
-    routeType: "render" | "route" | "action" | "proxy";
+    routeType: 'render' | 'route' | 'action' | 'proxy';
     renderSource?:
-      | "react-server-components"
-      | "react-server-components-payload"
-      | "server-rendering";
-    revalidateReason: "on-demand" | "stale" | undefined;
+      'react-server-components' | 'react-server-components-payload' | 'server-rendering';
+    revalidateReason: 'on-demand' | 'stale' | undefined;
   }>,
 ): void {
   const line = `[request:${context.routeType}] ${error instanceof Error ? (error.stack ?? error.message) : String(error)}`;

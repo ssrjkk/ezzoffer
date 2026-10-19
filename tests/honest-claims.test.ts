@@ -1,7 +1,7 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 /**
  * Обещания о безопасности должны соответствовать коду.
@@ -39,40 +39,40 @@ function sourceFiles(): string[] {
   const out: string[] = [];
   const walk = (dir: string): void => {
     for (const e of readdirSync(dir, { withFileTypes: true })) {
-      if (e.name === "node_modules" || e.name === ".next" || e.name.startsWith(".")) continue;
+      if (e.name === 'node_modules' || e.name === '.next' || e.name.startsWith('.')) continue;
       const full = join(dir, e.name);
       if (e.isDirectory()) walk(full);
       else if (/\.tsx?$/.test(e.name)) out.push(full);
     }
   };
-  walk(join(process.cwd(), "src"));
+  walk(join(process.cwd(), 'src'));
   return out.sort();
 }
 
 /** Возвращает текст, попадающий пользователю: убираем комментарии и код. */
 function userFacingText(source: string): string {
   return source
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/\{\/\*[\s\S]*?\*\/\}/g, " ")
-    .replace(/\/\/[^\n]*/g, " ");
+    .replace(/\/\*[\s\S]*?\*\//g, ' ')
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, ' ')
+    .replace(/\/\/[^\n]*/g, ' ');
 }
 
-test("текст не обещает отсутствие блокировки", () => {
+test('текст не обещает отсутствие блокировки', () => {
   // Проверяется наличие ТОЧНЫХ оборотов. Общее «безопасно» пропускаем:
   // оно может относиться к шифрованию или к хранению паролей.
   const FORBIDDEN = [
-    "никаких серых схем, рисков и блокировок",
-    "без рисков и блокировок",
-    "исключает блокировку",
-    "гарантирует отсутствие блокировки",
+    'никаких серых схем, рисков и блокировок',
+    'без рисков и блокировок',
+    'исключает блокировку',
+    'гарантирует отсутствие блокировки',
   ];
 
   const offenders: string[] = [];
   for (const file of sourceFiles()) {
-    const text = userFacingText(readFileSync(file, "utf8")).toLowerCase();
+    const text = userFacingText(readFileSync(file, 'utf8')).toLowerCase();
     for (const phrase of FORBIDDEN) {
       if (text.includes(phrase)) {
-        const line = readFileSync(file, "utf8").slice(0, text.indexOf(phrase)).split("\n").length;
+        const line = readFileSync(file, 'utf8').slice(0, text.indexOf(phrase)).split('\n').length;
         offenders.push(`${file}:~${line}  «${phrase}»`);
       }
     }
@@ -81,11 +81,11 @@ test("текст не обещает отсутствие блокировки",
   assert.deepEqual(
     offenders,
     [],
-    `текст обещает то, чего сервис не гарантирует:\n${offenders.join("\n")}`,
+    `текст обещает то, чего сервис не гарантирует:\n${offenders.join('\n')}`,
   );
 });
 
-test("текст не отрицает хранение токена доступа", () => {
+test('текст не отрицает хранение токена доступа', () => {
   /*
    * Единственное место, где сервис прямо говорит, что не хранит токен, —
    * /platform-rules: там сказано, что при отзыве доступа отклики
@@ -93,19 +93,19 @@ test("текст не отрицает хранение токена досту�
    * hh-oauth.ts пишет токены в базу, и это необходимо для работы.
    */
   const FORBIDDEN = [
-    "не храним доступы",
-    "не храним токен",
-    "не храним пароль",
-    "не управляем вашим профилем и не храним",
+    'не храним доступы',
+    'не храним токен',
+    'не храним пароль',
+    'не управляем вашим профилем и не храним',
   ];
 
   const offenders: string[] = [];
   for (const file of sourceFiles()) {
-    const raw = readFileSync(file, "utf8");
+    const raw = readFileSync(file, 'utf8');
     const text = userFacingText(raw).toLowerCase();
     for (const phrase of FORBIDDEN) {
       if (text.includes(phrase)) {
-        const line = raw.slice(0, raw.toLowerCase().indexOf(phrase)).split("\n").length;
+        const line = raw.slice(0, raw.toLowerCase().indexOf(phrase)).split('\n').length;
         offenders.push(`${file}:~${line}  «${phrase}»`);
       }
     }
@@ -114,29 +114,29 @@ test("текст не отрицает хранение токена досту�
   assert.deepEqual(
     offenders,
     [],
-    `сервис хранит токен (users.hh_token) — отрицать это в тексте нельзя:\n${offenders.join("\n")}`,
+    `сервис хранит токен (users.hh_token) — отрицать это в тексте нельзя:\n${offenders.join('\n')}`,
   );
 });
 
-test("текст не отрицает маскировку под человека", () => {
+test('текст не отрицает маскировку под человека', () => {
   // anti-ban.ts реализует обходное поведение, поэтому фразы
   // «не обходим защиту платформ» и «неотличимы от ручных» ложны:
   // первое — про то, чего код не делает; второе — про то, что он
   // делает как раз.
   const FORBIDDEN = [
-    "не обходим защиту платформ",
-    "не имитируем поддельные действия",
-    "неотличимы от ручных",
-    "отклики неотличимы",
+    'не обходим защиту платформ',
+    'не имитируем поддельные действия',
+    'неотличимы от ручных',
+    'отклики неотличимы',
   ];
 
   const offenders: string[] = [];
   for (const file of sourceFiles()) {
-    const raw = readFileSync(file, "utf8");
+    const raw = readFileSync(file, 'utf8');
     const text = userFacingText(raw).toLowerCase();
     for (const phrase of FORBIDDEN) {
       if (text.includes(phrase)) {
-        const line = raw.slice(0, raw.toLowerCase().indexOf(phrase)).split("\n").length;
+        const line = raw.slice(0, raw.toLowerCase().indexOf(phrase)).split('\n').length;
         offenders.push(`${file}:~${line}  «${phrase}»`);
       }
     }
@@ -145,7 +145,7 @@ test("текст не отрицает маскировку под челове�
   assert.deepEqual(
     offenders,
     [],
-    `anti-ban.ts добавляет паузы, чтобы не выглядеть ботом — отрицать это нельзя:\n${offenders.join("\n")}`,
+    `anti-ban.ts добавляет паузы, чтобы не выглядеть ботом — отрицать это нельзя:\n${offenders.join('\n')}`,
   );
 });
 
@@ -157,20 +157,18 @@ test("текст не отрицает маскировку под челове�
  * остались все три оговорки: про токен, про блокировку и про то, что
  * сервис управляет откликами от вашего имени.
  */
-test("страница правил сохраняет оговорки о рисках", () => {
-  const rules = userFacingText(readFileSync("src/app/platform-rules/page.tsx", "utf8")).toLowerCase();
+test('страница правил сохраняет оговорки о рисках', () => {
+  const rules = userFacingText(
+    readFileSync('src/app/platform-rules/page.tsx', 'utf8'),
+  ).toLowerCase();
 
   const REQUIRED = [
-    ["токен хранится", "храним токен"],
-    ["возможна блокировка", "блокировк"],
-    ["паузы и лимиты", "пауз"],
-    ["официальный api", "api"],
+    ['токен хранится', 'храним токен'],
+    ['возможна блокировка', 'блокировк'],
+    ['паузы и лимиты', 'пауз'],
+    ['официальный api', 'api'],
   ];
 
   const missing = REQUIRED.filter(([, needle]) => !rules.includes(needle)).map(([label]) => label);
-  assert.deepEqual(
-    missing,
-    [],
-    `на /platform-rules пропали оговорки: ${missing.join(", ")}`,
-  );
+  assert.deepEqual(missing, [], `на /platform-rules пропали оговорки: ${missing.join(', ')}`);
 });

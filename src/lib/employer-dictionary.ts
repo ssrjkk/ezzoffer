@@ -16,7 +16,7 @@
  * Подробное сравнение с резюме — задача Фазы 5 («проверка утверждений»).
  */
 
-import { KEYWORDS } from "./resume-enhance-keys";
+import { KEYWORDS } from './resume-enhance-keys';
 
 export type Requirement = {
   /** Каноническое имя навыка, как его пишет человек. */
@@ -39,10 +39,24 @@ export type ResumeMatchResult = {
   notice: string;
 };
 
-/** Считает вхождения алиаса по границам слова, а не подстроке. */
+/*
+ * Считает вхождения алиаса по границам слова, а не подстроке.
+ *
+ * Границы — через lookaround, а не потребляющие группы.
+ *
+ * Раньше шаблон был `(^|[^...])alias($|[^...])`: граничные символы ВХОДИЛИ в
+ * совпадение и съедались им. При повторе через один пробел («React react»)
+ * пробел уходил в первое совпадение, и второму уже не хватало ведущей
+ * границы — два вхождения считались как одно. С запятыми («React, react»)
+ * ошибки не было, поэтому она долго не попадалась на глаза: в реальных
+ * текстах навыки чаще перечисляются через запятую.
+ *
+ * Недосчёт бил по сортировке требований (частота — первый ключ) и по
+ * формулировкам «требовался в N вакансиях».
+ */
 function countWord(text: string, alias: string): number {
-  const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(`(^|[^a-zA-Zа-яА-ЯёЁ0-9])${escaped}($|[^a-zA-Zа-яА-ЯёЁ0-9])`, "giu");
+  const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`(?<![a-zA-Zа-яА-ЯёЁ0-9])${escaped}(?![a-zA-Zа-яА-ЯёЁ0-9])`, 'giu');
   return [...text.matchAll(re)].length;
 }
 
@@ -66,9 +80,7 @@ export function employerDictionary(vacancyText: string): Requirement[] {
     if (mentions > 0) found.push({ label: kw.label, mentions });
   }
 
-  return found.sort(
-    (a, b) => b.mentions - a.mentions || b.label.length - a.label.length,
-  );
+  return found.sort((a, b) => b.mentions - a.mentions || b.label.length - a.label.length);
 }
 
 /**
@@ -87,7 +99,7 @@ export function resumeMatch(resumeText: string, vacancyText: string): ResumeMatc
       missing: [],
       coverage: 0,
       notice:
-        "В вакансии не распознано требований — не с чем сравнивать. Словарь строится по известным навыкам, а не по любому тексту.",
+        'В вакансии не распознано требований — не с чем сравнивать. Словарь строится по известным навыкам, а не по любому тексту.',
     };
   }
 
@@ -96,15 +108,15 @@ export function resumeMatch(resumeText: string, vacancyText: string): ResumeMatc
   const missing: MatchItem[] = [];
 
   for (const req of requirements) {
-    const present = KEYWORDS
-      .filter((k) => k.label === req.label)
-      .some((k) => k.aliases.some((a) => countWord(resume, a.toLowerCase()) > 0));
+    const present = KEYWORDS.filter((k) => k.label === req.label).some((k) =>
+      k.aliases.some((a) => countWord(resume, a.toLowerCase()) > 0),
+    );
 
     const item: MatchItem = {
       ...req,
       hint: present
-        ? "Навык есть в резюме теми же словами, что и в вакансии — это то, что читает фильтр."
-        : "Требование вакансии, которого нет в резюме. Если опыт есть — напишите о нём своими словами; если нет — это честный пробел, и подставлять его не стоит.",
+        ? 'Навык есть в резюме теми же словами, что и в вакансии — это то, что читает фильтр.'
+        : 'Требование вакансии, которого нет в резюме. Если опыт есть — напишите о нём своими словами; если нет — это честный пробел, и подставлять его не стоит.',
     };
     (present ? matched : missing).push(item);
   }
@@ -112,7 +124,7 @@ export function resumeMatch(resumeText: string, vacancyText: string): ResumeMatc
   const coverage = matched.length / requirements.length;
   const notice =
     missing.length === 0
-      ? "Все распознанные требования вакансии встречаются в резюме."
+      ? 'Все распознанные требования вакансии встречаются в резюме.'
       : `В пробеле ${missing.length} из ${requirements.length} требований вакансии. Совпадение по словам — это входной фильтр, а не обещание ответа: дальше смотрит человек.`;
 
   return { matched, missing, coverage, notice };

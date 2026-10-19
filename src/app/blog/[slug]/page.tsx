@@ -1,12 +1,12 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import { notFound } from "next/navigation";
-import { articles } from "@/lib/data";
-import { articleDateIso } from "@/lib/article-date";
-import { JsonLd } from "@/components/json-ld";
-import { CtaPanel } from "@/components/cta-panel";
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+import { articles } from '@/lib/data';
+import { articleDateIso } from '@/lib/article-date';
+import { JsonLd } from '@/components/json-ld';
+import { CtaPanel } from '@/components/cta-panel';
 
-const siteUrl = process.env.SITE_URL ?? "https://ezoffer.ru";
+const siteUrl = process.env.SITE_URL ?? 'https://ezoffer.ru';
 
 export function generateStaticParams() {
   return articles.map((article) => ({ slug: article.slug }));
@@ -19,15 +19,11 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const article = articles.find((a) => a.slug === slug);
-  if (!article) return { title: "Статья не найдена" };
+  if (!article) return { title: 'Статья не найдена' };
   return { title: article.title, description: article.excerpt };
 }
 
-export default async function ArticlePage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
+export default async function ArticlePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const article = articles.find((a) => a.slug === slug);
   if (!article) notFound();
@@ -51,15 +47,20 @@ export default async function ArticlePage({
     <div className="container-x py-12 md:py-16">
       <JsonLd
         data={{
-          "@context": "https://schema.org",
-          "@type": "Article",
+          '@context': 'https://schema.org',
+          '@type': 'Article',
           headline: article.title,
           description: article.excerpt,
           datePublished: publishedIso,
           dateModified: publishedIso,
-          inLanguage: "ru-RU",
-          author: { "@type": "Organization", name: "EZOffer", url: siteUrl },
-          publisher: { "@type": "Organization", name: "EZOffer", url: siteUrl, logo: `${siteUrl}/icon.svg` },
+          inLanguage: 'ru-RU',
+          author: { '@type': 'Organization', name: 'EZOffer', url: siteUrl },
+          publisher: {
+            '@type': 'Organization',
+            name: 'EZOffer',
+            url: siteUrl,
+            logo: `${siteUrl}/icon.svg`,
+          },
         }}
       />
       <Link
@@ -72,14 +73,14 @@ export default async function ArticlePage({
       <article className="mx-auto mt-8 max-w-3xl">
         <header className="border-t-2 border-ink pt-6">
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2 font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
-          <span className="text-accent">{article.category}</span>
-          <span>{article.minutes} мин чтения</span>
-          <time dateTime={articleDateIso(article.date) ?? undefined}>{article.date}</time>
-        </div>
-        <h1 className="display mt-5 text-balance text-3xl md:text-5xl">{article.title}</h1>
-        <p className="measure mt-5 text-base leading-relaxed text-muted md:text-lg">
-          {article.excerpt}
-        </p>
+            <span className="text-accent">{article.category}</span>
+            <span>{article.minutes} мин чтения</span>
+            <time dateTime={articleDateIso(article.date) ?? undefined}>{article.date}</time>
+          </div>
+          <h1 className="display mt-5 text-balance text-3xl md:text-5xl">{article.title}</h1>
+          <p className="measure mt-5 text-base leading-relaxed text-muted md:text-lg">
+            {article.excerpt}
+          </p>
         </header>
 
         <div className="mt-12 space-y-12">

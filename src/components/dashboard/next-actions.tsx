@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { useState } from "react";
-import type { NextAction } from "@/lib/pipeline";
+import Link from 'next/link';
+import { useState } from 'react';
+import type { NextAction } from '@/lib/pipeline';
 
 /**
  * Что делать дальше.
@@ -81,7 +81,7 @@ function DraftBlock({ text }: { text: string }) {
 
   return (
     <details className="mt-3">
-      <summary className="cursor-pointer font-mono text-[11px] uppercase tracking-[0.14em] text-muted hover:text-accent">
+      <summary className="-my-2 inline-flex min-h-11 cursor-pointer items-center py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-muted hover:text-accent">
         Текст напоминания
       </summary>
       <div className="mt-2 border border-line bg-surface-2 p-4">
@@ -95,18 +95,18 @@ function DraftBlock({ text }: { text: string }) {
           <button
             type="button"
             onClick={copy}
-            className="font-mono text-[11px] uppercase tracking-[0.14em] text-accent underline underline-offset-4 hover:text-ink"
+            className="-my-2 inline-flex min-h-11 items-center py-2 font-mono text-[11px] uppercase tracking-[0.14em] text-accent underline underline-offset-4 hover:text-ink"
           >
             Скопировать
           </button>
           <span role="status" aria-live="polite" className="text-xs text-success">
-            {copied ? "Скопировано" : ""}
+            {copied ? 'Скопировано' : ''}
           </span>
         </div>
 
         <p className="mt-2 text-xs leading-snug text-muted">
-          Вставьте в чат на hh.ru. Отправку делает сам человек: API hh не даёт
-          сервису писать работодателю от имени соискателя.
+          Вставьте в чат на hh.ru. Отправку делает сам человек: API hh не даёт сервису писать
+          работодателю от имени соискателя.
         </p>
       </div>
     </details>

@@ -1,112 +1,179 @@
-import test from "node:test";
-import assert from "node:assert/strict";
+import test from 'node:test';
+import assert from 'node:assert/strict';
 import {
   responseForHhState,
-  isViewedState,
   isClosedState,
+  isReviewedNegotiation,
   hhStateLabel,
-} from "../src/lib/hh-states";
+} from '../src/lib/hh-states';
 
 /**
  * Соответствие состояний hh.ru внутренним статусам.
  *
- * Регрессия: синхронизация смотрела на четыре состояния (`viewed`,
- * `invitation`, `offer`, `chat`) и молча игнорировала все остальные.
- * Последствия были не косметические:
+ * Регрессия: модуль утверждал, что соответствие «взято из документации
+ * hh.ru», и содержал состояния, которых у соискателя на площадке НЕТ.
+ * Живой словарь `GET /dictionaries`, ключ `negotiations_state`, отдаёт ровно
+ * шесть: response, invitation, discard, hidden, interview, hired.
  *
- *  - «Отказы» в статистике были нулем ВСЕГДА — `decline` считался в getStats,
- *    но не записывался ни одной строкой в коде. Человек видел «Отказы: 0» и
- *    думал, что его не отказывают;
- *  - отличить «отказ» от «просто не ответили» было невозможно, значит
- *    подсказка «проверьте резюме» не могла появиться;
- *  - `screening` (HR взял в работу) считался вопросом соискателю.
+ * Из них в таблице соответствия был только `invitation`. Остальные пять
+ * попадали в «нет ответа», а отказ (`discard`) не был ещё и в CLOSED_STATES.
  *
- * Отдельно проверяется то, что НЕ должно считаться отказом: `on_hallow`
- * и подобные — это пауза, отклик жив.
+ * Что это значило на живых данных:
+ *  - «Отказы» в статистике равнялись нулю ВСЕГДА — ветка записи
+ *    `status='declined'` была недостижима;
+ *  - приглашение на собеседование (`interview`) и «Выход на работу» (`hired`)
+ *    записывались как отсутствие реакции;
+ *  - VIEWED_STATES состоял из выдуманных id, поэтому `viewed_at` не писался
+ *    никогда и «Просмотрено» было нулём.
+ *
+ * Тесты ниже сверяются с реальным словарём площадки, а не с предположением о
+ * нём: это единственный способ не повторить ту же ошибку через год.
  */
 
-test("отказы с площадки распознаются как отказы", () => {
-  for (const state of [
-    "rejected",
-    "rejected_after_review",
-    "declined",
-    "discarded",
-    "cancelled",
-    "invalid",
-    "not_relevant",
-  ]) {
+/** Состояния из живого ответа hh.ru/dictionaries → negotiations_state. */
+const REAL_HH_STATES = [
+  'response',
+  'invitation',
+  'discard',
+  'hidden',
+  'interview',
+  'hired',
+] as const;
+
+/**
+ * Отказ распознаётся, и закрытым считается только он.
+ *
+ * `discard` — единственное состояние, означающее «работодатель отказал».
+ */
+test('единственный настоящий отказ площадки — discard', () => {
+  assert.equal(
+    responseForHhState('discard'),
+    'decline',
+    'отказ на hh не распознан — «Отказы» в статистике останутся нулевыми',
+  );
+  assert.ok(isClosedState('discard'), 'discard не считается закрытым');
+});
+
+test('приглашение и собеседование распознаются как приглашение', () => {
+  for (const state of ['invitation', 'interview']) {
     assert.equal(
       responseForHhState(state),
-      "decline",
-      `состояние «${state}» не распознано как отказ`,
+      'interview',
+      `«${state}» — реальное состояние площадки, но не приглашение`,
     );
-    assert.ok(isClosedState(state), `«${state}» не считается закрытым`);
+    assert.ok(!isClosedState(state), `«${state}» засчитано как закрытие`);
   }
 });
 
-test("приглашение распознаётся как собеседование", () => {
-  for (const state of ["invitation", "invited", "offer"]) {
-    assert.equal(responseForHhState(state), "interview", `«${state}» не приглашение`);
-  }
-});
-
-test("вопрос HR распознаётся как вопрос, а HR-скрининг не путается с отказом", () => {
-  assert.equal(responseForHhState("question"), "question");
-  assert.equal(responseForHhState("chat"), "question");
+test('выход на работу — сильнейший исход, а не «нет ответа»', () => {
   assert.equal(
-    responseForHhState("screening"),
-    "question",
-    "screening — это работа HR, а не отказ и не ответ соискателю",
+    responseForHhState('hired'),
+    'interview',
+    'наняли, а в статистике «нет ответа» — самый обидный вид неправды',
   );
 });
 
-test("пауза работодателя не считается ни отказом, ни ответом", () => {
+test('скрытая переписка не отказ и не ответ', () => {
   /*
-   * on_hold — «работодатель взял отклик на паузу». Отклик жив. Приравнивать
-   * его к отказу было бы прямой ложью в статистике: человек увидел бы
-   * десяток отказов, которых не было.
+   * `hidden` — действие соискателя или площадки (настройки видимости),
+   * а не решение работодателя. Засчитать его отказом значило бы писать в
+   * статистику то, чего не было.
    */
-  assert.equal(responseForHhState("on_hold"), "", "пауза засчитана как результат");
-  assert.ok(!isClosedState("on_hold"), "пауза засчитана как закрытие");
+  assert.equal(responseForHhState('hidden'), '');
+  assert.ok(!isClosedState('hidden'), 'скрытая переписка засчитана как отказ');
 });
 
-test("просмотр резюме отмечается, но не как ответ", () => {
-  assert.equal(responseForHhState("viewed"), "viewed");
-  assert.ok(isViewedState("viewed"), "просмотр не отмечен");
-  assert.ok(!isClosedState("viewed"), "просмотр засчитан как закрытие");
+test('свежий отклик без реакции — пустой статус', () => {
+  assert.equal(responseForHhState('response'), '');
+  assert.ok(!isClosedState('response'));
 });
 
-test("вопрос и приглашение тоже означают просмотр", () => {
-  // Иначе знаменатель «просмотрено» оказывался бы меньше числителя
-  // «ответили», и конверсия выходила бы выше 100%.
-  for (const state of ["question", "invitation", "offer", "screening"]) {
-    assert.ok(isViewedState(state), `«${state}» не означает просмотр`);
+/**
+ * Главный тест файла: НИ ОДНОГО состояния реального словаря не должно
+ * молча превращаться в «нет ответа».
+ *
+ * Именно это и произошло раньше: пять состояний из шести не были описаны.
+ */
+test('каждое реальное состояние словаря описано явно', () => {
+  for (const state of REAL_HH_STATES) {
+    const known = state === 'response' || state === 'hidden' || REAL_HH_STATES.includes(state);
+    assert.ok(known, `состояние «${state}» выпало из рассмотрения`);
+  }
+  // Смысл проверки: для каждого состояния ответ известен заранее.
+  const expected: Record<string, string> = {
+    response: '',
+    invitation: 'interview',
+    discard: 'decline',
+    hidden: '',
+    interview: 'interview',
+    hired: 'interview',
+  };
+  for (const [state, want] of Object.entries(expected)) {
+    assert.equal(responseForHhState(state), want, `состояние «${state}»: ожидалось «${want}»`);
   }
 });
 
-test("неизвестное состояние не превращается в отказ", () => {
+/**
+ * Состояния, которых у соискателя на hh нет, но которые были в таблице.
+ *
+ * Список зафиксирован намеренно. Если кто-то снова внесёт их «на всякий
+ * случай», тест покажет, что внесено то, чего площадка не отдаёт, — то есть
+ * баг, из-за которого отказы и просмотры были нулевыми.
+ */
+test('несуществующие на стороне соискателя состояния не маскируются под реальные', () => {
+  const invented = ['viewed', 'rejected', 'discarded', 'declined', 'screening', 'invited', 'offer'];
+  for (const state of invented) {
+    assert.ok(
+      !REAL_HH_STATES.includes(state as (typeof REAL_HH_STATES)[number]),
+      `«${state}» вдруг стал настоящим состоянием — обновите соответствие`,
+    );
+  }
+  // И они не должны влиять на результат: неизвестное = «нет ответа».
+  for (const state of invented) {
+    assert.equal(responseForHhState(state), '', `выдуманное «${state}» истолковано как результат`);
+    assert.ok(!isClosedState(state), `выдуманное «${state}» засчитано как закрытие`);
+  }
+});
+
+test('неизвестное состояние не превращается в отказ', () => {
   /*
    * Площадка добавляет состояния. Неизвестное должно означать «нет
    * реакции», а не «отказ»: иначе появление нового состояния на hh
    * молча испортило бы статистику у всех пользователей разом.
    */
-  for (const state of ["что-то_новое", "some_new_state", "", null, undefined]) {
+  for (const state of ['что-то_новое', 'some_new_state', '', null, undefined]) {
     assert.equal(
       responseForHhState(state),
-      "",
+      '',
       `неизвестное состояние «${state}» истолковано как результат`,
     );
     assert.ok(!isClosedState(state), `«${state}» засчитано как закрытие`);
   }
 });
 
-test("причина отказа сохраняется текстом", () => {
+/**
+ * «Рассмотрено» приходит флагом в теле переписки, а не состоянием.
+ *
+ * У hh НЕТ состояния «резюме посмотрели» — среди шести состояний словаря
+ * такого нет, и площадка не отдаёт соискателю факт открытия резюме.
+ * Единственный честный признак, что работодатель дошёл до рассмотрения, —
+ * `reviewed`. Называть его «просмотром» нельзя, поэтому и в коде, и в UI
+ * это «рассмотрено».
+ */
+test('рассмотрение определяется флагом reviewed, а не догадкой о состоянии', () => {
+  assert.equal(isReviewedNegotiation(true), true);
+  for (const value of [false, undefined, null, 0, 1, 'true', '']) {
+    assert.equal(
+      isReviewedNegotiation(value),
+      false,
+      `значение ${JSON.stringify(value)} принято за «рассмотрено»`,
+    );
+  }
+});
+
+test('причина отказа сохраняется текстом', () => {
   // hh присылает причину в state.name, и именно она объясняет пользователю,
   // что не сработало. Раньше причина терялась: сохранялось «interview».
-  assert.equal(
-    hhStateLabel("rejected_after_review"),
-    "rejected after review",
-    "подпись состояния не читается",
-  );
+  assert.equal(hhStateLabel('discard'), 'discard');
   assert.equal(hhStateLabel(null), null);
 });

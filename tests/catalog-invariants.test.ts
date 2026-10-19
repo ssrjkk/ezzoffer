@@ -1,5 +1,5 @@
-import test, { before } from "node:test";
-import assert from "node:assert/strict";
+import test, { before } from 'node:test';
+import assert from 'node:assert/strict';
 
 /**
  * Инварианты на всём живом каталоге.
@@ -28,28 +28,26 @@ type Row = {
 };
 
 let db: { prepare(sql: string): { all(...a: unknown[]): unknown[] } };
-let direction: typeof import("../src/lib/direction");
+let direction: typeof import('../src/lib/direction');
 
-const LEVELS = new Set(["Intern", "Junior", "Middle", "Senior"]);
-const FORMATS = new Set(["Удалённо", "Гибрид", "В офисе"]);
-const FREELANCE = new Set(["flru", "kwork"]);
+const LEVELS = new Set(['Intern', 'Junior', 'Middle', 'Senior']);
+const FORMATS = new Set(['Удалённо', 'Гибрид', 'В офисе']);
+const FREELANCE = new Set(['flru', 'kwork']);
 
 before(async () => {
-  process.env.EZOFFER_SILENT = "1";
-  db = (await import("../src/lib/db")).db as never;
-  direction = await import("../src/lib/direction");
-  await (await import("../src/lib/vacancies")).refreshProviders({ limit: 100 });
+  process.env.EZOFFER_SILENT = '1';
+  db = (await import('../src/lib/db')).db as never;
+  direction = await import('../src/lib/direction');
+  await (await import('../src/lib/vacancies')).refreshProviders({ limit: 100 });
 });
 
 function catalog(): Row[] {
   return db
-    .prepare(
-      `SELECT slug, source, title, category, about, level, employment FROM vacancies`,
-    )
+    .prepare(`SELECT slug, source, title, category, about, level, employment FROM vacancies`)
     .all() as Row[];
 }
 
-test("инварианты каталога", async (t) => {
+test('инварианты каталога', async (t) => {
   const rows = catalog();
   if (rows.length < 200) {
     t.skip(`каталог мал (${rows.length}) — источники не обновились`);
@@ -65,17 +63,17 @@ test("инварианты каталога", async (t) => {
 
   const slugs = new Set<string>();
   for (const r of rows) {
-    const text = [r.title, r.about, r.category].join(" ");
+    const text = [r.title, r.about, r.category].join(' ');
     const dir = direction.detectDirection(r.category, r.title, text);
     const mode = direction.detectWorkMode(text, FREELANCE.has(r.source), r.employment);
 
-    if (!direction.DIRECTION_LABELS[dir]) add("направление без подписи", r.title);
+    if (!direction.DIRECTION_LABELS[dir]) add('направление без подписи', r.title);
     if (!LEVELS.has(r.level)) add(`грейд не из четырёх: «${r.level}»`, r.title);
-    if (!direction.WORK_MODE_LABELS[mode]) add("режим работы не определён", r.title);
-    if (slugs.has(r.slug)) add("слаг повторяется", `${r.title} (${r.source})`);
+    if (!direction.WORK_MODE_LABELS[mode]) add('режим работы не определён', r.title);
+    if (slugs.has(r.slug)) add('слаг повторяется', `${r.title} (${r.source})`);
     slugs.add(r.slug);
-    if (!r.title.trim()) add("пустой заголовок", r.slug);
-    if (r.employment?.trim() === "—") add("прочерк вместо пустого значения занятости", r.title);
+    if (!r.title.trim()) add('пустой заголовок', r.slug);
+    if (r.employment?.trim() === '—') add('прочерк вместо пустого значения занятости', r.title);
 
     /*
      * Поле занятости и режим обязаны совпадать.
@@ -85,40 +83,51 @@ test("инварианты каталога", async (t) => {
      * в поле только полная занятость, подработкой быть не может.
      */
     const sidegig = /неполн|частичн|гибк|временн|сезонн|договор/i;
-    if (r.employment && sidegig.test(r.employment) && mode !== "подработка") {
-      add("поле обещает подработку, режим другой", r.title);
+    if (r.employment && sidegig.test(r.employment) && mode !== 'подработка') {
+      add('поле обещает подработку, режим другой', r.title);
     }
-    if (r.employment && /полная занятость/i.test(r.employment) && !sidegig.test(r.employment) && mode === "подработка") {
-      add("поле обещает основную, режим подработка", r.title);
+    if (
+      r.employment &&
+      /полная занятость/i.test(r.employment) &&
+      !sidegig.test(r.employment) &&
+      mode === 'подработка'
+    ) {
+      add('поле обещает основную, режим подработка', r.title);
     }
 
     /* Профессии вне IT не должны получать цифровое направление. */
     if (
-      dir !== "other" &&
-      /(^|\W)(трактор|кассир|курьер|водител|грузчик|электрик|продав|врач|учител|бухгалтер|повар|охранник)(\W|$)/i.test(r.title)
+      dir !== 'other' &&
+      /(^|\W)(трактор|кассир|курьер|водител|грузчик|электрик|продав|врач|учител|бухгалтер|повар|охранник)(\W|$)/i.test(
+        r.title,
+      )
     ) {
-      add("профессия не из IT получила направление", r.title);
+      add('профессия не из IT получила направление', r.title);
     }
 
     void FORMATS;
   }
 
   const summary = [...violations]
-    .map(([k, v]) => `${k}: ${v.length}\n        ${v.join("\n        ")}`)
-    .join("\n      ");
+    .map(([k, v]) => `${k}: ${v.length}\n        ${v.join('\n        ')}`)
+    .join('\n      ');
   assert.equal(violations.size, 0, `нарушений в живом каталоге:\n      ${summary}`);
 });
 
-test("распределение по направлениям не вырождается", (t) => {
+test('распределение по направлениям не вырождается', (t) => {
   const rows = catalog();
   if (rows.length < 200) {
-    t.skip("каталог мал");
+    t.skip('каталог мал');
     return;
   }
 
   const counts = new Map<string, number>();
   for (const r of rows) {
-    const d = direction.detectDirection(r.category, r.title, [r.title, r.about, r.category].join(" "));
+    const d = direction.detectDirection(
+      r.category,
+      r.title,
+      [r.title, r.about, r.category].join(' '),
+    );
     counts.set(d, (counts.get(d) ?? 0) + 1);
   }
 
@@ -140,7 +149,7 @@ test("распределение по направлениям не вырожд
      * снизу отдельно следит, чтобы корзина не схлопнулась: если «неизвестно»
      * почти не осталось, значит направление выдумывается.
      */
-    if (dir === "other") continue;
+    if (dir === 'other') continue;
     const share = n / rows.length;
     assert.ok(
       share <= 0.2,
@@ -148,7 +157,7 @@ test("распределение по направлениям не вырожд
     );
   }
 
-  const other = counts.get("other") ?? 0;
+  const other = counts.get('other') ?? 0;
   assert.ok(
     other / rows.length >= 0.4,
     `«неизвестно» всего ${Math.round((other / rows.length) * 100)}% — подозрительно мало, направление выдумывается`,

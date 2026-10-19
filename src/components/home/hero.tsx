@@ -1,6 +1,6 @@
-import Link from "next/link";
-import { PrimaryButton, GhostButton, Eyebrow } from "@/components/ui";
-import { jobs, stats } from "@/lib/data";
+import Link from 'next/link';
+import { PrimaryButton, GhostButton, Eyebrow } from '@/components/ui';
+import { jobs, stats } from '@/lib/data';
 
 /*
  * Первый экран.
@@ -22,15 +22,16 @@ function Listings() {
   return (
     <div className="border border-line bg-surface">
       <div className="flex items-baseline justify-between border-b border-line px-5 py-3">
-        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-accent">В работе</span>
-        <span className="font-mono text-[11px] tabular-nums text-muted">{jobs.length} в каталоге</span>
+        <span className="font-mono text-[11px] uppercase tracking-[0.16em] text-accent">
+          В работе
+        </span>
+        <span className="font-mono text-[11px] tabular-nums text-muted">
+          {jobs.length} в каталоге
+        </span>
       </div>
       <ul>
         {listed.map((job, idx) => (
-          <li
-            key={job.slug}
-            className={`px-5 py-3.5 ${idx > 0 ? "border-t border-line" : ""}`}
-          >
+          <li key={job.slug} className={`px-5 py-3.5 ${idx > 0 ? 'border-t border-line' : ''}`}>
             <div className="flex items-baseline justify-between gap-4">
               <p className="truncate text-sm font-medium text-ink">{job.title}</p>
               <p className="shrink-0 font-mono text-xs tabular-nums text-muted">{job.salary}</p>
@@ -44,7 +45,7 @@ function Listings() {
       <div className="border-t border-line px-5 py-3">
         <Link
           href="/jobs"
-          className="text-xs font-semibold text-accent underline-offset-4 hover:underline"
+          className="-my-1 inline-flex min-h-11 items-center text-xs font-semibold text-accent underline-offset-4 hover:underline"
         >
           Весь каталог →
         </Link>
@@ -68,9 +69,9 @@ export function Hero() {
             </h1>
 
             <p className="measure mt-8 text-lg leading-relaxed text-muted">
-              Улучшим резюме, подберём релевантные вакансии и отправим до 100
-              персональных откликов в день. Вам останется выбирать лучшие
-              приглашения — а не вести переписку с сотней вакансий.
+              Улучшим резюме, подберём релевантные вакансии и отправим до 100 персональных откликов
+              в день. Вам останется выбирать лучшие приглашения — а не вести переписку с сотней
+              вакансий.
             </p>
 
             <div className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-4">

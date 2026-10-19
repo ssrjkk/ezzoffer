@@ -1,8 +1,8 @@
-"use client";
+'use client';
 
-import { useEffect, useRef, useState } from "react";
-import { Section, SectionHead, GhostButton } from "@/components/ui";
-import { BOT_COMMANDS, BOT_MESSAGES, type BotMessage } from "@/lib/bot-data";
+import { useEffect, useRef, useState } from 'react';
+import { Section, SectionHead, GhostButton } from '@/components/ui';
+import { BOT_COMMANDS, BOT_MESSAGES, type BotMessage } from '@/lib/bot-data';
 
 /**
  * Живое превью Telegram-бота: диалог проигрывается по шагам, как в реальном
@@ -11,22 +11,25 @@ import { BOT_COMMANDS, BOT_MESSAGES, type BotMessage } from "@/lib/bot-data";
  * статичная картинка.
  */
 type Replay =
-  | { phase: "thinking" }
-  | { phase: "typing"; index: number; text: string }
-  | { phase: "idle"; index: number };
+  | { phase: 'thinking' }
+  | { phase: 'typing'; index: number; text: string }
+  | { phase: 'idle'; index: number };
 
 /** Следующее состояние и задержка до него. */
 function advance(state: Replay): { state: Replay; delay: number } {
-  if (state.phase === "idle") {
+  if (state.phase === 'idle') {
     const msg = BOT_MESSAGES[state.index];
     if (!msg) return { state, delay: 0 };
     // Пауза «печати» перед сообщением, затем первая буква.
-    return { state: { phase: "typing", index: state.index, text: msg.text.slice(0, 1) }, delay: 16 };
+    return {
+      state: { phase: 'typing', index: state.index, text: msg.text.slice(0, 1) },
+      delay: 16,
+    };
   }
-  if (state.phase === "thinking") {
+  if (state.phase === 'thinking') {
     const msg = BOT_MESSAGES[0];
-    if (!msg) return { state: { phase: "idle", index: 0 }, delay: 0 };
-    return { state: { phase: "typing", index: 0, text: msg.text.slice(0, 1) }, delay: 16 };
+    if (!msg) return { state: { phase: 'idle', index: 0 }, delay: 0 };
+    return { state: { phase: 'typing', index: 0, text: msg.text.slice(0, 1) }, delay: 16 };
   }
 
   /*
@@ -42,24 +45,24 @@ function advance(state: Replay): { state: Replay; delay: number } {
   const full = BOT_MESSAGES[state.index];
   if (!full || state.text.length >= full.text.length) {
     return {
-      state: { phase: "idle", index: state.index + 1 },
+      state: { phase: 'idle', index: state.index + 1 },
       delay: full?.pauseAfterMs ?? 0,
     };
   }
   return {
-    state: { phase: "typing", index: state.index, text: full.text.slice(0, state.text.length + 1) },
+    state: { phase: 'typing', index: state.index, text: full.text.slice(0, state.text.length + 1) },
     delay: 16,
   };
 }
 
 function TelegramFrame() {
   const [done, setDone] = useState<BotMessage[]>([]);
-  const [replay, setReplay] = useState<Replay>({ phase: "thinking" });
+  const [replay, setReplay] = useState<Replay>({ phase: 'thinking' });
   const scroller = useRef<HTMLDivElement>(null);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
-    let state: Replay = { phase: "thinking" };
+    let state: Replay = { phase: 'thinking' };
 
     const scroll = () => {
       const el = scroller.current;
@@ -68,7 +71,7 @@ function TelegramFrame() {
 
     const step = () => {
       // Сообщение дописывается, когда следующий шаг его завершит.
-      if (state.phase === "typing") {
+      if (state.phase === 'typing') {
         const full = BOT_MESSAGES[state.index];
         // Пустой текст — это нажатие кнопки: оно появляется целиком, и
         // сравнение «дописано» верно уже на первом символе.
@@ -93,10 +96,10 @@ function TelegramFrame() {
     };
   }, []);
 
-  const partial = replay.phase === "typing" ? BOT_MESSAGES[replay.index] : null;
-  const partialText = replay.phase === "typing" ? replay.text : "";
-  const thinking = replay.phase === "thinking";
-  const finished = replay.phase === "idle" && replay.index >= BOT_MESSAGES.length;
+  const partial = replay.phase === 'typing' ? BOT_MESSAGES[replay.index] : null;
+  const partialText = replay.phase === 'typing' ? replay.text : '';
+  const thinking = replay.phase === 'thinking';
+  const finished = replay.phase === 'idle' && replay.index >= BOT_MESSAGES.length;
 
   return (
     <div className="relative">
@@ -119,7 +122,10 @@ function TelegramFrame() {
           </div>
         </div>
 
-        <div ref={scroller} className="h-[26rem] space-y-2.5 overflow-y-auto px-4 py-5 sm:h-[30rem]">
+        <div
+          ref={scroller}
+          className="h-[26rem] space-y-2.5 overflow-y-auto px-4 py-5 sm:h-[30rem]"
+        >
           {done.map((msg, i) => (
             <Bubble key={`done-${i}`} msg={msg} />
           ))}
@@ -129,7 +135,9 @@ function TelegramFrame() {
           {partial && <Bubble msg={partial} text={partialText} caret={partialText.length > 0} />}
 
           {finished && (
-            <p className="pt-6 text-center font-mono text-xs text-muted">Диалог проигран полностью</p>
+            <p className="pt-6 text-center font-mono text-xs text-muted">
+              Диалог проигран полностью
+            </p>
           )}
 
           {!thinking && !partial && done.length === 0 && !finished && (
@@ -152,7 +160,7 @@ function TelegramFrame() {
   );
 }
 
-function TelegramGlyph({ className = "size-4" }: { className?: string }) {
+function TelegramGlyph({ className = 'size-4' }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} fill="currentColor" aria-hidden>
       <path d="M21.9 4.3 18.7 19.4c-.2 1-.9 1.3-1.8.8l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-4.9 8.9-8c.4-.3-.1-.5-.6-.2L6.2 12.7 1.4 11.2c-1-.3-1-1 .2-1.5l19.1-7.4c.9-.3 1.6.2 1.2 2z" />
@@ -246,7 +254,7 @@ function Bubble({
 }) {
   const shown = text ?? msg.text;
 
-  if (msg.from === "user") {
+  if (msg.from === 'user') {
     if (msg.tap) return <TapNote label={msg.tap} />;
     return (
       <div className="flex justify-end">
@@ -258,7 +266,7 @@ function Bubble({
     );
   }
 
-  const lines = shown.split("\n");
+  const lines = shown.split('\n');
   return (
     <div className="flex items-end gap-2">
       <Avatar />

@@ -1,9 +1,9 @@
-import { db } from "./db";
-import { envNum } from "./env";
-import { parseKeywords } from "./skills";
-import { refreshProviders } from "./vacancies";
-import type { SourceStatus } from "./vacancies";
-import { logError, logInfo } from "./logger";
+import { db } from './db';
+import { envNum } from './env';
+import { parseKeywords } from './skills';
+import { refreshProviders } from './vacancies';
+import type { SourceStatus } from './vacancies';
+import { logError, logInfo } from './logger';
 
 /**
  * Обновление каталога под реальные поиски пользователей.
@@ -38,7 +38,7 @@ type SearchRow = {
 };
 
 /** Провайдеры, чья выдача меняется быстро: обновляем их чаще. */
-const FAST_SOURCES = new Set(["hh"]);
+const FAST_SOURCES = new Set(['hh']);
 
 /** Сколько вакансий забирать с одного провайдера за один запрос. */
 const PER_QUERY_LIMIT = 100;
@@ -65,15 +65,15 @@ export type RefreshReport = {
  */
 export function buildQueryText(keywords: string): string {
   const parsed = parseKeywords(keywords);
-  if (parsed.skills.length > 0) return parsed.skills.slice(0, 3).join(" ");
+  if (parsed.skills.length > 0) return parsed.skills.slice(0, 3).join(' ');
   // Слов из словаря нет — берём как есть, но коротко: длинный текст в поиске
   // hh работает как «все слова должны встретиться» и не находит ничего.
-  return parsed.words.slice(0, 3).join(" ");
+  return parsed.words.slice(0, 3).join(' ');
 }
 
 function activeSearches(): SearchRow[] {
   return db
-    .prepare("SELECT id, user_id, keywords, city, active FROM searches WHERE active = 1")
+    .prepare('SELECT id, user_id, keywords, city, active FROM searches WHERE active = 1')
     .all() as SearchRow[];
 }
 
@@ -101,12 +101,11 @@ export function distinctQueries(limit = MAX_QUERIES_PER_RUN): { text: string; ci
 }
 
 /** Записи в meta: последний результат обновления, для наблюдаемости. */
-const REPORT_KEY = "scheduler:catalog_report";
+const REPORT_KEY = 'scheduler:catalog_report';
 
 export function lastRefreshReport(): RefreshReport | null {
-  const row = db.prepare("SELECT value FROM meta WHERE key = ?").get(REPORT_KEY) as
-    | { value: string }
-    | undefined;
+  const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(REPORT_KEY) as
+    { value: string } | undefined;
   const raw = row?.value;
   if (!raw) return null;
   try {
@@ -140,7 +139,7 @@ export async function refreshCatalogForSearches(opts?: {
      */
     const report: RefreshReport = {
       ran: false,
-      skipped: "нет активных поисков",
+      skipped: 'нет активных поисков',
       queries: 0,
       statuses: [],
       added: 0,
@@ -161,14 +160,14 @@ export async function refreshCatalogForSearches(opts?: {
       });
       statuses.push(...result);
     } catch (err) {
-      logError("catalog:refresh", err, { query: q.text, city: q.city });
+      logError('catalog:refresh', err, { query: q.text, city: q.city });
       statuses.push({
-        source: "local",
-        label: "Обновление",
+        source: 'local',
+        label: 'Обновление',
         available: true,
         count: 0,
         ok: false,
-        error: err instanceof Error ? err.message : "unknown",
+        error: err instanceof Error ? err.message : 'unknown',
       });
     }
   }
@@ -182,12 +181,13 @@ export async function refreshCatalogForSearches(opts?: {
     durationMs: Date.now() - started,
   };
 
-  db.prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-    .run(REPORT_KEY, JSON.stringify(report));
+  db.prepare(
+    'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+  ).run(REPORT_KEY, JSON.stringify(report));
 
   const failed = statuses.filter((s) => !s.ok && !s.requiresSetup);
   logInfo(
-    "catalog:refresh",
+    'catalog:refresh',
     `запросов: ${queries.length}, добавлено вакансий: ${added}, источников с ошибкой: ${failed.length}, ${report.durationMs} мс`,
   );
 
@@ -195,7 +195,7 @@ export async function refreshCatalogForSearches(opts?: {
 }
 
 function countVacancies(): number {
-  return (db.prepare("SELECT COUNT(*) c FROM vacancies").get() as { c: number }).c;
+  return (db.prepare('SELECT COUNT(*) c FROM vacancies').get() as { c: number }).c;
 }
 
 /**
@@ -207,13 +207,13 @@ function countVacancies(): number {
  * было бы невыполнимо по построению, а не из-за настроек.
  */
 export function fastProvidersDue(now: number, lastAt: number): boolean {
-  const ttlMs = envNum(process.env, "CATALOG_FAST_TTL_MS", 30 * 60 * 1000, { min: 60_000 });
+  const ttlMs = envNum(process.env, 'CATALOG_FAST_TTL_MS', 30 * 60 * 1000, { min: 60_000 });
   return now - lastAt >= ttlMs;
 }
 
 /** Медленным источникам достаточно обновляться редко. */
 export function slowProvidersDue(now: number, lastAt: number): boolean {
-  const ttlMs = envNum(process.env, "CATALOG_SLOW_TTL_MS", 6 * 60 * 60 * 1000, { min: 60_000 });
+  const ttlMs = envNum(process.env, 'CATALOG_SLOW_TTL_MS', 6 * 60 * 60 * 1000, { min: 60_000 });
   return now - lastAt >= ttlMs;
 }
 

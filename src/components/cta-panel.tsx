@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from 'next/link';
 
 /**
  * Врезка-призыв в конце страницы.
@@ -16,8 +16,8 @@ import Link from "next/link";
 export function CtaPanel({
   title,
   text,
-  cta = "Попробовать бесплатно",
-  href = "/signup",
+  cta = 'Попробовать бесплатно',
+  href = '/signup',
 }: {
   title: string;
   text: string;

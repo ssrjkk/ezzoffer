@@ -1,5 +1,5 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { authMethod } from "../auth-methods";
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { authMethod } from '../auth-methods';
 
 /**
  * Механика внешнего входа.
@@ -31,26 +31,49 @@ export type OAuthIdentity = {
   verified: boolean;
 };
 
-const SECRET_ENV = "OAUTH_STATE_SECRET";
+const SECRET_ENV = 'OAUTH_STATE_SECRET';
+
+/*
+ * Секрет подписи ответов Telegram. Пустого значения нет.
+ *
+ * Раньше здесь было `process.env[SECRET_ENV] ?? ""`, и пустая строка считалась
+ * секретом. `createHmac("sha256", "")` не бросает — поэтому вход через Telegram
+ * «работал» и без настроенного секрета. Но подпись с пустым ключом умеет
+ * посчитать кто угодно: подделать `parseProviderResponse` мог любой, кто
+ * прочитал этот файл. То есть защита от подделки существовала только у тех,
+ * кто и так всё настроил, а у остальных вход был открыт нараспашку — и молча.
+ *
+ * Теперь без секрета вход закрыт: parseProviderResponse возвращает null, а
+ * коллбэк отвечает 401 «провайдер не подтвердил вход». Это осознанно грубо:
+ * лучше видимый отказ, чем невидимая дыра.
+ */
+function stateSecret(): string | null {
+  const secret = (process.env[SECRET_ENV] ?? '').trim();
+  return secret ? secret : null;
+}
 
 /** Живущие state, срок жизни короткий: код отправлен, на возврат есть минуты. */
 const STATE_TTL_MS = 10 * 60 * 1000;
 
 const states = new Map<string, { userId: number; at: number }>();
 
-function stateSecret(): string {
-  return process.env[SECRET_ENV] ?? "";
-}
-
 function publicBase(): string {
-  return (process.env.SITE_URL ?? "http://localhost:3000").replace(/\/+$/, "");
+  return (process.env.SITE_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
 }
 
 /** Одноразовый код возврата. */
 export function createState(userId: number): string {
-  const nonce = randomBytes(16).toString("hex");
+  const nonce = randomBytes(16).toString('hex');
   const at = Date.now();
-  const mac = createHmac("sha256", stateSecret()).update(`${nonce}:${userId}:${at}`).digest("hex");
+  /*
+   * Подпись кода при возврате не проверяется — consumeState смотрит только в
+   * серверную карту. Поэтому секрета здесь не требуется: код живёт лишь в
+   * памяти процесса, и угадать 128 бит nonce снаружи нельзя. Секрет нужен для
+   * ответов Telegram (parseProviderResponse ниже): они приходят снаружи, и
+   * подпись — единственное, что их защищает.
+   */
+  const secret = stateSecret() ?? 'state-only';
+  const mac = createHmac('sha256', secret).update(`${nonce}:${userId}:${at}`).digest('hex');
   const token = `${nonce}.${at}.${mac}`;
   states.set(token, { userId, at });
   purgeStates();
@@ -98,20 +121,25 @@ export function resetStates(): void {
  *
  * Провайдер берётся из белого списка auth-methods, а не из параметра как
  * есть: иначе ?provider=https://evil.com уведёт человека с нашего домена.
+ *
+ * Способ без completes ссылку не строит: вести человека к провайдеру, когда
+ * завершить вход нечем, — значит подарить ему 401 на возврате. См. completes
+ * в auth-methods.ts.
  */
 export function authorizeUrl(provider: string, state: string): string | null {
   const method = authMethod(provider);
   if (!method?.authorizeUrl || !method.env) return null;
+  if (method.completes === false) return null;
 
   const clientId = process.env[method.env.id];
   if (!clientId) return null;
 
   const redirectUri = `${publicBase()}/api/auth/oauth/${provider}/callback`;
   const url = new URL(method.authorizeUrl);
-  url.searchParams.set("client_id", clientId);
-  url.searchParams.set("redirect_uri", redirectUri);
-  url.searchParams.set("state", state);
-  url.searchParams.set("response_type", "code");
+  url.searchParams.set('client_id', clientId);
+  url.searchParams.set('redirect_uri', redirectUri);
+  url.searchParams.set('state', state);
+  url.searchParams.set('response_type', 'code');
   return url.toString();
 }
 
@@ -123,39 +151,46 @@ export function authorizeUrl(provider: string, state: string): string | null {
  * HTTPS-обмену токена, и этот разбор не вызывается.
  */
 export function parseProviderResponse(provider: string, raw: string): OAuthIdentity | null {
-  if (provider !== "telegram") return null;
+  if (provider !== 'telegram') return null;
 
-  const dot = raw.lastIndexOf(".");
+  /*
+   * Без секрета проверять нечем — и отвечать «не подтверждено».
+   *
+   * Раньше подпись считалась пустым ключом, и подделать ответ мог кто угодно:
+   * HMAC с известным (пустым) ключом — не защита. Закрыть вход здесь — значит
+   * сломать его видимо (401 на коллбэке), а не оставить дыру тихо.
+   */
+  const secret = stateSecret();
+  if (!secret) return null;
+
+  const dot = raw.lastIndexOf('.');
   if (dot <= 0) return null;
   const payload = raw.slice(0, dot);
   const signature = raw.slice(dot + 1);
 
-  const expected = createHmac("sha256", stateSecret()).update(payload).digest("hex");
+  const expected = createHmac('sha256', secret).update(payload).digest('hex');
   if (signature.length !== expected.length) return null;
   if (!timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) return null;
 
   let data: Record<string, unknown>;
   try {
-    data = JSON.parse(Buffer.from(payload, "base64").toString("utf8")) as Record<
-      string,
-      unknown
-    >;
+    data = JSON.parse(Buffer.from(payload, 'base64').toString('utf8')) as Record<string, unknown>;
   } catch {
     return null;
   }
 
-  const providerId = String(data.id ?? "");
+  const providerId = String(data.id ?? '');
   if (!providerId) return null;
 
   return {
     providerId,
-    email: typeof data.email === "string" ? data.email : "",
+    email: typeof data.email === 'string' ? data.email : '',
     /*
      * Отображаемое имя берётся из username, а не из поля name: username —
      * это то, за что человек отвечает в самом Telegram, а name прислал
      * внешний сервис и может содержать что угодно.
      */
-    name: typeof data.username === "string" ? data.username : "",
+    name: typeof data.username === 'string' ? data.username : '',
     verified: data.hash !== undefined,
   };
 }

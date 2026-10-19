@@ -1,10 +1,10 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { dom } from "./helpers/dom-setup";
-import { createRoot, type Root } from "react-dom/client";
-import { act } from "react";
-import { StatsPanel } from "../src/components/dashboard/stats-panel";
-import type { Stats } from "../src/lib/stats";
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { dom } from './helpers/dom-setup';
+import { createRoot, type Root } from 'react-dom/client';
+import { act } from 'react';
+import { StatsPanel } from '../src/components/dashboard/stats-panel';
+import type { Stats } from '../src/lib/stats';
 
 /**
  * График динамики: легенда должна означать то же, что нарисовано.
@@ -36,8 +36,8 @@ let container: HTMLElement;
  */
 test.beforeEach(() => {
   if (root) act(() => root.unmount());
-  dom.document.body.innerHTML = "";
-  container = dom.document.createElement("div");
+  dom.document.body.innerHTML = '';
+  container = dom.document.createElement('div');
   dom.document.body.appendChild(container);
   root = createRoot(container);
 });
@@ -60,9 +60,9 @@ const STATS = {
   respondRate: 12,
   inviteRate: 5,
   series: [
-    { label: "пн", sent: 10, viewed: 30, invited: 2 },
-    { label: "вт", sent: 20, viewed: 40, invited: 1 },
-    { label: "ср", sent: 30, viewed: 20, invited: 3 },
+    { label: 'пн', sent: 10, viewed: 30, invited: 2 },
+    { label: 'вт', sent: 20, viewed: 40, invited: 1 },
+    { label: 'ср', sent: 30, viewed: 20, invited: 3 },
   ],
 } as unknown as Stats;
 
@@ -80,11 +80,8 @@ async function render(): Promise<void> {
 
 /** Классы цвета (bg-*) легенды, по порядку. */
 function legendColors(): string[] {
-  return [...container.querySelectorAll("li > span[aria-hidden]")].map(
-    (el) =>
-      [...el.classList]
-        .filter((c) => c.startsWith("bg-"))
-        .join(" ") || "",
+  return [...container.querySelectorAll('li > span[aria-hidden]')].map(
+    (el) => [...el.classList].filter((c) => c.startsWith('bg-')).join(' ') || '',
   );
 }
 
@@ -93,15 +90,10 @@ function firstDayBarColors(): string[] {
   const groups = container.querySelectorAll('[role="img"][aria-label]');
   return [...groups]
     .slice(0, 3)
-    .map(
-      (el) =>
-        [...el.classList]
-          .filter((c) => c.startsWith("bg-"))
-          .join(" ") || "",
-    );
+    .map((el) => [...el.classList].filter((c) => c.startsWith('bg-')).join(' ') || '');
 }
 
-test("цвет точки легенды совпадает с цветом столбца", async () => {
+test('цвет точки легенды совпадает с цветом столбца', async () => {
   await render();
 
   const legend = legendColors();
@@ -112,16 +104,17 @@ test("цвет точки легенды совпадает с цветом ст
   assert.deepEqual(
     bars,
     legend,
-    `легенда и столбцы раскрашены по-разному:\n  легенда: ${legend.join(" | ")}\n  столбцы: ${bars.join(" | ")}`,
+    `легенда и столбцы раскрашены по-разному:\n  легенда: ${legend.join(' | ')}\n  столбцы: ${bars.join(' | ')}`,
   );
 });
 
-test("ни легенда, ни столбцы не используют сырых цветов Tailwind", async () => {
+test('ни легенда, ни столбцы не используют сырых цветов Tailwind', async () => {
   await render();
 
-  const RAW = /\b(?:violet|indigo|purple|fuchsia|sky|blue|rose|pink|red|orange|amber|emerald|lime|teal|cyan|slate|gray|zinc)-\d{2,3}\b/;
+  const RAW =
+    /\b(?:violet|indigo|purple|fuchsia|sky|blue|rose|pink|red|orange|amber|emerald|lime|teal|cyan|slate|gray|zinc)-\d{2,3}\b/;
 
-  for (const el of container.querySelectorAll("[class]")) {
+  for (const el of container.querySelectorAll('[class]')) {
     const hit = [...el.classList].find((c) => RAW.test(c));
     assert.equal(
       hit,
@@ -131,14 +124,14 @@ test("ни легенда, ни столбцы не используют сыр�
   }
 });
 
-test("данные столбца доступны с клавиатуры", async () => {
+test('данные столбца доступны с клавиатуры', async () => {
   await render();
 
   const bars = [...container.querySelectorAll('[role="img"][aria-label]')];
-  assert.ok(bars.length > 0, "столбцы не найдены");
+  assert.ok(bars.length > 0, 'столбцы не найдены');
 
   for (const bar of bars) {
-    const label = bar.getAttribute("aria-label") ?? "";
+    const label = bar.getAttribute('aria-label') ?? '';
     // Раньше данные были только в title: он не попадает в дерево
     // доступности, на клавиатуре недоступен и озвучивается выборочно.
     assert.match(
@@ -147,18 +140,18 @@ test("данные столбца доступны с клавиатуры", asy
       `подпись столбца не читается вслух: «${label}»`,
     );
     assert.equal(
-      bar.getAttribute("title"),
+      bar.getAttribute('title'),
       null,
-      "данные дублируются в title — который недоступен с клавиатуры",
+      'данные дублируются в title — который недоступен с клавиатуры',
     );
   }
 });
 
-test("высота столбца вычисляется, а не равна NaN", async () => {
+test('высота столбца вычисляется, а не равна NaN', async () => {
   await render();
 
   const bars = [...container.querySelectorAll<HTMLElement>('[role="img"][aria-label]')];
-  assert.ok(bars.length > 0, "столбцы не найдены");
+  assert.ok(bars.length > 0, 'столбцы не найдены');
 
   for (const bar of bars) {
     const height = bar.style.height;
@@ -166,13 +159,13 @@ test("высота столбца вычисляется, а не равна NaN
   }
 });
 
-test("пустой ряд не даёт NaN% (max = 0)", async () => {
+test('пустой ряд не даёт NaN% (max = 0)', async () => {
   const empty = {
     ...STATS,
     sent: 0,
     viewed: 0,
     invited: 0,
-    series: [{ label: "пн", sent: 0, viewed: 0, invited: 0 }],
+    series: [{ label: 'пн', sent: 0, viewed: 0, invited: 0 }],
   } as unknown as Stats;
 
   await act(async () => {

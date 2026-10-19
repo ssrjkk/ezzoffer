@@ -1,11 +1,12 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import { Section, SectionHead } from "@/components/ui";
-import { FaqAccordion } from "@/components/home/faq";
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { Section, SectionHead } from '@/components/ui';
+import { FaqAccordion } from '@/components/home/faq';
 
 export const metadata: Metadata = {
-  title: "Вопросы и ответы",
-  description: "FAQ EZOffer: безопасность, автоотклики, резюме, сопроводительные письма, тарифы и пробный период.",
+  title: 'Вопросы и ответы',
+  description:
+    'FAQ EZOffer: безопасность, автоотклики, резюме, сопроводительные письма, тарифы и пробный период.',
 };
 
 export default function FaqPage() {

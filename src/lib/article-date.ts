@@ -15,18 +15,46 @@
  * («Сентябрь 2026»). Без обеих форм разбор молча возвращал null.
  */
 const RU_MONTHS: Record<string, number> = {
-  "января": 0, "февраля": 1, "марта": 2, "апреля": 3,
-  "мая": 4, "июня": 5, "июля": 6, "августа": 7,
-  "сентября": 8, "октября": 9, "ноября": 10, "декабря": 11,
+  января: 0,
+  февраля: 1,
+  марта: 2,
+  апреля: 3,
+  мая: 4,
+  июня: 5,
+  июля: 6,
+  августа: 7,
+  сентября: 8,
+  октября: 9,
+  ноября: 10,
+  декабря: 11,
   // Именительный падеж (заголовки, группировка по месяцам).
-  "январь": 0, "февраль": 1, "март": 2, "апрель": 3,
-  "май": 4, "июнь": 5, "июль": 6, "август": 7,
-  "сентябрь": 8, "октябрь": 9, "ноябрь": 10, "декабрь": 11,
+  январь: 0,
+  февраль: 1,
+  март: 2,
+  апрель: 3,
+  май: 4,
+  июнь: 5,
+  июль: 6,
+  август: 7,
+  сентябрь: 8,
+  октябрь: 9,
+  ноябрь: 10,
+  декабрь: 11,
 };
 
 const RU_MONTHS_SHORT: Record<string, number> = {
-  "янв": 0, "фев": 1, "мар": 2, "апр": 3, "мая": 4, "июн": 5,
-  "июл": 6, "авг": 7, "сен": 8, "окт": 9, "ноя": 10, "дек": 11,
+  янв: 0,
+  фев: 1,
+  мар: 2,
+  апр: 3,
+  мая: 4,
+  июн: 5,
+  июл: 6,
+  авг: 7,
+  сен: 8,
+  окт: 9,
+  ноя: 10,
+  дек: 11,
 };
 
 /**
@@ -38,7 +66,7 @@ const RU_MONTHS_SHORT: Record<string, number> = {
  * возвращало бы null, и в разметке молча пропадала бы дата.
  */
 function lookupShortMonth(token: string): number | null {
-  const key = token.toLowerCase().replace(/\.$/, "");
+  const key = token.toLowerCase().replace(/\.$/, '');
   if (key in RU_MONTHS) return RU_MONTHS[key]!;
   if (key in RU_MONTHS_SHORT) return RU_MONTHS_SHORT[key]!;
   for (const [name, index] of Object.entries(RU_MONTHS)) {
@@ -92,7 +120,7 @@ export function articleMonthIso(value: string): string | null {
   if (m) {
     const month = RU_MONTHS[m[1]!.toLowerCase()];
     if (month === undefined) return null;
-    return `${m[2]}-${String(month + 1).padStart(2, "0")}`;
+    return `${m[2]}-${String(month + 1).padStart(2, '0')}`;
   }
   return null;
 }

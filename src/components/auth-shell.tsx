@@ -1,6 +1,6 @@
-import Link from "next/link";
-import type { InputHTMLAttributes, ReactNode } from "react";
-import { StatusMessage } from "@/components/ui";
+import Link from 'next/link';
+import type { InputHTMLAttributes, ReactNode } from 'react';
+import { StatusMessage } from '@/components/ui';
 
 /*
  * Оболочка форм входа.
@@ -46,10 +46,10 @@ export function AuthPanel({
 export function Field({
   label,
   hint,
-  className = "",
+  className = '',
   ...props
 }: InputHTMLAttributes<HTMLInputElement> & { label: string; hint?: string }) {
-  const id = props.id ?? `f-${label.toLowerCase().replace(/[^a-zа-я0-9]+/gi, "-")}`;
+  const id = props.id ?? `f-${label.toLowerCase().replace(/[^a-zа-я0-9]+/gi, '-')}`;
   return (
     <label htmlFor={id} className="block">
       <span className="mb-1.5 block font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
@@ -68,7 +68,7 @@ export function Field({
 export function SubmitButton({
   busy,
   children,
-  busyLabel = "Подождите…",
+  busyLabel = 'Подождите…',
 }: {
   busy: boolean;
   children: ReactNode;

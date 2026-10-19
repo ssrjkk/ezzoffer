@@ -1,6 +1,6 @@
-import { db } from "./db";
-import { explain, type LastRunReport } from "./autoapply-report";
-import type { AutoApplyRun } from "./autoapply";
+import { db } from './db';
+import { explain, type LastRunReport } from './autoapply-report';
+import type { AutoApplyRun } from './autoapply';
 
 /**
  * Хранение итога последнего прогона автоотклика.
@@ -12,7 +12,7 @@ import type { AutoApplyRun } from "./autoapply";
  * Один такой тест и оставил в базе битую запись.
  */
 
-const KEY = "autoapply:last_run";
+const KEY = 'autoapply:last_run';
 
 export function saveLastRun(report: AutoApplyRun, at = Date.now()): void {
   db.prepare(
@@ -22,7 +22,8 @@ export function saveLastRun(report: AutoApplyRun, at = Date.now()): void {
 }
 
 export function loadLastRun(): LastRunReport | null {
-  const row = db.prepare("SELECT value FROM meta WHERE key = ?").get(KEY) as { value: string } | undefined;
+  const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(KEY) as
+    { value: string } | undefined;
   if (!row?.value) return null;
   try {
     const raw = JSON.parse(row.value) as Partial<LastRunReport> & AutoApplyRun;

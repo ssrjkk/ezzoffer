@@ -1,7 +1,7 @@
-import Link from "next/link";
-import { Section, SectionHead, PrimaryButton } from "@/components/ui";
-import { Reveal } from "@/components/reveal";
-import { securityCards } from "@/lib/data";
+import Link from 'next/link';
+import { Section, SectionHead, PrimaryButton } from '@/components/ui';
+import { Reveal } from '@/components/reveal';
+import { securityCards } from '@/lib/data';
 
 /*
  * «Никаких блокировок».
@@ -87,10 +87,10 @@ export function Security() {
           */}
           <p className="max-w-prose text-sm leading-relaxed text-muted">
             Пароль от EZOffer хранится в виде хеша и не передаётся ни в hh.ru, ни в другие сервисы.
-            Подробности — в{" "}
+            Подробности — в{' '}
             <Link
               href="/platform-rules"
-              className="border-b border-accent pb-0.5 text-accent transition-colors hover:border-ink hover:text-ink"
+              className="-my-1 inline-flex min-h-11 items-center border-b border-accent py-1 text-accent transition-colors hover:border-ink hover:text-ink"
             >
               правилах платформ и безопасности
             </Link>

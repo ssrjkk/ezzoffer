@@ -1,12 +1,14 @@
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
-import { isPlanActive, planDailyLimit, planLabel, daysLeft } from "@/lib/plans";
-import { DashboardNav } from "@/components/dashboard/nav";
-import { DemoBanner } from "@/components/dashboard/demo-banner";
+import { redirect } from 'next/navigation';
+import { getCurrentUser } from '@/lib/auth';
+import { isPlanActive, planDailyLimit, planLabel, daysLeft } from '@/lib/plans';
+import { catalogItem } from '@/lib/payments/catalog';
+import { DashboardNav } from '@/components/dashboard/nav';
+import { MobileNav } from '@/components/dashboard/mobile-nav';
+import { DemoBanner } from '@/components/dashboard/demo-banner';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect('/login');
 
   const active = isPlanActive(user);
   const nav = {
@@ -16,6 +18,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     planActive: active,
     planDays: daysLeft(user),
     planLimit: active ? planDailyLimit(user.plan) : 0,
+    planPermanent: Boolean(catalogItem(user.plan)?.permanent),
   };
 
   /*
@@ -29,7 +32,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
    */
   return (
     <div className="min-h-screen bg-paper lg:flex">
-      <aside className="hidden shrink-0 border-r border-line bg-surface lg:sticky lg:top-0 lg:flex lg:h-screen lg:w-72 lg:flex-col">
+      {/*
+          top-16, а не top-0: сайт-шапка липкая и имеет h-16 от lg, поэтому
+          при top-0 верхние 64px колонки навигации уходили под неё. Видно
+          становилось то, что должно быть видно при любой прокрутке.
+        */}
+      <aside className="hidden shrink-0 border-r border-line bg-surface lg:sticky lg:top-16 lg:flex lg:h-[calc(100vh-4rem)] lg:w-72 lg:flex-col">
         <div className="flex h-full flex-col overflow-y-auto px-7 py-8">
           <DashboardNav {...nav} />
         </div>
@@ -45,8 +53,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
               мал, а риск пропустить пометку на одной из них — обман.
             */}
             <DemoBanner mode={user.mode} />
-            <div className="mb-8 lg:hidden">
-              <DashboardNav {...nav} onMobile />
+            {/*
+              На телефоне колонка разделов занимала 737px — больше экрана
+              целиком, и до содержания страницы человек доходил только после
+              длинной прокрутки мимо десяти ссылок. Здесь вместо неё одна
+              сворачивающаяся строка с названием текущего раздела
+              (MobileNav), которая работает и без JavaScript.
+            */}
+            <div className="mb-5 lg:hidden">
+              <MobileNav {...nav} />
             </div>
             {children}
           </div>

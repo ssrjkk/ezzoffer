@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
-import { registry } from "@/lib/payments/registry";
-import { grant } from "@/lib/payments/entitlements";
+import { NextResponse } from 'next/server';
+import { registry } from '@/lib/payments/registry';
+import { grant, revoke } from '@/lib/payments/entitlements';
 
 /**
  * POST /api/payments/webhook/[provider] — приём подтверждения об оплате.
@@ -25,20 +25,28 @@ export async function POST(request: Request, ctx: { params: Promise<{ provider: 
   const { provider } = await ctx.params;
   const impl = registry.get(provider);
   if (!impl) {
-    return NextResponse.json({ error: "Неизвестный способ оплаты" }, { status: 404 });
+    return NextResponse.json({ error: 'Неизвестный способ оплаты' }, { status: 404 });
   }
 
   // Секрет настроен на сервере? Иначе проверять нечем и принимать нельзя.
   if (!impl.ready() && !impl.reason?.()) {
-    return NextResponse.json({ error: "Способ оплаты не настроен" }, { status: 503 });
+    return NextResponse.json({ error: 'Способ оплаты не настроен' }, { status: 503 });
   }
 
   const body = await request.text();
   const event = impl.verify({ body, headers: request.headers });
   if (!event) {
-    return NextResponse.json({ error: "Подпись не сошлась или формат неизвестен" }, { status: 401 });
+    return NextResponse.json(
+      { error: 'Подпись не сошлась или формат неизвестен' },
+      { status: 401 },
+    );
   }
 
-  const applied = grant(event);
+  /*
+   * Возврат отзывает права, а не выдаёт. Раньше событие "refunded" отбрасывал
+   * сам verify (там принимался только "paid"): деньги возвращались, а тариф
+   * оставался — подписка за чужой счёт.
+   */
+  const applied = event.kind === 'refunded' ? revoke(event) : grant(event);
   return NextResponse.json({ ok: true, applied, externalId: event.externalId });
 }

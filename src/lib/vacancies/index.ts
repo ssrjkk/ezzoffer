@@ -1,37 +1,43 @@
-import { db } from "../db";
-import type { Level, WorkFormat } from "../data";
-import type { Vacancy, VacancyProvider, VacancyQuery, VacancySource } from "./types";
-import { allLocalVacancies, localProvider } from "./local";
-import { trudvsemProvider } from "./trudvsem";
-import { hhProvider } from "./hh";
-import { remoteokProvider } from "./remoteok";
-import { greenhouseProvider } from "./greenhouse";
-import { ashbyProvider } from "./ashby";
-import { companyFeedProvider } from "./company";
-import { geekjobProvider } from "./geekjob";
-import { jobicyProvider } from "./jobicy";
-import { weworkremotelyProvider } from "./weworkremotely";
-import { rabotaProvider } from "./rabota";
-import { flruProvider, kworkProvider } from "./freelance";
+import { db } from '../db';
+import type { Level, WorkFormat } from '../data';
+import type { Vacancy, VacancyProvider, VacancyQuery, VacancySource } from './types';
+import { allLocalVacancies, localProvider } from './local';
+import { trudvsemProvider } from './trudvsem';
+import { hhProvider } from './hh';
+import { remoteokProvider } from './remoteok';
+import { greenhouseProvider } from './greenhouse';
+import { ashbyProvider } from './ashby';
+import { companyFeedProvider } from './company';
+import { geekjobProvider } from './geekjob';
+import { jobicyProvider } from './jobicy';
+import { weworkremotelyProvider } from './weworkremotely';
+import { rabotaProvider } from './rabota';
+import { flruProvider, kworkProvider } from './freelance';
 
-export type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery, VacancySource } from "./types";
+export type {
+  Vacancy,
+  VacancyFetchResult,
+  VacancyProvider,
+  VacancyQuery,
+  VacancySource,
+} from './types';
 
 export const SOURCE_LABELS: Record<VacancySource, string> = {
-  local: "EZOffer",
-  trudvsem: "Работа России",
-  hh: "hh.ru",
-  remoteok: "RemoteOK",
-  greenhouse: "Сайты компаний (Greenhouse)",
-  ashby: "Сайты компаний (Ashby)",
-  company: "Сайты компаний (RSS)",
-  x: "X / Twitter",
-  tg: "Telegram-каналы",
-  geekjob: "GeekJob",
-  jobicy: "Jobicy (remote)",
-  weworkremotely: "We Work Remotely",
-  rabota: "Работа.ру",
-  flru: "FL.ru (фриланс)",
-  kwork: "Kwork (фриланс)",
+  local: 'EZOffer',
+  trudvsem: 'Работа России',
+  hh: 'hh.ru',
+  remoteok: 'RemoteOK',
+  greenhouse: 'Сайты компаний (Greenhouse)',
+  ashby: 'Сайты компаний (Ashby)',
+  company: 'Сайты компаний (RSS)',
+  x: 'X / Twitter',
+  tg: 'Telegram-каналы',
+  geekjob: 'GeekJob',
+  jobicy: 'Jobicy (remote)',
+  weworkremotely: 'We Work Remotely',
+  rabota: 'Работа.ру',
+  flru: 'FL.ru (фриланс)',
+  kwork: 'Kwork (фриланс)',
 };
 
 export type SourceStatus = {
@@ -93,7 +99,7 @@ function parseList(json: string): string[] {
   try {
     const value: unknown = JSON.parse(json);
     if (!Array.isArray(value)) return [];
-    return value.filter((item): item is string => typeof item === "string");
+    return value.filter((item): item is string => typeof item === 'string');
   } catch {
     return [];
   }
@@ -218,9 +224,15 @@ function invalidateCatalog(): void {
  * тестам прохождения не по той причине: вакансия из первого теста попадала
  * в кэш, а вакансии из следующих тестов туда не попадали, и проверки
  * «отклик ушёл» выполнялись на первой попавшейся записи.
+ *
+ * Сбрасывается и флаг localSeeded, а не только кэш. Иначе после стирания
+ * таблицы (тесты между кейсами делают DELETE FROM vacancies) сид локальных
+ * вакансий не повторялся бы: флаг говорил «уже засеяно», а засеяно было в
+ * уже стёртую таблицу. Каталог оставался бы пустым до конца процесса.
  */
 export function resetCatalogCache(): void {
   invalidateCatalog();
+  localSeeded = false;
 }
 
 export function ensureLocalSeeded(): void {
@@ -258,14 +270,16 @@ export function getVacancyIndex(): Map<string, Vacancy> {
 
 export function getVacancyBySlug(slug: string): Vacancy | null {
   ensureLocalSeeded();
-  const row = db.prepare("SELECT * FROM vacancies WHERE slug = ?").get(slug) as VacancyRow | undefined;
+  const row = db.prepare('SELECT * FROM vacancies WHERE slug = ?').get(slug) as
+    VacancyRow | undefined;
   return row ? rowToVacancy(row) : null;
 }
 
 function sourceCounts(): Map<string, number> {
-  const rows = db
-    .prepare("SELECT source, COUNT(*) AS c FROM vacancies GROUP BY source")
-    .all() as { source: string; c: number }[];
+  const rows = db.prepare('SELECT source, COUNT(*) AS c FROM vacancies GROUP BY source').all() as {
+    source: string;
+    c: number;
+  }[];
   return new Map(rows.map((r) => [r.source, r.c]));
 }
 
@@ -285,9 +299,15 @@ export async function refreshProviders(query: VacancyQuery = {}): Promise<Source
   ensureLocalSeeded();
   const staleBefore = Date.now() - EXTERNAL_TTL_MS;
   const statuses: SourceStatus[] = [];
-  const local = providers.find((p) => p.source === "local")!;
-  statuses.push({ source: local.source, label: local.label, available: true, count: allLocalCount(), ok: true });
-  const external = providers.filter((p) => p.source !== "local");
+  const local = providers.find((p) => p.source === 'local')!;
+  statuses.push({
+    source: local.source,
+    label: local.label,
+    available: true,
+    count: allLocalCount(),
+    ok: true,
+  });
+  const external = providers.filter((p) => p.source !== 'local');
   // Сколько запросов можно успеть: каждый с таймаутом 25с — успеваем все параллельно,
   // но ограничиваем конкурентность, чтобы не бить по всем доменам разом.
   const CONCURRENCY = Math.min(4, external.length);
@@ -296,13 +316,22 @@ export async function refreshProviders(query: VacancyQuery = {}): Promise<Source
   const run = async (p: VacancyProvider): Promise<void> => {
     const base = { source: p.source, label: p.label, available: p.isAvailable() };
     if (!p.isAvailable()) {
-      statuses.push({ ...base, count: sourceCounts().get(p.source) ?? 0, requiresSetup: true, ok: false, error: "Провайдер не настроен" });
+      statuses.push({
+        ...base,
+        count: sourceCounts().get(p.source) ?? 0,
+        requiresSetup: true,
+        ok: false,
+        error: 'Провайдер не настроен',
+      });
       return;
     }
     const result = await p.fetchVacancies({ ...query, limit });
     if (result.ok && result.vacancies.length > 0) {
       upsertMany(result.vacancies);
-      db.prepare("DELETE FROM vacancies WHERE source = ? AND fetched_at < ?").run(p.source, staleBefore);
+      db.prepare('DELETE FROM vacancies WHERE source = ? AND fetched_at < ?').run(
+        p.source,
+        staleBefore,
+      );
     }
     statuses.push({
       ...base,

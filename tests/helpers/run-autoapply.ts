@@ -1,5 +1,5 @@
-import { runAutoApply as realRunAutoApply } from "../../src/lib/autoapply";
-import type { PacingConfig } from "../../src/lib/anti-ban";
+import { runAutoApply as realRunAutoApply } from '../../src/lib/autoapply';
+import type { PacingConfig } from '../../src/lib/anti-ban';
 
 /**
  * Прогон автоотклика на фиксированном времени.
@@ -26,6 +26,6 @@ export const TEST_NOW = (() => {
 export function runAutoApply(opts?: {
   pacing?: Partial<PacingConfig>;
   now?: () => number;
-}): Promise<import("../../src/lib/autoapply").AutoApplyRun> {
+}): Promise<import('../../src/lib/autoapply').AutoApplyRun> {
   return realRunAutoApply({ ...opts, now: opts?.now ?? (() => TEST_NOW) });
 }

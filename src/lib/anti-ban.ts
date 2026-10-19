@@ -79,13 +79,13 @@ const BACKOFF: Record<FailureKind, (streak: number) => number> = {
 /** Потолок для Retry-After: иначе 429 с Retry-After: 3600 встал бы на час. */
 const RETRY_AFTER_CAP = 2 * HOUR;
 
-export type FailureKind = "network" | "rate_limit" | "blocked";
+export type FailureKind = 'network' | 'rate_limit' | 'blocked';
 
 export type PaceDecision =
   | { allowed: true; delayMs: number }
   | {
       allowed: false;
-      reason: "night" | "daily" | "hourly" | "backoff";
+      reason: 'night' | 'daily' | 'hourly' | 'backoff';
       retryAfterMs: number;
       /** Что именно площадка сказала — показывается человеку. */
       detail?: string;
@@ -121,18 +121,21 @@ function dayFloor(now: number): number {
   return d.getTime();
 }
 
-export function createPacing(config: Partial<PacingConfig> = {}, nowFn: () => number = Date.now): Pacing {
+export function createPacing(
+  config: Partial<PacingConfig> = {},
+  nowFn: () => number = Date.now,
+): Pacing {
   const cfg: PacingConfig = { ...DEFAULT_PACING, ...config };
   const sentTimestamps: number[] = [];
   let lastFailureAt = 0;
   let failureStreak = 0;
   /** Вид последнего отказа — от него зависит, чем считать паузу. */
-  let failureKind: FailureKind = "network";
+  let failureKind: FailureKind = 'network';
   /** Пауза до следующей отправки: реальный планировщик зовёт decide() один раз на тик. */
   let cooldownUntil = 0;
   /** Инструкция площадки «не раньше»: важнее расчётного backoff, но с потолком. */
   let retryAfterUntil = 0;
-  let retryAfterDetail = "";
+  let retryAfterDetail = '';
   /** Аккаунт ограничен площадкой — самый сильный сигнал, держим дольше всех. */
   let blockUntil = 0;
   /** Задержка, возвращённая последним разрешённым decide(); применяется в recordSent. */
@@ -156,15 +159,15 @@ export function createPacing(config: Partial<PacingConfig> = {}, nowFn: () => nu
       if (blockUntil > t) {
         return {
           allowed: false,
-          reason: "backoff",
+          reason: 'backoff',
           retryAfterMs: blockUntil - t,
-          detail: "hh.ru ограничил доступ к аккаунту",
+          detail: 'hh.ru ограничил доступ к аккаунту',
         };
       }
 
       // Выдержка после предыдущей отправки внутри того же процесса.
       if (cooldownUntil > t) {
-        return { allowed: false, reason: "backoff", retryAfterMs: cooldownUntil - t };
+        return { allowed: false, reason: 'backoff', retryAfterMs: cooldownUntil - t };
       }
 
       // Ночь: пауза до начала рабочего дня.
@@ -172,14 +175,14 @@ export function createPacing(config: Partial<PacingConfig> = {}, nowFn: () => nu
       if (hour < cfg.workStartHour || hour >= cfg.workEndHour) {
         const start = startOfLocalHour(t, cfg.workStartHour);
         const retry = start <= t ? start + 24 * HOUR : start;
-        return { allowed: false, reason: "night", retryAfterMs: retry - t };
+        return { allowed: false, reason: 'night', retryAfterMs: retry - t };
       }
 
       // Инструкция площадки важнее расчётного backoff.
       if (retryAfterUntil > t) {
         return {
           allowed: false,
-          reason: "backoff",
+          reason: 'backoff',
           retryAfterMs: retryAfterUntil - t,
           detail: retryAfterDetail || undefined,
         };
@@ -192,7 +195,7 @@ export function createPacing(config: Partial<PacingConfig> = {}, nowFn: () => nu
         if (t - lastFailureAt < wait) {
           return {
             allowed: false,
-            reason: "backoff",
+            reason: 'backoff',
             retryAfterMs: wait - (t - lastFailureAt),
             detail: FAILURE_LABEL[failureKind],
           };
@@ -204,7 +207,7 @@ export function createPacing(config: Partial<PacingConfig> = {}, nowFn: () => nu
       const hourlyUsed = sentTimestamps.filter((ts) => ts >= hourStart).length;
       if (hourlyUsed >= cfg.hourlyLimit) {
         const nextHour = hourStart + HOUR;
-        return { allowed: false, reason: "hourly", retryAfterMs: nextHour - t };
+        return { allowed: false, reason: 'hourly', retryAfterMs: nextHour - t };
       }
 
       // Суточный лимит.
@@ -212,7 +215,7 @@ export function createPacing(config: Partial<PacingConfig> = {}, nowFn: () => nu
       const dailyUsed = sentTimestamps.filter((ts) => ts >= dayStart).length;
       if (dailyUsed >= cfg.dailyLimit) {
         const nextDay = dayStart + 24 * HOUR;
-        return { allowed: false, reason: "daily", retryAfterMs: nextDay - t };
+        return { allowed: false, reason: 'daily', retryAfterMs: nextDay - t };
       }
 
       // Джиттер-пауза между откликами. Вызывающий код обязан ждать delayMs
@@ -236,7 +239,7 @@ export function createPacing(config: Partial<PacingConfig> = {}, nowFn: () => nu
       failureStreak = 0;
       lastFailureAt = 0;
       retryAfterUntil = 0;
-      retryAfterDetail = "";
+      retryAfterDetail = '';
       // Храним только последние 24 часа.
       const cutoff = now - 24 * HOUR;
       for (let i = 0; i < sentTimestamps.length; i++) {
@@ -258,7 +261,7 @@ export function createPacing(config: Partial<PacingConfig> = {}, nowFn: () => nu
        */
       failureStreak = failureStreak > 0 && failureKind === kind ? failureStreak + 1 : 1;
       failureKind = kind;
-      if (kind === "blocked") {
+      if (kind === 'blocked') {
         blockUntil = now + BACKOFF.blocked(failureStreak);
       }
     },
@@ -266,7 +269,7 @@ export function createPacing(config: Partial<PacingConfig> = {}, nowFn: () => nu
     respectRetryAfter(ms: number, now = nowFn()): void {
       if (!Number.isFinite(ms) || ms <= 0) return;
       retryAfterUntil = now + Math.min(ms, RETRY_AFTER_CAP);
-      retryAfterDetail = "hh.ru попросил замедлиться (Retry-After)";
+      retryAfterDetail = 'hh.ru попросил замедлиться (Retry-After)';
     },
 
     blockedUntil(now = nowFn()): number {
@@ -277,9 +280,9 @@ export function createPacing(config: Partial<PacingConfig> = {}, nowFn: () => nu
 
 /** Человеческие подписи отказов — они показываются в кабинете и в Telegram. */
 export const FAILURE_LABEL: Record<FailureKind, string> = {
-  network: "Сбой связи с hh.ru",
-  rate_limit: "hh.ru попросил замедлиться",
-  blocked: "hh.ru ограничил доступ к аккаунту",
+  network: 'Сбой связи с hh.ru',
+  rate_limit: 'hh.ru попросил замедлиться',
+  blocked: 'hh.ru ограничил доступ к аккаунту',
 };
 
 /** Тестовый хелпер: мгновенная пауза, без лимитов и задержек. */

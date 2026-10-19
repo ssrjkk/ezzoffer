@@ -9,7 +9,7 @@
  * Это те самые эффекты, ради которых существуют тесты диалогов:
  * фокус, ловушка и возврат фокуса живут в useEffect.
  */
-import { JSDOM } from "jsdom";
+import { JSDOM } from 'jsdom';
 
 export interface DomHandle {
   window: Window & typeof globalThis;
@@ -22,8 +22,8 @@ export interface DomHandle {
  * Поднимает DOM и прокидывает глобалы. Возвращает контейнер, который
  * нужно отрендерить в act().
  */
-export function setupDom(html = "<!doctype html><html><body></body></html>"): DomHandle {
-  const dom = new JSDOM(html, { pretendToBeVisual: true, url: "http://localhost/" });
+export function setupDom(html = '<!doctype html><html><body></body></html>'): DomHandle {
+  const dom = new JSDOM(html, { pretendToBeVisual: true, url: 'http://localhost/' });
   const win = dom.window as unknown as Window & typeof globalThis;
 
   const globals: Record<string, unknown> = {
@@ -56,7 +56,7 @@ export function setupDom(html = "<!doctype html><html><body></body></html>"): Do
     });
   }
 
-  const container = win.document.createElement("div");
+  const container = win.document.createElement('div');
   win.document.body.appendChild(container);
 
   return {
@@ -76,7 +76,7 @@ export function setupDom(html = "<!doctype html><html><body></body></html>"): Do
 /** Нажимает клавишу на документе — так же, как это делает реальный браузер. */
 export function pressKey(doc: Document, key: string, init: KeyboardEventInit = {}): KeyboardEvent {
   const win = doc.defaultView!;
-  const event = new win.KeyboardEvent("keydown", {
+  const event = new win.KeyboardEvent('keydown', {
     key,
     bubbles: true,
     cancelable: true,

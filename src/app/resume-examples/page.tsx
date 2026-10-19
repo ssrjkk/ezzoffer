@@ -1,13 +1,13 @@
-import type { Metadata } from "next";
-import Link from "next/link";
-import { Section, Eyebrow } from "@/components/ui";
-import { Reveal } from "@/components/reveal";
-import { resumeExamples } from "@/lib/data";
+import type { Metadata } from 'next';
+import Link from 'next/link';
+import { Section, Eyebrow } from '@/components/ui';
+import { Reveal } from '@/components/reveal';
+import { resumeExamples } from '@/lib/data';
 
 export const metadata: Metadata = {
-  title: "Примеры резюме, которые проходят ATS",
+  title: 'Примеры резюме, которые проходят ATS',
   description:
-    "Готовые примеры резюме по IT-ролям: Frontend, Backend, QA. Структура, ключевые слова и формулировки, которые нравятся рекрутерам и ATS-системам.",
+    'Готовые примеры резюме по IT-ролям: Frontend, Backend, QA. Структура, ключевые слова и формулировки, которые нравятся рекрутерам и ATS-системам.',
 };
 
 /*
@@ -31,8 +31,8 @@ export default function ResumeExamplesPage() {
           Резюме, которое <span className="text-accent">проходит ATS</span>
         </h1>
         <p className="measure mt-6 text-base leading-relaxed text-muted md:text-lg">
-          Готовые структуры резюме для популярных IT-ролей. Используйте их как образец:
-          замените данные своими, сохранив формулировки с цифрами и правильные ключевые слова.
+          Готовые структуры резюме для популярных IT-ролей. Используйте их как образец: замените
+          данные своими, сохранив формулировки с цифрами и правильные ключевые слова.
         </p>
       </Section>
 
@@ -82,12 +82,10 @@ export default function ResumeExamplesPage() {
         </div>
 
         <div className="mt-16 border-t-2 border-ink pt-10">
-          <h2 className="font-serif text-2xl md:text-3xl">
-            Готовое резюме под вашу вакансию
-          </h2>
+          <h2 className="font-serif text-2xl md:text-3xl">Готовое резюме под вашу вакансию</h2>
           <p className="measure mt-3 leading-relaxed text-muted">
-            Загрузите своё резюме в кабинет — EZOffer адаптирует формулировки под целевые
-            вакансии и посчитает ATS-скор.
+            Загрузите своё резюме в кабинет — EZOffer адаптирует формулировки под целевые вакансии и
+            посчитает ATS-скор.
           </p>
           <Link
             href="/signup"

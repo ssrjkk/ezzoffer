@@ -1,6 +1,6 @@
-import { db } from "./db";
-import { getCatalog } from "./vacancies";
-import type { Vacancy } from "./vacancies/types";
+import { db } from './db';
+import { getCatalog } from './vacancies';
+import type { Vacancy } from './vacancies/types';
 import {
   DIRECTION_LABELS,
   WORK_MODE_LABELS,
@@ -8,8 +8,8 @@ import {
   detectWorkMode,
   type Direction,
   type WorkMode,
-} from "./direction";
-import type { Level } from "./data";
+} from './direction';
+import type { Level } from './data';
 
 /**
  * Подработка и фриланс.
@@ -64,24 +64,24 @@ export type Gig = {
 };
 
 const SOURCE_LABELS_LOCAL: Record<string, string> = {
-  local: "EZOffer",
-  trudvsem: "Работа России",
-  hh: "hh.ru",
-  remoteok: "RemoteOK",
-  greenhouse: "Greenhouse",
-  ashby: "Ashby",
-  company: "RSS компании",
-  x: "X / Twitter",
-  tg: "Telegram",
-  geekjob: "GeekJob",
-  jobicy: "Jobicy",
-  weworkremotely: "We Work Remotely",
-  rabota: "Работа.ру",
-  flru: "FL.ru",
-  kwork: "Kwork",
+  local: 'EZOffer',
+  trudvsem: 'Работа России',
+  hh: 'hh.ru',
+  remoteok: 'RemoteOK',
+  greenhouse: 'Greenhouse',
+  ashby: 'Ashby',
+  company: 'RSS компании',
+  x: 'X / Twitter',
+  tg: 'Telegram',
+  geekjob: 'GeekJob',
+  jobicy: 'Jobicy',
+  weworkremotely: 'We Work Remotely',
+  rabota: 'Работа.ру',
+  flru: 'FL.ru',
+  kwork: 'Kwork',
 };
 
-const FREELANCE_SOURCES = new Set(["flru", "kwork"]);
+const FREELANCE_SOURCES = new Set(['flru', 'kwork']);
 
 /**
  * Что вообще можно считать подработкой.
@@ -90,8 +90,7 @@ const FREELANCE_SOURCES = new Set(["flru", "kwork"]);
  * человек пришёл за подработкой, а не за разовым заказом. Считать заказ
  * подработкой — подмена предмета.
  */
-const SIDEGIG_SOURCES = new Set(["hh", "trudvsem", "geekjob", "rabota"]);
-
+const SIDEGIG_SOURCES = new Set(['hh', 'trudvsem', 'geekjob', 'rabota']);
 
 /*
  * Признак цифровой работы.
@@ -107,7 +106,13 @@ const SIDEGIG_SOURCES = new Set(["hh", "trudvsem", "geekjob", "rabota"]);
  */
 
 function textOf(v: Vacancy): string {
-  return [v.title, v.about, v.category, ...(v.requirements ?? []), ...(v.responsibilities ?? [])].join(" ");
+  return [
+    v.title,
+    v.about,
+    v.category,
+    ...(v.requirements ?? []),
+    ...(v.responsibilities ?? []),
+  ].join(' ');
 }
 
 function toGig(v: Vacancy): Gig {
@@ -130,7 +135,7 @@ function toGig(v: Vacancy): Gig {
     direction,
     directionLabel: DIRECTION_LABELS[direction],
     mode,
-    manual: v.source !== "hh",
+    manual: v.source !== 'hh',
     employment: v.employment ?? null,
   };
 }
@@ -152,7 +157,7 @@ export function findGigs(filter: GigFilter = {}): Gig[] {
   for (const v of getCatalog()) {
     if (wantedMode) {
       // Заказ и подработка — разные вещи, и подменять одно другим нельзя.
-      if (wantedMode === "подработка" && !SIDEGIG_SOURCES.has(v.source)) continue;
+      if (wantedMode === 'подработка' && !SIDEGIG_SOURCES.has(v.source)) continue;
     }
 
     const g = toGig(v);
@@ -164,7 +169,7 @@ export function findGigs(filter: GigFilter = {}): Gig[] {
      * подработкой на вечер, получал вакансии с полной занятостью — это
      * обещание, которое вкладка не выполняет.
      */
-    if (!wantedMode && g.mode === "основная") continue;
+    if (!wantedMode && g.mode === 'основная') continue;
     /*
      * Работа России — государственная площадка по всем профессиям, а не по IT.
      * В каталоге это было всегда, но в подбор подработки вылезли «Тракторист -
@@ -173,7 +178,7 @@ export function findGigs(filter: GigFilter = {}): Gig[] {
      * что и везде, поэтому «Системный администратор» проходит, а «Тракторист»
      * отсекается как «неизвестно».
      */
-    if (g.direction === "other") continue;
+    if (g.direction === 'other') continue;
     /*
      * Режим сверяется всегда, включая «подработку».
      *
@@ -201,9 +206,8 @@ export function findGigs(filter: GigFilter = {}): Gig[] {
 }
 
 function getVacancyDate(slug: string): number {
-  const row = db.prepare("SELECT published_at FROM vacancies WHERE slug = ?").get(slug) as
-    | { published_at: number | null }
-    | undefined;
+  const row = db.prepare('SELECT published_at FROM vacancies WHERE slug = ?').get(slug) as
+    { published_at: number | null } | undefined;
   return row?.published_at ?? 0;
 }
 
@@ -226,8 +230,8 @@ export function gigCounts(filter: GigFilter = {}): {
    * кнопке «Подработка (42)», а под ней четыре вакансии. Обе величины верны по
    * отдельности — просто отвечают на разные вопросы, а стояли в одном месте.
    */
-  const подработка = findGigs({ ...filter, mode: "подработка", limit: 1000 }).length;
-  const фриланс = findGigs({ ...filter, mode: "фриланс", limit: 1000 }).length;
+  const подработка = findGigs({ ...filter, mode: 'подработка', limit: 1000 }).length;
+  const фриланс = findGigs({ ...filter, mode: 'фриланс', limit: 1000 }).length;
   /*
    * «Всё» — это подработка плюс фриланс, а не весь каталог.
    *
@@ -240,12 +244,14 @@ export function gigCounts(filter: GigFilter = {}): {
 }
 
 /** Направления, за которые реально есть заказы — пустые разделы не показываем. */
-export function availableDirections(mode?: WorkMode): { key: Direction; label: string; count: number }[] {
+export function availableDirections(
+  mode?: WorkMode,
+): { key: Direction; label: string; count: number }[] {
   const gigs = findGigs({ mode });
   const counts = new Map<Direction, number>();
   for (const g of gigs) counts.set(g.direction, (counts.get(g.direction) ?? 0) + 1);
   return [...counts.entries()]
-    .filter(([key]) => key !== "other" || (counts.get(key) ?? 0) >= 3)
+    .filter(([key]) => key !== 'other' || (counts.get(key) ?? 0) >= 3)
     .map(([key, count]) => ({ key, label: DIRECTION_LABELS[key], count }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 }

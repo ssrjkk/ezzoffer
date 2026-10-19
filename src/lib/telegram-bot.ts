@@ -1,24 +1,20 @@
-import {
-  mainKeyboard,
-  commandKeyboard,
-  keyboardFor,
-  DYNAMIC_LABELS,
-} from "./telegram-keyboard";
+import { mainKeyboard, commandKeyboard, keyboardFor, DYNAMIC_LABELS } from './telegram-keyboard';
 
 // Реэкспорт: клавиатуры живут в отдельном модуле, но это часть бота, и
 // потребители (тесты, превью) обращаются к telegram-bot.
 export { mainKeyboard, commandKeyboard, keyboardFor };
 
-import { db, type User } from "./db";
-import { getStats } from "./stats";
-import { isPlanActive, planLabel } from "./plans";
-import { getCatalog, getVacancyBySlug } from "./vacancies";
-import { prepareInterview } from "./interview";
-import { nextActions } from "./pipeline";
-import { matchesSearch, skillsByVacancy } from "./matcher";
-import { applyToVacancy, getUserResumes, blockedUntil, blockedReason } from "./autoapply";
-import { rankVacancies } from "./resume-targeting";
-import type { Vacancy } from "./vacancies/types";
+import { db, type User } from './db';
+import { getStats } from './stats';
+import { isPlanActive, planLabel } from './plans';
+import { getCatalog, getVacancyBySlug } from './vacancies';
+import { prepareInterview } from './interview';
+import { nextActions } from './pipeline';
+import { matchesSearch, skillsByVacancy } from './matcher';
+import { applyToVacancy, getUserResumes, blockedUntil, blockedReason } from './autoapply';
+import { rankVacancies } from './resume-targeting';
+import { DEMO_MODE_BRIEF, isLiveMode } from './user-mode';
+import type { Vacancy } from './vacancies/types';
 import {
   sendTelegramMessage,
   unlinkChat,
@@ -28,11 +24,11 @@ import {
   editTelegramMessage,
   escapeHtml,
   type InlineKeyboard,
-} from "./telegram";
-import { BOT_COMMANDS, BOT_MESSAGES } from "./bot-data";
-import { computeSkillGaps } from "./skill-gaps";
-import { findGigs } from "./gigs";
-import { learningPath } from "./learning-paths";
+} from './telegram';
+import { BOT_COMMANDS, BOT_MESSAGES } from './bot-data';
+import { computeSkillGaps } from './skill-gaps';
+import { findGigs } from './gigs';
+import { learningPath } from './learning-paths';
 
 /**
  * Обработчик апдейтов Telegram.
@@ -74,13 +70,52 @@ export type TelegramUpdate = {
  *
  * Храним последние обработанные id в памяти процесса: update_id у Telegram
  * монотонно возрастает, поэтому достаточно отсекать всё, что уже встречалось.
+ *
+ * Память подкреплена таблицей meta: при рестарте процесса множество
+ * восстанавливается из неё. Без этого окно повтора открывалось на каждый
+ * рестарт — а рестарты здесь регулярны (деплой, планировщик, падения).
+ * Задержанный ретрай Telegram после рестарта обрабатывался как новый апдейт:
+ * команда выполнялась второй раз.
+ *
+ * Запись в meta идёт на каждый НОВЫЙ апдейт — это одна вставка на сообщение,
+ * для локального SQLite дёшево. Семантика та же, что была: последние 1000 id.
  */
 const seenUpdates = new Set<number>();
 const SEEN_UPDATES_LIMIT = 1000;
+const SEEN_UPDATES_META_KEY = 'tg:seen-updates';
+let seenUpdatesLoaded = false;
+
+function loadSeenUpdates(): void {
+  if (seenUpdatesLoaded) return;
+  seenUpdatesLoaded = true;
+  try {
+    const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(SEEN_UPDATES_META_KEY) as
+      { value: string } | undefined;
+    if (!row?.value) return;
+    const ids = JSON.parse(row.value) as unknown;
+    if (!Array.isArray(ids)) return;
+    for (const id of ids) {
+      if (typeof id === 'number' && Number.isFinite(id)) seenUpdates.add(id);
+    }
+  } catch {
+    // Нет таблицы, битый JSON — начинаем с пустого множества, как раньше.
+  }
+}
+
+function persistSeenUpdates(): void {
+  try {
+    db.prepare(
+      'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    ).run(SEEN_UPDATES_META_KEY, JSON.stringify([...seenUpdates].slice(-SEEN_UPDATES_LIMIT)));
+  } catch {
+    // Защита от повторов — не условие обработки: молча пропускаем.
+  }
+}
 
 /** Возвращает false, если апдейт уже обрабатывался. */
 export function markUpdateSeen(updateId: number | undefined): boolean {
   if (updateId === undefined) return true;
+  loadSeenUpdates();
   if (seenUpdates.has(updateId)) return false;
   seenUpdates.add(updateId);
   // Сдерживаем рост памяти: при переполнении вытесняем самые старые записи.
@@ -92,12 +127,19 @@ export function markUpdateSeen(updateId: number | undefined): boolean {
       if (++removed >= excess) break;
     }
   }
+  persistSeenUpdates();
   return true;
 }
 
 /** Сброс для тестов. */
 export function resetSeenUpdates(): void {
   seenUpdates.clear();
+  seenUpdatesLoaded = true;
+  try {
+    db.prepare('DELETE FROM meta WHERE key = ?').run(SEEN_UPDATES_META_KEY);
+  } catch {
+    // Тестовая БД без meta — нечего чистить.
+  }
 }
 
 export type Reply = {
@@ -115,14 +157,14 @@ export type Reply = {
  * «Мгновенная остановка» и «Отклик с персонализацией».
  */
 export type BotAction =
-  | "link"
-  | "unlink"
-  | "pause"
-  | "resume"
-  | { kind: "apply"; vacancy: Vacancy }
-  | { kind: "interview"; page: number }
-  | { kind: "bookmarks"; page: number }
-  | { kind: "tips" };
+  | 'link'
+  | 'unlink'
+  | 'pause'
+  | 'resume'
+  | { kind: 'apply'; vacancy: Vacancy }
+  | { kind: 'interview'; page: number }
+  | { kind: 'bookmarks'; page: number }
+  | { kind: 'tips' };
 
 /** Сколько вопросов помещается в одно сообщение. */
 const INTERVIEW_PAGE = 3;
@@ -136,11 +178,27 @@ const BOOKMARK_PAGE = 6;
  * Берётся последний: человек готовится к тому, куда его позвали или куда он
  * только что откликнулся, а не к произвольному отклику трёхдневной давности.
  */
+/*
+ * Алиас `resume_id AS resumeId` — не косметика.
+ *
+ * Здесь был `SELECT job_slug AS slug, resume_id`, а тип объявлялся как
+ * `{ slug: string; resumeId: string | null }`. Приведение типа в TypeScript не
+ * проверяется, поэтому ошибка прошла компиляцию: в объекте лежал
+ * `resume_id`, а читался `last.resumeId` — всегда `undefined`.
+ *
+ * Дальше `resumeForPrep(user.id, undefined)` молча уходил на «последнее
+ * обновлённое резюме». То есть подготовка к собеседованию из Telegram всегда
+ * строилась не по тому резюме, которое компания видела, а по случайному, и
+ * человек об этом не узнавал: вопросы выглядят осмысленно, просто чужие.
+ *
+ * Ровно та же ошибка была в api/applications/[id]/interview, там её
+ * исправили, а до телеграма не добрались.
+ */
 function lastApplicable(userId: number): { slug: string; resumeId: string | null } | null {
   return (
     (db
       .prepare(
-        `SELECT job_slug AS slug, resume_id FROM applications
+        `SELECT job_slug AS slug, resume_id AS resumeId FROM applications
          WHERE user_id = ? AND withdrawn = 0
          ORDER BY sent_at DESC LIMIT 1`,
       )
@@ -149,16 +207,23 @@ function lastApplicable(userId: number): { slug: string; resumeId: string | null
 }
 
 /** Резюме, отправленное в этом отклике, с откатом на последнее обновлённое. */
-function resumeForPrep(userId: number, hhId: string | null): { title: string; content: string } | null {
+function resumeForPrep(
+  userId: number,
+  hhId: string | null,
+): { title: string; content: string } | null {
   const found = (
     hhId
-      ? db.prepare("SELECT title, content FROM resumes WHERE user_id = ? AND hh_id = ?").get(userId, hhId)
+      ? db
+          .prepare('SELECT title, content FROM resumes WHERE user_id = ? AND hh_id = ?')
+          .get(userId, hhId)
       : undefined
   ) as { title: string; content: string } | undefined;
   if (found) return found;
   return (
     (db
-      .prepare("SELECT title, content FROM resumes WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1")
+      .prepare(
+        'SELECT title, content FROM resumes WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1',
+      )
       .get(userId) as { title: string; content: string } | undefined) ?? null
   );
 }
@@ -176,10 +241,10 @@ function interviewReply(user: User, page: number): Reply {
   if (!last) {
     return {
       text: [
-        "Пока нечего готовить — нет ни одного отклика.",
-        "",
-        "Сначала отправьте отклик: /подбор, затем кнопка под вакансией. После этого здесь появятся вопросы именно по вашему резюме на эту позицию.",
-      ].join("\n"),
+        'Пока нечего готовить — нет ни одного отклика.',
+        '',
+        'Сначала отправьте отклик: /подбор, затем кнопка под вакансией. После этого здесь появятся вопросы именно по вашему резюме на эту позицию.',
+      ].join('\n'),
       keyboard: mainKeyboard(),
     };
   }
@@ -188,10 +253,10 @@ function interviewReply(user: User, page: number): Reply {
   if (!vacancy) {
     return {
       text: [
-        "Последний отклик — на вакансию, которой больше нет в каталоге.",
-        "",
-        "Скорее всего, её сняли на hh. Подготовьтесь к следующей: /подбор.",
-      ].join("\n"),
+        'Последний отклик — на вакансию, которой больше нет в каталоге.',
+        '',
+        'Скорее всего, её сняли на hh. Подготовьтесь к следующей: /подбор.',
+      ].join('\n'),
       keyboard: mainKeyboard(),
     };
   }
@@ -200,10 +265,10 @@ function interviewReply(user: User, page: number): Reply {
   if (!resume) {
     return {
       text: [
-        "Нет резюме — готовиться не к чему.",
-        "",
-        "Добавьте резюме в кабинете: /dashboard/resumes. Подготовка строится по нему.",
-      ].join("\n"),
+        'Нет резюме — готовиться не к чему.',
+        '',
+        'Добавьте резюме в кабинете: /dashboard/resumes. Подготовка строится по нему.',
+      ].join('\n'),
       keyboard: mainKeyboard(),
     };
   }
@@ -217,49 +282,49 @@ function interviewReply(user: User, page: number): Reply {
   const lines = [
     `<b>Собеседование: ${escapeHtml(vacancy.title)}</b>`,
     escapeHtml(vacancy.company),
-    "",
+    '',
   ];
 
   // Козыри и пробелы идут до вопросов: это то, что человек должен знать наизусть.
   if (prep.strongCards.length > 0) {
-    lines.push(`<b>Сильные стороны</b>: ${escapeHtml(prep.strongCards.slice(0, 4).join(", "))}`);
+    lines.push(`<b>Сильные стороны</b>: ${escapeHtml(prep.strongCards.slice(0, 4).join(', '))}`);
   }
   if (prep.riskyGaps.length > 0) {
     lines.push(
-      `<b>Спросят, а в резюме нет</b>: ${escapeHtml(prep.riskyGaps.slice(0, 4).join(", "))}`,
+      `<b>Спросят, а в резюме нет</b>: ${escapeHtml(prep.riskyGaps.slice(0, 4).join(', '))}`,
     );
   }
   if (prep.achievements.length > 0) {
-    lines.push("", "<b>Готовьте цифры</b>:");
+    lines.push('', '<b>Готовьте цифры</b>:');
     for (const a of prep.achievements) lines.push(`— ${escapeHtml(a)}`);
   }
 
-  lines.push("", `<b>Вопросы ${safePage} из ${pages}</b>`);
+  lines.push('', `<b>Вопросы ${safePage} из ${pages}</b>`);
   for (const q of chunk) {
     lines.push(`— ${escapeHtml(q.question)}`);
     lines.push(`  ${escapeHtml(q.hint)}`);
   }
 
   if (safePage < pages) {
-    lines.push("", `Осталось вопросов: ${prep.questions.length - from - chunk.length}.`);
+    lines.push('', `Осталось вопросов: ${prep.questions.length - from - chunk.length}.`);
   }
 
   return {
-    text: lines.join("\n"),
+    text: lines.join('\n'),
     keyboard: {
       inline_keyboard: [
         ...(safePage < pages
           ? [[{ text: DYNAMIC_LABELS.interviewMore, data: `interview:${safePage + 1}` }]]
           : []),
         [
-          { text: "Подбор вакансий", data: "menu:search" },
-          { text: "Статистика", data: "menu:stats" },
+          { text: 'Подбор вакансий', data: 'menu:search' },
+          { text: 'Статистика', data: 'menu:stats' },
         ],
         // Выход всегда под рукой: без него со второй страницы вопросов
         // единственный путь — набирать команду вручную.
         [
-          { text: "Пауза", data: "menu:pause" },
-          { text: "Помощь", data: "menu:help" },
+          { text: 'Пауза', data: 'menu:pause' },
+          { text: 'Помощь', data: 'menu:help' },
         ],
       ],
     },
@@ -270,7 +335,7 @@ function interviewReply(user: User, page: number): Reply {
 function resolveBookmark(userId: number, number: number): Vacancy | null {
   if (!Number.isInteger(number) || number < 1) return null;
   const row = db
-    .prepare("SELECT job_slug FROM bookmarks WHERE user_id = ? ORDER BY created_at DESC")
+    .prepare('SELECT job_slug FROM bookmarks WHERE user_id = ? ORDER BY created_at DESC')
     .all(userId) as { job_slug: string }[];
   const hit = row[number - 1];
   return hit ? getVacancyBySlug(hit.job_slug) : null;
@@ -279,16 +344,18 @@ function resolveBookmark(userId: number, number: number): Vacancy | null {
 /** Избранное: что человек отложил, чтобы вернуться. */
 function bookmarksReply(user: User, page: number): Reply {
   const rows = db
-    .prepare("SELECT job_slug, created_at FROM bookmarks WHERE user_id = ? ORDER BY created_at DESC")
+    .prepare(
+      'SELECT job_slug, created_at FROM bookmarks WHERE user_id = ? ORDER BY created_at DESC',
+    )
     .all(user.id) as { job_slug: string; created_at: number }[];
 
   if (rows.length === 0) {
     return {
       text: [
-        "В избранном пусто.",
-        "",
-        "Откладывайте вакансии, к которым хотите вернуться, — они не исчезнут из каталога за неделю. Список отложенного: /dashboard/bookmarks.",
-      ].join("\n"),
+        'В избранном пусто.',
+        '',
+        'Откладывайте вакансии, к которым хотите вернуться, — они не исчезнут из каталога за неделю. Список отложенного: /dashboard/bookmarks.',
+      ].join('\n'),
       keyboard: mainKeyboard(),
     };
   }
@@ -298,8 +365,8 @@ function bookmarksReply(user: User, page: number): Reply {
   const from = (safePage - 1) * BOOKMARK_PAGE;
   const chunk = rows.slice(from, from + BOOKMARK_PAGE);
 
-  const lines = [`<b>Избранное</b> — ${rows.length}, страница ${safePage} из ${pages}`, ""];
-  const buttons: InlineKeyboard["inline_keyboard"] = [];
+  const lines = [`<b>Избранное</b> — ${rows.length}, страница ${safePage} из ${pages}`, ''];
+  const buttons: InlineKeyboard['inline_keyboard'] = [];
 
   for (const [i, row] of chunk.entries()) {
     const vacancy = getVacancyBySlug(row.job_slug);
@@ -315,13 +382,14 @@ function bookmarksReply(user: User, page: number): Reply {
     ]);
   }
 
-  if (safePage < pages) buttons.unshift([{ text: DYNAMIC_LABELS.bookmarksMore, data: `bookmarks:${safePage + 1}` }]);
+  if (safePage < pages)
+    buttons.unshift([{ text: DYNAMIC_LABELS.bookmarksMore, data: `bookmarks:${safePage + 1}` }]);
   buttons.push([
-    { text: "Подбор вакансий", data: "menu:search" },
-    { text: "Пауза", data: "menu:pause" },
+    { text: 'Подбор вакансий', data: 'menu:search' },
+    { text: 'Пауза', data: 'menu:pause' },
   ]);
 
-  return { text: lines.join("\n"), keyboard: { inline_keyboard: buttons } };
+  return { text: lines.join('\n'), keyboard: { inline_keyboard: buttons } };
 }
 
 /** Что делать прямо сейчас: подсказки строятся по фактическому состоянию. */
@@ -330,20 +398,20 @@ function tipsReply(user: User): Reply {
   if (actions.length === 0) {
     return {
       text: [
-        "Сейчас ничего срочного: активные поиски есть, отклики идут.",
-        "",
-        "Посмотреть, что происходит: /статистика",
-      ].join("\n"),
+        'Сейчас ничего срочного: активные поиски есть, отклики идут.',
+        '',
+        'Посмотреть, что происходит: /статистика',
+      ].join('\n'),
       keyboard: mainKeyboard(),
     };
   }
 
-  const lines = ["<b>Что сделать сейчас</b>", ""];
+  const lines = ['<b>Что сделать сейчас</b>', ''];
   for (const action of actions.slice(0, 4)) {
     lines.push(`— ${escapeHtml(action.title)}`);
     if (action.detail) lines.push(`  ${escapeHtml(action.detail)}`);
   }
-  return { text: lines.join("\n"), keyboard: mainKeyboard() };
+  return { text: lines.join('\n'), keyboard: mainKeyboard() };
 }
 
 /**
@@ -362,11 +430,11 @@ function skillsReply(user: User): Reply {
   if (!report.basis.resumeFound) {
     return {
       text: [
-        "<b>Что закрыть в первую очередь</b>",
-        "",
-        "Пока нет резюме, список не собрать: неизвестно, чего в нём не хватает.",
-        "Добавьте резюме в кабинете (/dashboard/resumes) — и список соберётся сам.",
-      ].join("\n"),
+        '<b>Что закрыть в первую очередь</b>',
+        '',
+        'Пока нет резюме, список не собрать: неизвестно, чего в нём не хватает.',
+        'Добавьте резюме в кабинете (/dashboard/resumes) — и список соберётся сам.',
+      ].join('\n'),
       keyboard: mainKeyboard(),
     };
   }
@@ -374,29 +442,29 @@ function skillsReply(user: User): Reply {
   if (report.gaps.length === 0) {
     return {
       text: [
-        "<b>Что закрыть в первую очередь</b>",
-        "",
+        '<b>Что закрыть в первую очередь</b>',
+        '',
         report.basis.applications > 0
           ? `Пробелов не видно: всё, что требуют вакансии из вашего подбора, уже есть в резюме. Откликов разобрано: ${report.basis.applications}.`
-          : "Пробелов не видно, но откликов пока нет — список уточнится, как только они появятся.",
-      ].join("\n"),
+          : 'Пробелов не видно, но откликов пока нет — список уточнится, как только они появятся.',
+      ].join('\n'),
       keyboard: mainKeyboard(),
     };
   }
 
-  const lines = ["<b>Что закрыть в первую очередь</b>", ""];
+  const lines = ['<b>Что закрыть в первую очередь</b>', ''];
   for (const gap of report.gaps.slice(0, 4)) {
     lines.push(`— <b>${escapeHtml(gap.skill)}</b>: ${escapeHtml(gap.reason)}`);
     const path = learningPath(gap.skill);
     if (path) lines.push(`  Первым делом: ${escapeHtml(path.topics[0]?.topic ?? path.why)}`);
   }
   if (report.gaps.length > 4) {
-    lines.push("", `И ещё ${report.gaps.length - 4} — полный список с планами: /dashboard/skills`);
+    lines.push('', `И ещё ${report.gaps.length - 4} — полный список с планами: /dashboard/skills`);
   } else {
-    lines.push("", "Полный список с планами: /dashboard/skills");
+    lines.push('', 'Полный список с планами: /dashboard/skills');
   }
 
-  return { text: lines.join("\n"), keyboard: mainKeyboard() };
+  return { text: lines.join('\n'), keyboard: mainKeyboard() };
 }
 
 /**
@@ -408,32 +476,43 @@ function skillsReply(user: User): Reply {
  * что ввод текста с телефона дороже, чем сама вакансия; список ограничен по
  * длине сообщения, а полный — на странице.
  */
-function gigsReply(user: User, mode: "подработка" | "фриланс" | undefined): Reply {
+function gigsReply(user: User, mode: 'подработка' | 'фриланс' | undefined): Reply {
   const gigs = findGigs({ mode, limit: 8 });
 
   if (gigs.length === 0) {
-    const what = mode === "фриланс" ? "заказов" : mode === "подработка" ? "подработки" : "подработки и заказов";
+    const what =
+      mode === 'фриланс'
+        ? 'заказов'
+        : mode === 'подработка'
+          ? 'подработки'
+          : 'подработки и заказов';
     return {
       text: [
         `<b>${escapeHtml(cap(what))}:</b> сейчас пусто`,
-        "",
-        "Это факт, а не сбой: источники конечны, и пустая лента означает, что на площадках сегодня тихо.",
-        "Подработка обычно появляется в течение дня. Полный каталог с фильтрами: /dashboard/gigs",
-      ].join("\n"),
+        '',
+        'Это факт, а не сбой: источники конечны, и пустая лента означает, что на площадках сегодня тихо.',
+        'Подработка обычно появляется в течение дня. Полный каталог с фильтрами: /dashboard/gigs',
+      ].join('\n'),
       keyboard: mainKeyboard(),
     };
   }
 
-  const lines = [`<b>${mode === "фриланс" ? "Фриланс и заказы" : mode === "подработка" ? "Подработка" : "Подработка и заказы"}</b>`, ""];
+  const lines = [
+    `<b>${mode === 'фриланс' ? 'Фриланс и заказы' : mode === 'подработка' ? 'Подработка' : 'Подработка и заказы'}</b>`,
+    '',
+  ];
   for (const [i, g] of gigs.entries()) {
     lines.push(`${i + 1}. ${escapeHtml(g.title)}`);
     const meta = [g.company, g.city, g.directionLabel, g.sourceLabel].filter(Boolean);
-    if (meta.length) lines.push(`   ${escapeHtml(meta.join(" · "))}`);
+    if (meta.length) lines.push(`   ${escapeHtml(meta.join(' · '))}`);
   }
-  lines.push("", `Ещё ${Math.max(0, findGigs({ mode }).length - gigs.length)} в разделе: /dashboard/gigs`);
-  lines.push("Заказы отправляются на самой площадке — автоматической отправки нет.");
+  lines.push(
+    '',
+    `Ещё ${Math.max(0, findGigs({ mode }).length - gigs.length)} в разделе: /dashboard/gigs`,
+  );
+  lines.push('Заказы отправляются на самой площадке — автоматической отправки нет.');
 
-  return { text: lines.join("\n"), keyboard: mainKeyboard() };
+  return { text: lines.join('\n'), keyboard: mainKeyboard() };
 }
 
 function cap(s: string): string {
@@ -443,35 +522,35 @@ function cap(s: string): string {
 /** Ставит и снимает паузу. Возвращает, изменилось ли что-то. */
 function setPaused(user: User, paused: boolean): boolean {
   const result = db
-    .prepare("UPDATE users SET autoapply_paused = ? WHERE id = ?")
+    .prepare('UPDATE users SET autoapply_paused = ? WHERE id = ?')
     .run(paused ? 1 : 0, user.id);
   return result.changes > 0;
 }
 
 const HELP = [
-  "Привет! Я бот EZOffer — управляю откликами из Telegram.",
-  "",
-  "Команды:",
+  'Привет! Я бот EZOffer — управляю откликами из Telegram.',
+  '',
+  'Команды:',
   ...BOT_COMMANDS.map((c) => `/${c.command} — ${c.title.toLowerCase()}`),
-  "/статистика — воронка откликов за неделю",
-  "/собеседование — что спросят по вашему резюме на последнюю вакансию",
-  "/избранное — отложенные вакансии",
-  "/советы — что сделать прямо сейчас",
-  "/навыки — чего не хватает в резюме по вашим откликам",
-  "/подработка — частичная занятость и заказы с фриланс-досок",
-  "/связать <код> — привязать аккаунт из кабинета",
-  "/выйти — отвязать этот чат",
-  "/помощь — эта справка",
-  "",
-  "Сначала привяжите аккаунт: «Настройки → Telegram-бот» в кабинете (/dashboard/settings).",
-].join("\n");
+  '/статистика — воронка откликов за неделю',
+  '/собеседование — что спросят по вашему резюме на последнюю вакансию',
+  '/избранное — отложенные вакансии',
+  '/советы — что сделать прямо сейчас',
+  '/навыки — чего не хватает в резюме по вашим откликам',
+  '/подработка — частичная занятость и заказы с фриланс-досок',
+  '/связать <код> — привязать аккаунт из кабинета',
+  '/выйти — отвязать этот чат',
+  '/помощь — эта справка',
+  '',
+  'Сначала привяжите аккаунт: «Настройки → Telegram-бот» в кабинете (/dashboard/settings).',
+].join('\n');
 
 const NOT_LINKED = [
-  "Аккаунт не привязан.",
-  "",
-  "Чтобы связать: откройте в кабинете «Настройки → Telegram-бот» (/dashboard/settings),",
-  "возьмите шестизначный код и пришлите сюда: /связать 123456",
-].join("\n");
+  'Аккаунт не привязан.',
+  '',
+  'Чтобы связать: откройте в кабинете «Настройки → Telegram-бот» (/dashboard/settings),',
+  'возьмите шестизначный код и пришлите сюда: /связать 123456',
+].join('\n');
 
 function fmt(n: number): string {
   return String(n);
@@ -484,22 +563,22 @@ function statsReply(user: User): string {
   if (!active) {
     return [
       `Тариф «${planLabel(user)}» истёк — автоотклики на паузе.`,
-      "",
-      "Продлите тариф в кабинете: /dashboard/settings",
-    ].join("\n");
+      '',
+      'Продлите тариф в кабинете: /dashboard/settings',
+    ].join('\n');
   }
 
   const lines = [
     `Тариф: ${planLabel(user)} · сегодня ${fmt(stats.today)}/${fmt(stats.todayLimit)}`,
-    `Активных поисков: ${fmt(stats.activeSearches)}${user.autoapply_paused ? " · на паузе ⏸" : ""}`,
-    "",
-    "За 7 дней:",
+    `Активных поисков: ${fmt(stats.activeSearches)}${user.autoapply_paused ? ' · на паузе ⏸' : ''}`,
+    '',
+    'За 7 дней:',
     `Отправлено ${fmt(stats.sent)} · Просмотрено ${fmt(stats.viewed)} · Ответов ${fmt(stats.responded)}`,
-    "",
+    '',
     `Просмотры: ${fmt(stats.viewRate)}% · Ответы: ${fmt(stats.respondRate)}% · Приглашения: ${fmt(stats.inviteRate)}%`,
   ];
-  if (stats.hint) lines.push("", stats.hint);
-  return lines.join("\n");
+  if (stats.hint) lines.push('', stats.hint);
+  return lines.join('\n');
 }
 
 /**
@@ -515,17 +594,30 @@ function statsReply(user: User): string {
  * кодом, что и плановый прогон.
  */
 function applyReply(user: User, args: string): Reply {
-  if (!isPlanActive(user)) return { text: "Сначала активируйте тариф или пробный период." };
+  /*
+   * Демо-режим отсекает раньше тарифа.
+   *
+   * Порядок не формальный: человеку без тарифа помогает «активируйте тариф»,
+   * а человеку в демо-режиме с активным тарифом такой совет вводит в
+   * заблуждение — он выполнит его и всё равно не отправит отклик. Поэтому
+   * сначала режим, потом остальные препятствия.
+   */
+  if (!isLiveMode(user)) return { text: DEMO_MODE_BRIEF };
+  if (!isPlanActive(user)) return { text: 'Сначала активируйте тариф или пробный период.' };
   if (user.autoapply_paused) {
-    return { text: "Автоотклики на паузе ⏸ Снимите паузу: /старт" };
+    return { text: 'Автоотклики на паузе ⏸ Снимите паузу: /старт' };
   }
 
   const searches = db
-    .prepare("SELECT * FROM searches WHERE user_id = ? AND active = 1 ORDER BY created_at DESC LIMIT 5")
+    .prepare(
+      'SELECT * FROM searches WHERE user_id = ? AND active = 1 ORDER BY created_at DESC LIMIT 5',
+    )
     .all(user.id) as Parameters<typeof matchesSearch>[1][];
 
   if (searches.length === 0) {
-    return { text: "Нет активных автопоисков — откликаться пока не на что. Создайте поиск: /dashboard/jobs" };
+    return {
+      text: 'Нет активных автопоисков — откликаться пока не на что. Создайте поиск: /dashboard/jobs',
+    };
   }
 
   const catalog = getCatalog();
@@ -534,7 +626,7 @@ function applyReply(user: User, args: string): Reply {
   const seen = new Set<string>();
   const matched = catalog.filter(
     (v) =>
-      v.source === "hh" &&
+      v.source === 'hh' &&
       searches.some((s) => matchesSearch(v, s, skills.get(v.slug))) &&
       !seen.has(v.slug) &&
       seen.add(v.slug),
@@ -543,10 +635,10 @@ function applyReply(user: User, args: string): Reply {
   if (matched.length === 0) {
     return {
       text: [
-        "<b>Подходящих вакансий на hh.ru пока нет.</b>",
-        "",
-        "Бот откликается только на вакансии hh.ru — на остальных площадках отклик делается вручную из кабинета.",
-      ].join("\n"),
+        '<b>Подходящих вакансий на hh.ru пока нет.</b>',
+        '',
+        'Бот откликается только на вакансии hh.ru — на остальных площадках отклик делается вручную из кабинета.',
+      ].join('\n'),
       keyboard: mainKeyboard(),
     };
   }
@@ -570,7 +662,7 @@ function applyReply(user: User, args: string): Reply {
         keyboard: mainKeyboard(),
       };
     }
-    return { text: "", action: { kind: "apply", vacancy: target } };
+    return { text: '', action: { kind: 'apply', vacancy: target } };
   }
 
   /*
@@ -580,16 +672,16 @@ function applyReply(user: User, args: string): Reply {
    * «показаны все».
    */
   const shown = ranked.slice(0, 5);
-  const lines = [`<b>Подбор по вашим активным поискам</b>`, ""];
+  const lines = [`<b>Подбор по вашим активным поискам</b>`, ''];
   for (const [i, r] of shown.entries()) {
     const v = r.vacancy;
-    const match = r.ratio > 0 ? ` · навыков ${Math.round(r.ratio * 100)}%` : "";
+    const match = r.ratio > 0 ? ` · навыков ${Math.round(r.ratio * 100)}%` : '';
     lines.push(
-      `${i + 1}. ${escapeHtml(v.title)} — ${escapeHtml(v.company)}${v.salary ? ` · ${escapeHtml(v.salary)}` : ""}${match}`,
+      `${i + 1}. ${escapeHtml(v.title)} — ${escapeHtml(v.company)}${v.salary ? ` · ${escapeHtml(v.salary)}` : ''}${match}`,
     );
   }
   if (ranked.length > shown.length) {
-    lines.push("", `и ещё ${ranked.length - shown.length} — в кабинете виден полный список.`);
+    lines.push('', `и ещё ${ranked.length - shown.length} — в кабинете виден полный список.`);
   }
 
   /*
@@ -599,13 +691,13 @@ function applyReply(user: User, args: string): Reply {
    * Кнопка ставит выбор рядом с названием вакансии, и промахнуться нельзя.
    */
   return {
-    text: lines.join("\n"),
+    text: lines.join('\n'),
     keyboard: keyboardFor(
       shown.map((r) => ({ title: r.vacancy.title, company: r.vacancy.company })),
       [
         [
-          { text: "Статистика", data: "menu:stats" },
-          { text: "Пауза", data: "menu:pause" },
+          { text: 'Статистика', data: 'menu:stats' },
+          { text: 'Пауза', data: 'menu:pause' },
         ],
       ],
     ),
@@ -615,10 +707,10 @@ function applyReply(user: User, args: string): Reply {
 /** Разбирает команду и аргументы: "/поиск React удалённо" -> ["поиск", "React удалённо"]. */
 export function parseCommand(text: string): { command: string; args: string } | null {
   const raw = text.trim();
-  if (!raw.startsWith("/")) return null;
+  if (!raw.startsWith('/')) return null;
   const [head, ...rest] = raw.split(/\s+/);
-  const command = head.slice(1).split("@")[0].toLowerCase();
-  return { command, args: rest.join(" ") };
+  const command = head.slice(1).split('@')[0].toLowerCase();
+  return { command, args: rest.join(' ') };
 }
 
 /**
@@ -636,36 +728,32 @@ export function parseCommand(text: string): { command: string; args: string } | 
  * прошла) считается НЕ live: молчать о происхождении цифр опаснее, чем
  * показать лишнюю плашку.
  */
-export function withModeNotice(text: string, mode: "demo" | "live" | undefined): string {
-  if (mode === "live") return text;
+export function withModeNotice(text: string, mode: 'demo' | 'live' | undefined): string {
+  if (mode === 'live') return text;
   if (!text.trim()) return text;
   return (
-    "<b>Демо-режим</b>\n" +
-    "Цифры ниже демонстрационные: они не отражают ответы площадок.\n\n" +
+    '<b>Демо-режим</b>\n' +
+    'Цифры ниже демонстрационные: они не отражают ответы площадок.\n\n' +
     text
   );
 }
 
 /** Чистый расчёт ответа: без БД и сети — удобно тестировать. */
-export function replyFor(
-  command: string,
-  args: string,
-  user: User | null,
-): Reply {
+export function replyFor(command: string, args: string, user: User | null): Reply {
   switch (command) {
-    case "start":
-    case "help":
-    case "помощь":
+    case 'start':
+    case 'help':
+    case 'помощь':
       return { text: HELP, keyboard: commandKeyboard() };
 
-    case "связать":
-    case "link":
-      if (!args.trim()) return { text: "Пришлите код: /связать 123456" };
-      return { text: "", action: "link" };
+    case 'связать':
+    case 'link':
+      if (!args.trim()) return { text: 'Пришлите код: /связать 123456' };
+      return { text: '', action: 'link' };
 
-    case "выйти":
-    case "logout":
-      return { text: "", action: "unlink" };
+    case 'выйти':
+    case 'logout':
+      return { text: '', action: 'unlink' };
 
     default:
       break;
@@ -674,8 +762,8 @@ export function replyFor(
   if (!user) return { text: NOT_LINKED };
 
   switch (command) {
-    case "статистика":
-    case "stats":
+    case 'статистика':
+    case 'stats':
       return { text: statsReply(user), keyboard: mainKeyboard() };
     /*
      * Подготовка к собеседованию, избранное и подсказки.
@@ -685,18 +773,18 @@ export function replyFor(
      * перед самым интересным — что спросят. Вопросы строятся из его же резюме
      * на эту вакансию, поэтому из телефона они не хуже, чем с сайта.
      */
-    case "собеседование":
-    case "собеса":
-    case "интервью":
-    case "interview":
+    case 'собеседование':
+    case 'собеса':
+    case 'интервью':
+    case 'interview':
       return interviewReply(user, 1);
-    case "избранное":
-    case "bookmarks":
-    case "favorites":
+    case 'избранное':
+    case 'bookmarks':
+    case 'favorites':
       return bookmarksReply(user, 1);
-    case "советы":
-    case "что делать":
-    case "next":
+    case 'советы':
+    case 'что делать':
+    case 'next':
       return tipsReply(user);
     /*
      * Пробелы в навыках — тот же раздел, что на сайте.
@@ -705,10 +793,10 @@ export function replyFor(
      * было вовсе: человек узнавал об отказе и оставался без ответа, что делать
      * дальше. Теперь список собирается из тех же данных и приходит в чат.
      */
-    case "навыки":
-    case "пробелы":
-    case "учиться":
-    case "skills":
+    case 'навыки':
+    case 'пробелы':
+    case 'учиться':
+    case 'skills':
       return skillsReply(user);
     /*
      * Подработка и заказы.
@@ -717,15 +805,15 @@ export function replyFor(
      * вещи. Заказ это разовая задача без занятости и графика, и человек, который
      * пришёл за подработкой на вечер, не должен получать список разовых заказов.
      */
-    case "подработка":
-    case "подработки":
+    case 'подработка':
+    case 'подработки':
       // Обе раздела: справка обещает «частичная занятость и заказы», и команда
       // с названием «подработка» обязана показывать оба — иначе человек уходит
       // за подработкой и не видит заказов, а потом считает, что их нет.
       return gigsReply(user, undefined);
-    case "фриланс":
-    case "заказы":
-      return gigsReply(user, "фриланс");
+    case 'фриланс':
+    case 'заказы':
+      return gigsReply(user, 'фриланс');
     /*
      * Подбор и отклик — одна команда.
      *
@@ -736,19 +824,19 @@ export function replyFor(
      * Теперь: без номера — список с кнопками, с номером — отклик на вакансию
      * из этого списка. Команда одна, поведение очевидное.
      */
-    case "подбор":
-    case "поиск":
-    case "search":
-    case "отклик":
-    case "apply":
+    case 'подбор':
+    case 'поиск':
+    case 'search':
+    case 'отклик':
+    case 'apply':
       return applyReply(user, args);
-    case "пауза":
-    case "stop":
-      return { text: "", action: "pause" };
-    case "старт":
-    case "run":
-    case "resume":
-      return { text: "", action: "resume" };
+    case 'пауза':
+    case 'stop':
+      return { text: '', action: 'pause' };
+    case 'старт':
+    case 'run':
+    case 'resume':
+      return { text: '', action: 'resume' };
     default:
       return { text: `Не знаю команду /${command}.\n\n${HELP}`, keyboard: commandKeyboard() };
   }
@@ -769,33 +857,33 @@ async function handleCallback(update: TelegramUpdate): Promise<boolean | null> {
   if (!cb) return null;
 
   const chatId = cb.chat?.id ?? cb.message?.chat?.id;
-  const data = cb.data ?? "";
+  const data = cb.data ?? '';
   if (chatId === undefined) return null;
   const chat = String(chatId);
 
   const user = userByChatId(chat) ?? null;
   if (!user) {
-    if (cb.id) await answerCallbackQuery(cb.id, { text: "Аккаунт не привязан" });
+    if (cb.id) await answerCallbackQuery(cb.id, { text: 'Аккаунт не привязан' });
     return sendTelegramMessage(chat, NOT_LINKED, { keyboard: commandKeyboard(), html: true });
   }
 
-  const [kind, value] = data.split(":");
+  const [kind, value] = data.split(':');
 
-  if (kind === "menu") {
+  if (kind === 'menu') {
     const command =
-      value === "search"
-        ? "подбор"
-        : value === "stats"
-          ? "статистика"
-          : value === "interview"
-            ? "собеседование"
-            : value === "bookmarks"
-              ? "избранное"
-              : value === "pause"
-                ? "пауза"
-                : value === "resume"
-                  ? "старт"
-                  : "помощь";
+      value === 'search'
+        ? 'подбор'
+        : value === 'stats'
+          ? 'статистика'
+          : value === 'interview'
+            ? 'собеседование'
+            : value === 'bookmarks'
+              ? 'избранное'
+              : value === 'pause'
+                ? 'пауза'
+                : value === 'resume'
+                  ? 'старт'
+                  : 'помощь';
 
     /*
      * Действие выполняется ДО правки сообщения.
@@ -805,9 +893,9 @@ async function handleCallback(update: TelegramUpdate): Promise<boolean | null> {
      * продолжали уходить. Ровно тот случай, который страшнее отсутствия
      * кнопки: человек нажимает «Пауза» и не получает откликов.
      */
-    if (command === "пауза" || command === "старт") {
+    if (command === 'пауза' || command === 'старт') {
       if (cb.id) await answerCallbackQuery(cb.id);
-      const text = togglePause(chat, command === "пауза");
+      const text = togglePause(chat, command === 'пауза');
       if (cb.message_id !== undefined) {
         const changed = await editTelegramMessage(chat, cb.message_id, text, {
           keyboard: mainKeyboard(),
@@ -818,7 +906,7 @@ async function handleCallback(update: TelegramUpdate): Promise<boolean | null> {
       return sendTelegramMessage(chat, text, { keyboard: mainKeyboard(), html: true });
     }
 
-    const reply = replyFor(command, "", user);
+    const reply = replyFor(command, '', user);
     if (cb.id) await answerCallbackQuery(cb.id);
 
     const text = reply.text || HELP;
@@ -834,37 +922,43 @@ async function handleCallback(update: TelegramUpdate): Promise<boolean | null> {
     return sendTelegramMessage(chat, text, { keyboard: reply.keyboard, html: true });
   }
 
-  if (kind === "interview" && value) {
+  if (kind === 'interview' && value) {
     if (cb.id) await answerCallbackQuery(cb.id);
     const reply = interviewReply(user, Number(value) || 1);
     const text = reply.text;
     const changed =
       cb.message_id !== undefined
-        ? await editTelegramMessage(chat, cb.message_id, text, { keyboard: reply.keyboard, html: true })
+        ? await editTelegramMessage(chat, cb.message_id, text, {
+            keyboard: reply.keyboard,
+            html: true,
+          })
         : false;
     if (changed) return true;
     return sendTelegramMessage(chat, text, { keyboard: reply.keyboard, html: true });
   }
 
-  if (kind === "bookmarks" && value) {
+  if (kind === 'bookmarks' && value) {
     if (cb.id) await answerCallbackQuery(cb.id);
     const reply = bookmarksReply(user, Number(value) || 1);
     const text = reply.text;
     const changed =
       cb.message_id !== undefined
-        ? await editTelegramMessage(chat, cb.message_id, text, { keyboard: reply.keyboard, html: true })
+        ? await editTelegramMessage(chat, cb.message_id, text, {
+            keyboard: reply.keyboard,
+            html: true,
+          })
         : false;
     if (changed) return true;
     return sendTelegramMessage(chat, text, { keyboard: reply.keyboard, html: true });
   }
 
-  if (kind === "bookmarkRemove" && value) {
-    if (cb.id) await answerCallbackQuery(cb.id, { text: "Убрано" });
+  if (kind === 'bookmarkRemove' && value) {
+    if (cb.id) await answerCallbackQuery(cb.id, { text: 'Убрано' });
     const removed = db
-      .prepare("DELETE FROM bookmarks WHERE user_id = ? AND job_slug = ?")
+      .prepare('DELETE FROM bookmarks WHERE user_id = ? AND job_slug = ?')
       .run(user.id, value);
     if (removed.changes === 0) {
-      return sendTelegramMessage(chat, "Этой вакансии уже нет в избранном.", {
+      return sendTelegramMessage(chat, 'Этой вакансии уже нет в избранном.', {
         keyboard: mainKeyboard(),
         html: true,
       });
@@ -873,33 +967,39 @@ async function handleCallback(update: TelegramUpdate): Promise<boolean | null> {
     const text = `Убрано из избранного.\n\n${reply.text}`;
     const changed =
       cb.message_id !== undefined
-        ? await editTelegramMessage(chat, cb.message_id, text, { keyboard: reply.keyboard, html: true })
+        ? await editTelegramMessage(chat, cb.message_id, text, {
+            keyboard: reply.keyboard,
+            html: true,
+          })
         : false;
     if (changed) return true;
     return sendTelegramMessage(chat, text, { keyboard: reply.keyboard, html: true });
   }
 
-  if (kind === "bookmarkApply" && value) {
-    if (cb.id) await answerCallbackQuery(cb.id, { text: "Отправляю…" });
+  if (kind === 'bookmarkApply' && value) {
+    if (cb.id) await answerCallbackQuery(cb.id, { text: 'Отправляю…' });
     const vacancy = resolveBookmark(user.id, Number(value));
     if (!vacancy) {
-      const text = "Этой вакансии больше нет в каталоге — она убрана с площадки.";
+      const text = 'Этой вакансии больше нет в каталоге — она убрана с площадки.';
       if (cb.message_id !== undefined) {
-        await editTelegramMessage(chat, cb.message_id, text, { keyboard: mainKeyboard(), html: true });
+        await editTelegramMessage(chat, cb.message_id, text, {
+          keyboard: mainKeyboard(),
+          html: true,
+        });
       }
       return sendTelegramMessage(chat, text, { keyboard: mainKeyboard(), html: true });
     }
     return runApplyFromChat(chat, vacancy, cb.message_id);
   }
 
-  if (kind === "apply" && value) {
-    if (cb.id) await answerCallbackQuery(cb.id, { text: "Отправляю…" });
+  if (kind === 'apply' && value) {
+    if (cb.id) await answerCallbackQuery(cb.id, { text: 'Отправляю…' });
     const reply = applyReply(user, value);
     const action = reply.action;
     // Сужение именно по kind: после появления других объектных действий
     // проверка «typeof === object» больше ничего не отсекала.
-    if (!action || typeof action !== "object" || action.kind !== "apply") {
-      const text = reply.text || "Не удалось выбрать вакансию.";
+    if (!action || typeof action !== 'object' || action.kind !== 'apply') {
+      const text = reply.text || 'Не удалось выбрать вакансию.';
       if (cb.message_id !== undefined) {
         await editTelegramMessage(chat, cb.message_id, text, {
           keyboard: mainKeyboard(),
@@ -911,8 +1011,8 @@ async function handleCallback(update: TelegramUpdate): Promise<boolean | null> {
     return runApplyFromChat(chat, action.vacancy, cb.message_id);
   }
 
-  if (cb.id) await answerCallbackQuery(cb.id, { text: "Кнопка устарела" });
-  return sendTelegramMessage(chat, "Эта кнопка из старого сообщения. Откройте подбор заново.", {
+  if (cb.id) await answerCallbackQuery(cb.id, { text: 'Кнопка устарела' });
+  return sendTelegramMessage(chat, 'Эта кнопка из старого сообщения. Откройте подбор заново.', {
     keyboard: mainKeyboard(),
     html: true,
   });
@@ -944,43 +1044,43 @@ export async function handleUpdate(update: TelegramUpdate): Promise<boolean | nu
   const replyingUser = userByChatId(chat) ?? null;
   const reply = replyFor(parsed.command, parsed.args, replyingUser);
 
-  if (reply.action === "link") {
+  if (reply.action === 'link') {
     const linked = linkChatByCode(chat, parsed.args);
     if (!linked) {
       return sendTelegramMessage(
         chat,
-        "Код не подошёл: он мог истечь или уже использован.\nВозьмите свежий код в кабинете: /dashboard/settings",
+        'Код не подошёл: он мог истечь или уже использован.\nВозьмите свежий код в кабинете: /dashboard/settings',
       );
     }
     return sendTelegramMessage(
       chat,
       [
-        `Готово, ${linked.name || "аккаунт"} привязан! ✅`,
-        "",
-        "Что доступно:",
-        "— /подбор — вакансии по вашим критериям",
-        "— /отклик 1 — откликнуться на вакансию №1 из подбора",
-        "— /статистика — воронка откликов",
-        "— /пауза и /старт — остановить и возобновить отправку",
-        "",
+        `Готово, ${linked.name || 'аккаунт'} привязан! ✅`,
+        '',
+        'Что доступно:',
+        '— /подбор — вакансии по вашим критериям',
+        '— /отклик 1 — откликнуться на вакансию №1 из подбора',
+        '— /статистика — воронка откликов',
+        '— /пауза и /старт — остановить и возобновить отправку',
+        '',
         `Отклики отправляются по тарифу «${planLabel(linked)}» с человеческими паузами.`,
-      ].join("\n"),
+      ].join('\n'),
     );
   }
 
-  if (reply.action === "unlink") {
+  if (reply.action === 'unlink') {
     const removed = unlinkChat(chat);
     return sendTelegramMessage(
       chat,
       removed > 0
-        ? "Чат отвязан. Привязать обратно можно в кабинете: /dashboard/settings"
-        : "Этот чат и так не был привязан.",
+        ? 'Чат отвязан. Привязать обратно можно в кабинете: /dashboard/settings'
+        : 'Этот чат и так не был привязан.',
     );
   }
 
-  if (reply.action === "pause" || reply.action === "resume") {
+  if (reply.action === 'pause' || reply.action === 'resume') {
     if (!userByChatId(chat)) return sendTelegramMessage(chat, NOT_LINKED);
-    return sendTelegramMessage(chat, togglePause(chat, reply.action === "pause"), {
+    return sendTelegramMessage(chat, togglePause(chat, reply.action === 'pause'), {
       keyboard: mainKeyboard(),
       html: true,
     });
@@ -993,7 +1093,7 @@ export async function handleUpdate(update: TelegramUpdate): Promise<boolean | nu
    * Идёт через applyToVacancy — тот же код, что у планового прогона, поэтому
    * лимиты, паузы, подбор резюме и письмо работают одинаково.
    */
-  if (reply.action && typeof reply.action === "object" && reply.action.kind === "apply") {
+  if (reply.action && typeof reply.action === 'object' && reply.action.kind === 'apply') {
     const user = userByChatId(chat);
     if (!user) return sendTelegramMessage(chat, NOT_LINKED);
     return runApplyFromChat(chat, reply.action.vacancy);
@@ -1026,7 +1126,8 @@ async function runApplyFromChat(
   replaceMessageId?: number,
 ): Promise<boolean | null> {
   const user = userByChatId(chat);
-  if (!user) return sendTelegramMessage(chat, NOT_LINKED, { keyboard: commandKeyboard(), html: true });
+  if (!user)
+    return sendTelegramMessage(chat, NOT_LINKED, { keyboard: commandKeyboard(), html: true });
 
   const result = await applyToVacancy(user, vacancy);
   const opts = { keyboard: mainKeyboard(), html: true };
@@ -1040,14 +1141,14 @@ async function runApplyFromChat(
   }
 
   const text = [
-    "<b>Отклик отправлен ✅</b>",
-    "",
+    '<b>Отклик отправлен ✅</b>',
+    '',
     `Вакансия: ${escapeHtml(vacancy.title)}`,
     `Компания: ${escapeHtml(vacancy.company)}`,
     result.withLetter
-      ? "Сопроводительное письмо приложено."
-      : "Без письма — подходящего текста не нашлось.",
-  ].join("\n");
+      ? 'Сопроводительное письмо приложено.'
+      : 'Без письма — подходящего текста не нашлось.',
+  ].join('\n');
 
   if (replaceMessageId !== undefined) {
     const changed = await editTelegramMessage(chat, replaceMessageId, text, opts);
@@ -1080,49 +1181,49 @@ function togglePause(chat: string, paused: boolean): string {
     const stopUntil = blockedUntil(user.id);
     if (stopUntil > 0) {
       return [
-        "<b>Пока нельзя возобновить</b>",
-        "",
-        blockedReason(user.id) || "hh.ru ограничил доступ к аккаунту",
-        "",
-        "Отклики пойдут сами, как ограничение снимется — отдельно ничего делать не нужно. Снять его можно только на hh.ru: проверьте, нет ли там ограничений или требования подтвердить аккаунт.",
-      ].join("\n");
+        '<b>Пока нельзя возобновить</b>',
+        '',
+        blockedReason(user.id) || 'hh.ru ограничил доступ к аккаунту',
+        '',
+        'Отклики пойдут сами, как ограничение снимется — отдельно ничего делать не нужно. Снять его можно только на hh.ru: проверьте, нет ли там ограничений или требования подтвердить аккаунт.',
+      ].join('\n');
     }
   }
 
   if (!paused && !isPlanActive(user)) {
     return [
       `Тариф «${planLabel(user)}» истёк — сначала продлите его.`,
-      "",
-      "Продлить: /dashboard/settings",
-    ].join("\n");
+      '',
+      'Продлить: /dashboard/settings',
+    ].join('\n');
   }
 
   const changed = setPaused(user, paused);
   const queued = db
-    .prepare("SELECT COUNT(*) AS c FROM searches WHERE user_id = ? AND active = 1")
+    .prepare('SELECT COUNT(*) AS c FROM searches WHERE user_id = ? AND active = 1')
     .get(user.id) as { c: number };
 
   if (!changed) {
-    return paused ? "Автоотклики уже были на паузе." : "Отправка уже была включена.";
+    return paused ? 'Автоотклики уже были на паузе.' : 'Отправка уже была включена.';
   }
 
   if (paused) {
     return [
-      "<b>Автоотклики на паузе ⏸</b>",
-      "",
+      '<b>Автоотклики на паузе ⏸</b>',
+      '',
       queued.c > 0
         ? `Остановлю отправку сразу. Активных поисков: ${queued.c} — на возобновлении они вернутся в очередь.`
-        : "Активных поисков нет, так что ничего не теряется.",
-    ].join("\n");
+        : 'Активных поисков нет, так что ничего не теряется.',
+    ].join('\n');
   }
 
   return [
-    "<b>Отправка возобновлена ✅</b>",
-    "",
+    '<b>Отправка возобновлена ✅</b>',
+    '',
     queued.c > 0
       ? `Активных поисков: ${queued.c}. Следующий прогон — в ближайшие минуты.`
-      : "Но активных поисков нет: создайте поиск, иначе откликаться не на что.",
-  ].join("\n");
+      : 'Но активных поисков нет: создайте поиск, иначе откликаться не на что.',
+  ].join('\n');
 }
 
 /** Текст приветственного сообщения для превью (совпадает с /start в боте). */

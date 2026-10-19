@@ -1,7 +1,7 @@
-import { db } from "./db";
-import { getVacancyBySlug } from "./vacancies";
+import { db } from './db';
+import { getVacancyBySlug } from './vacancies';
 
-export type ApplicationOrigin = "real" | "simulated" | "user" | "ai";
+export type ApplicationOrigin = 'real' | 'simulated' | 'user' | 'ai';
 
 export type ApplicationRow = {
   id: number;
@@ -39,9 +39,9 @@ export type ApplicationRow = {
 };
 
 export const STATUS_RU: Record<string, string> = {
-  sent: "Отправлен",
-  viewed: "Просмотрен",
-  responded: "Ответ HR",
+  sent: 'Отправлен',
+  viewed: 'Просмотрен',
+  responded: 'Ответ HR',
 };
 
 /**
@@ -58,7 +58,10 @@ export function serializeApplication(row: ApplicationRow) {
   return serializeApplicationWith(row, vacancy);
 }
 
-function serializeApplicationWith(row: ApplicationRow, vacancy: ReturnType<typeof getVacancyBySlug>) {
+function serializeApplicationWith(
+  row: ApplicationRow,
+  vacancy: ReturnType<typeof getVacancyBySlug>,
+) {
   return {
     id: row.id,
     job_slug: row.job_slug,
@@ -99,7 +102,7 @@ function serializeApplicationWith(row: ApplicationRow, vacancy: ReturnType<typeo
  */
 export function listApplications(userId: number, limit = 200) {
   const rows = db
-    .prepare("SELECT * FROM applications WHERE user_id = ? ORDER BY sent_at DESC, id DESC LIMIT ?")
+    .prepare('SELECT * FROM applications WHERE user_id = ? ORDER BY sent_at DESC, id DESC LIMIT ?')
     .all(userId, Math.min(Math.max(1, Math.floor(limit)), 200)) as ApplicationRow[];
   return rows.map((row) => serializeApplicationWith(row, getVacancyBySlug(row.job_slug)));
 }

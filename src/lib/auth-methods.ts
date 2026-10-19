@@ -14,13 +14,7 @@
  */
 
 export type AuthMethodId =
-  | "password"
-  | "link"
-  | "github"
-  | "google"
-  | "yandex"
-  | "telegram"
-  | (string & {});
+  'password' | 'link' | 'github' | 'google' | 'yandex' | 'telegram' | (string & {});
 
 export type AuthMethod = {
   id: AuthMethodId;
@@ -34,40 +28,61 @@ export type AuthMethod = {
   env?: { id: string; secret: string };
   /** Авторизационная ссылка провайдера. */
   authorizeUrl?: string;
+  /**
+   * Умеет ли способ ЗАВЕРШИТЬ вход (обмен кода на личность).
+   *
+   * Кнопка без завершения — это враньё: человек уходит к провайдеру,
+   * авторизуется там, возвращается — и получает 401 «провайдер не подтвердил
+   * вход», потому что parseProviderResponse умеет разбирать только подпись
+   * Telegram. Именно так GitHub/Google/Яндекс и «рекламировались, но были
+   * сломаны»: ключи заданы, кнопка есть, входа нет.
+   *
+   * Поэтому незавершаемые способы не показываются (authMethodReady их гасит)
+   * и ссылку не строят. Полноценный OAuth (обмен code→token→userinfo) для них
+   * не написан намеренно: без живых ключей его нельзя проверить, а
+   * непроверенный код входа хуже честной заглушки — он создаёт ложное чувство
+   * «работает». Когда появятся ключи и возможность прогнать флоу живьём,
+   * достаточно выставить completes: true и дописать разбор в oauth.ts.
+   */
+  completes?: boolean;
 };
 
 const methods: AuthMethod[] = [
-  { id: "password", title: "Почта и пароль", passwordless: false },
-  { id: "link", title: "По ссылке из письма", passwordless: true },
+  { id: 'password', title: 'Почта и пароль', passwordless: false, completes: true },
+  { id: 'link', title: 'По ссылке из письма', passwordless: true, completes: false },
   {
-    id: "github",
-    title: "GitHub",
+    id: 'github',
+    title: 'GitHub',
     passwordless: false,
-    env: { id: "GITHUB_CLIENT_ID", secret: "GITHUB_CLIENT_SECRET" },
-    authorizeUrl: "https://github.com/login/oauth/authorize",
+    env: { id: 'GITHUB_CLIENT_ID', secret: 'GITHUB_CLIENT_SECRET' },
+    authorizeUrl: 'https://github.com/login/oauth/authorize',
+    completes: false,
   },
   {
-    id: "google",
-    title: "Google",
+    id: 'google',
+    title: 'Google',
     passwordless: false,
-    env: { id: "GOOGLE_CLIENT_ID", secret: "GOOGLE_CLIENT_SECRET" },
-    authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
+    env: { id: 'GOOGLE_CLIENT_ID', secret: 'GOOGLE_CLIENT_SECRET' },
+    authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    completes: false,
   },
   {
-    id: "yandex",
-    title: "Яндекс",
+    id: 'yandex',
+    title: 'Яндекс',
     passwordless: false,
-    env: { id: "YANDEX_CLIENT_ID", secret: "YANDEX_CLIENT_SECRET" },
-    authorizeUrl: "https://oauth.yandex.ru/authorize",
+    env: { id: 'YANDEX_CLIENT_ID', secret: 'YANDEX_CLIENT_SECRET' },
+    authorizeUrl: 'https://oauth.yandex.ru/authorize',
+    completes: false,
   },
   {
-    id: "telegram",
-    title: "Telegram",
+    id: 'telegram',
+    title: 'Telegram',
     passwordless: true,
     // Telegram Login подписывает значение, а не секрет приложения, поэтому
     // нужен только bot token.
-    env: { id: "TELEGRAM_BOT_TOKEN", secret: "TELEGRAM_BOT_TOKEN" },
-    authorizeUrl: "https://oauth.telegram.org/auth",
+    env: { id: 'TELEGRAM_BOT_TOKEN', secret: 'TELEGRAM_BOT_TOKEN' },
+    authorizeUrl: 'https://oauth.telegram.org/auth',
+    completes: true,
   },
 ];
 
@@ -83,6 +98,9 @@ export function authMethods(): AuthMethod[] {
 export function authMethodReady(id: string): boolean {
   const m = authMethod(id);
   if (!m) return false;
+  // Способ без завершения входа не готов по определению: кнопка вела бы
+  // человека к провайдеру и обратно — в 401. См. completes выше.
+  if (m.completes === false) return false;
   if (!m.env) return true;
   return Boolean(process.env[m.env.id] && process.env[m.env.secret]);
 }
@@ -107,24 +125,24 @@ const MAX_EMAIL = 254;
 const MAX_NAME = 100;
 
 export function normalizeIdentity(raw: Partial<ExternalIdentity>): ExternalIdentity | null {
-  const provider = String(raw.provider ?? "");
-  const providerId = String(raw.providerId ?? "").slice(0, 64);
+  const provider = String(raw.provider ?? '');
+  const providerId = String(raw.providerId ?? '').slice(0, 64);
   if (!authMethod(provider) || !providerId) return null;
 
-  const email = String(raw.email ?? "")
+  const email = String(raw.email ?? '')
     .trim()
     .toLowerCase()
     // Управляющие символы в почте ломают и заголовки писем, и сравнение.
-    .replace(/[\u0000-\u001f\u007f]/g, "");
+    .replace(/[\u0000-\u001f\u007f]/g, '');
   if (!email || email.length > MAX_EMAIL || !/^[^\s@]+@[^\s@.]+\.[^\s@]+$/.test(email)) {
     // Без почты аккаунт не завести: восстановление пароля и письма без неё
     // не работают. Лучше явная ошибка, чем аккаунт без почты.
     return null;
   }
 
-  const name = String(raw.name ?? "")
-    .replace(/[\u0000-\u001f\u007f]/g, " ")
-    .replace(/\s+/g, " ")
+  const name = String(raw.name ?? '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim()
     .slice(0, MAX_NAME);
 
@@ -145,18 +163,18 @@ export function normalizeIdentity(raw: Partial<ExternalIdentity>): ExternalIdent
  * каждом показе. Список хостов узкий: провайдеры аватаров известны.
  */
 const AVATAR_HOSTS = new Set([
-  "avatars.githubusercontent.com",
-  "github.com",
-  "lh3.googleusercontent.com",
-  "avatars.metahub.com",
-  "yastatic.net",
-  "t.me",
+  'avatars.githubusercontent.com',
+  'github.com',
+  'lh3.googleusercontent.com',
+  'avatars.metahub.com',
+  'yastatic.net',
+  't.me',
 ]);
 
 function sanitizeAvatar(url: string): string | undefined {
   try {
     const parsed = new URL(url);
-    if (parsed.protocol !== "https:") return undefined;
+    if (parsed.protocol !== 'https:') return undefined;
     if (!AVATAR_HOSTS.has(parsed.hostname)) return undefined;
     return parsed.toString();
   } catch {

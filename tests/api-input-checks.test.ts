@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 
 /**
  * Вход в API-роуты.
@@ -13,8 +13,8 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
  * как «покрыто». Поэтому здесь перечислены именно те случаи, где отсутствие
  * обращения к сессии — настоящая находка.
  */
-import { test } from "node:test";
-import assert from "node:assert/strict";
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
 
 const routes: string[] = [];
 const walk = (dir: string): void => {
@@ -24,10 +24,10 @@ const walk = (dir: string): void => {
       walk(full);
       continue;
     }
-    if (entry.endsWith("route.ts")) routes.push(full);
+    if (entry.endsWith('route.ts')) routes.push(full);
   }
 };
-walk("src/app/api");
+walk('src/app/api');
 
 /**
  * Маршруты, где отсутствие сессии — не дыра.
@@ -41,6 +41,13 @@ walk("src/app/api");
  */
 const KNOWN_OPEN = [
   /auth\/(login|register|logout|forgot-password|reset-password)\//,
+  /*
+   * Подтверждение почты. Тот же класс, что forgot-password: работает до
+   * сессии по определению (человек переходит из письма, сессии может не
+   * быть). Авторизация — одноразовый токен из письма (GET гасит его) и
+   * нейтральный ответ с rate-limit (POST не раскрывает адрес).
+   */
+  /auth\/verify\//,
   /*
    * Внешний вход. Исключение НЕ из-за отсутствия проверки, а из-за природы
    * параметра: `[provider]` — это строка из белого списка auth-methods, а не
@@ -61,12 +68,12 @@ const KNOWN_OPEN = [
 const MUTATING = /\b(POST|PUT|PATCH|DELETE)\b/;
 const AUTH = /getCurrentUser|requireUser|getSessionUser|destroySession|getUserById|auth\.get/;
 
-test("изменяющие маршруты сверяются с сессией или с одноразовым токеном", () => {
+test('изменяющие маршруты сверяются с сессией или с одноразовым токеном', () => {
   assert.ok(routes.length > 20, `роутов найдено ${routes.length} — обход ничего не собрал`);
 
   const findings: string[] = [];
   for (const file of routes) {
-    const text = readFileSync(file, "utf8");
+    const text = readFileSync(file, 'utf8');
     if (!MUTATING.test(text)) continue;
     if (KNOWN_OPEN.some((re) => re.test(file))) continue;
 
@@ -85,7 +92,7 @@ test("изменяющие маршруты сверяются с сессией
     }
   }
 
-  assert.deepEqual(findings, [], `замечания по входу в API:\n      ${findings.join("\n      ")}`);
+  assert.deepEqual(findings, [], `замечания по входу в API:\n      ${findings.join('\n      ')}`);
 });
 
 /**
@@ -102,12 +109,12 @@ test("изменяющие маршруты сверяются с сессией
  * isFinite — пустой идентификатор в адресе вёл к запросу за откликом с id = 0
  * вместо отказа.
  */
-test("роуты используют общие помощники проверки", () => {
+test('роуты используют общие помощники проверки', () => {
   const found: string[] = [];
   let checked = 0;
 
   for (const file of routes) {
-    const text = readFileSync(file, "utf8");
+    const text = readFileSync(file, 'utf8');
     if (KNOWN_OPEN.some((re) => re.test(file))) continue;
 
     const mutating = /\b(POST|PUT|PATCH|DELETE)\b/.test(text);
@@ -116,7 +123,7 @@ test("роуты используют общие помощники провер
     if (!mutating && !takesParam && !readsBody) continue;
     checked++;
 
-    const short = file.replace("src/app/api", "");
+    const short = file.replace('src/app/api', '');
 
     /*
      * Считаются обработчики, а не факт присутствия.
@@ -126,7 +133,8 @@ test("роуты используют общие помощники провер
      * них. Мутация это показала на трёх роутах из четырёх: обработчик остался
      * открытым, а проверка была довольна вторым вызовом в том же файле.
      */
-    const handlers = (text.match(/export\s+async\s+function\s+(GET|POST|PUT|PATCH|DELETE)/g) ?? []).length;
+    const handlers = (text.match(/export\s+async\s+function\s+(GET|POST|PUT|PATCH|DELETE)/g) ?? [])
+      .length;
     const checks = (text.match(/await\s+requireUser\(/g) ?? []).length;
     if (handlers > 0 && checks < handlers) {
       found.push(`${short}: обработчиков ${handlers}, проверка сессии в ${checks}`);
@@ -158,11 +166,11 @@ test("роуты используют общие помощники провер
    * собрал» вместо правды о том, что обход работает.
    */
   assert.ok(checked >= 15, `проверено только ${checked} роутов — обход ничего не собрал`);
-  assert.deepEqual(found, [], `роуты вне общего идиома:\n      ${found.join("\n      ")}`);
+  assert.deepEqual(found, [], `роуты вне общего идиома:\n      ${found.join('\n      ')}`);
 });
 
-test("обработчик OAuth сверяет одноразовый state и гасит его", () => {
-  const text = readFileSync("src/app/api/hh/callback/route.ts", "utf8");
+test('обработчик OAuth сверяет одноразовый state и гасит его', () => {
+  const text = readFileSync('src/app/api/hh/callback/route.ts', 'utf8');
   /*
    * Проверяется именно SELECT, а не «где-то есть oauth_states WHERE token = ?».
    *
@@ -173,12 +181,16 @@ test("обработчик OAuth сверяет одноразовый state и 
   assert.match(
     text,
     /SELECT \* FROM oauth_states WHERE token = \?/,
-    "state не сверяется с таблицей одноразовых токенов",
+    'state не сверяется с таблицей одноразовых токенов',
   );
-  assert.match(text, /DELETE FROM oauth_states WHERE token = \?/, "state не гасится после использования");
+  assert.match(
+    text,
+    /DELETE FROM oauth_states WHERE token = \?/,
+    'state не гасится после использования',
+  );
   assert.match(
     text,
     /if \(!row \|\| row\.expires_at <= Date\.now\(\)\)/,
-    "state без записи или с истёкшим сроком не отклоняется — окно подделки остаётся открытым",
+    'state без записи или с истёкшим сроком не отклоняется — окно подделки остаётся открытым',
   );
 });

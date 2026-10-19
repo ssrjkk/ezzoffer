@@ -1,6 +1,6 @@
-import Link from "next/link";
-import { Section, Eyebrow } from "@/components/ui";
-import { jobs } from "@/lib/data";
+import Link from 'next/link';
+import { Section, Eyebrow } from '@/components/ui';
+import { jobs } from '@/lib/data';
 
 /*
  * Превью вакансий на главной.
@@ -33,7 +33,7 @@ export function JobsPreview() {
         </div>
         <Link
           href="/jobs"
-          className="inline-flex w-fit items-center gap-2 border-b border-ink pb-0.5 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
+          className="inline-flex w-fit items-center gap-2 -my-1 inline-flex min-h-11 items-center border-b border-ink py-1 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
         >
           Смотреть все вакансии
           <span aria-hidden>→</span>

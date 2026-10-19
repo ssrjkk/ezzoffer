@@ -1,21 +1,22 @@
-import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
-import { isPlanActive, planDailyLimit, planLabel, daysLeft } from "@/lib/plans";
-import { PlanSettings } from "@/components/dashboard/plan-settings";
-import { ProfileForm } from "@/components/dashboard/profile-form";
-import { HhConnect } from "@/components/dashboard/hh-connect";
-import { ModeSwitch } from "@/components/dashboard/mode-switch";
-import { AutoApplyPause } from "@/components/dashboard/autoapply-pause";
-import { TelegramConnect } from "@/components/dashboard/telegram-connect";
-import { isHhConnected } from "@/lib/hh-oauth";
+import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
+import { getCurrentUser } from '@/lib/auth';
+import { isPlanActive, planDailyLimit, planLabel, daysLeft } from '@/lib/plans';
+import { catalogItem } from '@/lib/payments/catalog';
+import { PlanSettings } from '@/components/dashboard/plan-settings';
+import { ProfileForm } from '@/components/dashboard/profile-form';
+import { HhConnect } from '@/components/dashboard/hh-connect';
+import { ModeSwitch } from '@/components/dashboard/mode-switch';
+import { AutoApplyPause } from '@/components/dashboard/autoapply-pause';
+import { TelegramConnect } from '@/components/dashboard/telegram-connect';
+import { isHhConnected } from '@/lib/hh-oauth';
 
-export const metadata: Metadata = { title: "Настройки" };
-export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: 'Настройки' };
+export const dynamic = 'force-dynamic';
 
 export default async function SettingsPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect('/login');
 
   const active = isPlanActive(user);
 
@@ -40,6 +41,7 @@ export default async function SettingsPage() {
         active={active}
         planDays={daysLeft(user)}
         planLimit={active ? planDailyLimit(user.plan) : 0}
+        planPermanent={Boolean(catalogItem(user.plan)?.permanent)}
         trialStarted={Boolean(user.trial_started_at)}
         trialExpiresAt={user.plan_expires_at}
       />
@@ -48,7 +50,7 @@ export default async function SettingsPage() {
         name={user.name}
         email={user.email}
         salaryExpectation={user.salary_expectation ?? null}
-        cityPreference={user.city_preference ?? ""}
+        cityPreference={user.city_preference ?? ''}
       />
     </div>
   );

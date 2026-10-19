@@ -50,9 +50,15 @@ services:
       - ./data:/app/data
     # Приложение слушает 0.0.0.0 внутри сети compose, иначе Caddy его не достанет.
     expose:
-      - "3000"
+      - '3000'
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
       interval: 30s
       timeout: 10s
       start_period: 40s
@@ -66,9 +72,9 @@ services:
       app:
         condition: service_healthy
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
     volumes:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       # Сертификаты должны пережить пересоздание контейнера, иначе каждый

@@ -1,4 +1,4 @@
-import { db } from "./db";
+import { db } from './db';
 
 /**
  * A/B-варианты одного резюме.
@@ -28,18 +28,17 @@ export type VariantRow = {
 };
 
 /** Алфавит для меток. Больше 26 вариантов смысла не имеет — это не эксперимент. */
-const LABELS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const LABELS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 export function getResumeForUser(userId: number, resumeId: number): VariantRow | undefined {
-  return db
-    .prepare("SELECT * FROM resumes WHERE id = ? AND user_id = ?")
-    .get(resumeId, userId) as VariantRow | undefined;
+  return db.prepare('SELECT * FROM resumes WHERE id = ? AND user_id = ?').get(resumeId, userId) as
+    VariantRow | undefined;
 }
 
 export function listVariants(userId: number, group: string): VariantRow[] {
   return db
     .prepare(
-      "SELECT * FROM resumes WHERE user_id = ? AND variant_group = ? ORDER BY created_at, id",
+      'SELECT * FROM resumes WHERE user_id = ? AND variant_group = ? ORDER BY created_at, id',
     )
     .all(userId, group) as VariantRow[];
 }
@@ -66,7 +65,7 @@ export function createVariant(userId: number, resumeId: number): VariantRow | nu
 
   const siblings = listVariants(userId, group);
   const used = new Set(siblings.map((v) => v.variant_label));
-  const next = LABELS.split("").find((l) => !used.has(l)) ?? null;
+  const next = LABELS.split('').find((l) => !used.has(l)) ?? null;
   if (!next) return null; // 26 вариантов одного резюме — не эксперимент, а мусор
 
   const now = Date.now();
@@ -80,7 +79,7 @@ export function createVariant(userId: number, resumeId: number): VariantRow | nu
       userId,
       title,
       source.content,
-      (source as { years_label?: string }).years_label ?? "",
+      (source as { years_label?: string }).years_label ?? '',
       0,
       group,
       next,
@@ -88,7 +87,7 @@ export function createVariant(userId: number, resumeId: number): VariantRow | nu
       now,
     );
 
-  return db.prepare("SELECT * FROM resumes WHERE id = ?").get(result.lastInsertRowid) as VariantRow;
+  return db.prepare('SELECT * FROM resumes WHERE id = ?').get(result.lastInsertRowid) as VariantRow;
 }
 
 export type VariantStat = {
@@ -166,7 +165,7 @@ export function compareVariants(userId: number, group: string): VariantCompariso
     const responded = respondedBy.get(v.id) ?? 0;
     return {
       id: v.id,
-      label: v.variant_label ?? "—",
+      label: v.variant_label ?? '—',
       title: v.title,
       uploaded: Boolean(v.hh_id),
       sent,
@@ -178,9 +177,9 @@ export function compareVariants(userId: number, group: string): VariantCompariso
   const enough = stats.length > 1 && stats.every((s) => s.sent >= MIN_SAMPLE_PER_VARIANT);
 
   let leader: string | null = null;
-  let notice = "";
+  let notice = '';
   if (stats.length < 2) {
-    notice = "Создайте второй вариант резюме, чтобы было что сравнивать.";
+    notice = 'Создайте второй вариант резюме, чтобы было что сравнивать.';
   } else if (!enough) {
     const worst = Math.min(...stats.map((s) => s.sent));
     notice =
@@ -191,7 +190,7 @@ export function compareVariants(userId: number, group: string): VariantCompariso
     const best = Math.max(...stats.map((s) => s.rate ?? 0));
     const winners = stats.filter((s) => (s.rate ?? 0) === best);
     if (winners.length === 1) leader = winners[0].label;
-    else notice = "Ничья: доли ответов совпали.";
+    else notice = 'Ничья: доли ответов совпали.';
   }
 
   return { group, variants: stats, enough, leader, notice };

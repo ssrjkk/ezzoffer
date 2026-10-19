@@ -1,16 +1,16 @@
-"use client";
+'use client';
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState, type FormEvent } from "react";
-import { AuthPanel, Field, FormError, PanelLink, SubmitButton } from "@/components/auth-shell";
-import { Eyebrow } from "@/components/ui";
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useState, type FormEvent } from 'react';
+import { AuthPanel, Field, FormError, PanelLink, SubmitButton } from '@/components/auth-shell';
+import { Eyebrow } from '@/components/ui';
 
 function ResetForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const token = params.get("token") ?? "";
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
+  const token = params.get('token') ?? '';
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -23,23 +23,23 @@ function ResetForm() {
     e.preventDefault();
     setError(null);
     if (password !== confirm) {
-      setError("Пароли не совпадают");
+      setError('Пароли не совпадают');
       return;
     }
     setBusy(true);
     try {
-      const res = await fetch("/api/auth/reset-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token, password }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Что-то пошло не так. Попробуйте ещё раз.");
+        setError(data.error ?? 'Что-то пошло не так. Попробуйте ещё раз.');
         return;
       }
       setDone(true);
-      setTimeout(() => router.push("/login"), 2500);
+      setTimeout(() => router.push('/login'), 2500);
     } finally {
       setBusy(false);
     }

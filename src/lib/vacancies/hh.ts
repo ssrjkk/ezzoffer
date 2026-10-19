@@ -1,12 +1,19 @@
-import type { Level, WorkFormat } from "../data";
-import type { Vacancy, VacancyApplyResult, VacancyFetchResult, VacancyProvider, VacancyQuery } from "./types";
-import { sanitizeExternalUrl, toSalaryNumber } from "./util";
-import { parsePublishedAt } from "./published";
-import { httpFetch, parseJson } from "../http-client";
-import { getHhAppToken, hhSearchConfigured } from "../hh-app-token";
-import { logError } from "../logger";
+import type { Level, WorkFormat } from '../data';
+import type {
+  Vacancy,
+  VacancyApplyResult,
+  VacancyFetchResult,
+  VacancyProvider,
+  VacancyQuery,
+} from './types';
+import { sanitizeExternalUrl, toSalaryNumber } from './util';
+import { parsePublishedAt } from './published';
+import { httpFetch, parseJson } from '../http-client';
+import { getHhAppToken, hhSearchConfigured } from '../hh-app-token';
+import { resolveAreaId } from '../hh-areas';
+import { logError } from '../logger';
 
-const BASE = "https://api.hh.ru/vacancies";
+const BASE = 'https://api.hh.ru/vacancies';
 const FETCH_TIMEOUT = 25_000;
 /** hh отдаёт максимум 100 за раз (per_page cap). */
 const MAX_PER_PAGE = 100;
@@ -39,48 +46,52 @@ export type HhVacancyRaw = {
 
 function relativePosted(iso: string): string {
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "недавно";
+  if (Number.isNaN(d.getTime())) return 'недавно';
   const days = Math.floor((Date.now() - d.getTime()) / (24 * 60 * 60 * 1000));
-  if (days <= 0) return "сегодня";
-  if (days === 1) return "вчера";
+  if (days <= 0) return 'сегодня';
+  if (days === 1) return 'вчера';
   if (days < 7) return `${days} дн. назад`;
-  return d.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 function inferLevel(name: string): Level {
   const s = name.toLowerCase();
-  if (/(стаж|intern)/.test(s)) return "Intern";
-  if (/(младш|junior)/.test(s)) return "Junior";
-  if (/(ведущ|senior|старш|principal|lead)/.test(s)) return "Senior";
-  return "Middle";
+  if (/(стаж|intern)/.test(s)) return 'Intern';
+  if (/(младш|junior)/.test(s)) return 'Junior';
+  if (/(ведущ|senior|старш|principal|lead)/.test(s)) return 'Senior';
+  return 'Middle';
 }
 
 function inferFormat(id?: string): WorkFormat {
   switch (id) {
-    case "remote":
-      return "Удалённо";
-    case "flexible":
-    case "hybrid":
-    case "shift":
-      return "Гибрид";
+    case 'remote':
+      return 'Удалённо';
+    case 'flexible':
+    case 'hybrid':
+    case 'shift':
+      return 'Гибрид';
     default:
-      return "В офисе";
+      return 'В офисе';
   }
 }
 
 function salaryDisplay(s?: HhSalary | null): string {
-  if (!s) return "по договорённости";
+  if (!s) return 'по договорённости';
   const from = toSalaryNumber(s.from) ?? 0;
   const to = toSalaryNumber(s.to) ?? 0;
-  const sym = s.currency === "RUR" || s.currency === "RUB" ? "₽" : s.currency ?? "";
-  if (from > 0 && to > 0) return `${from.toLocaleString("ru-RU")}–${to.toLocaleString("ru-RU")} ${sym}`;
-  if (from > 0) return `от ${from.toLocaleString("ru-RU")} ${sym}`;
-  if (to > 0) return `до ${to.toLocaleString("ru-RU")} ${sym}`;
-  return "по договорённости";
+  const sym = s.currency === 'RUR' || s.currency === 'RUB' ? '₽' : (s.currency ?? '');
+  if (from > 0 && to > 0)
+    return `${from.toLocaleString('ru-RU')}–${to.toLocaleString('ru-RU')} ${sym}`;
+  if (from > 0) return `от ${from.toLocaleString('ru-RU')} ${sym}`;
+  if (to > 0) return `до ${to.toLocaleString('ru-RU')} ${sym}`;
+  return 'по договорённости';
 }
 
 function cleanSnippet(s?: string): string {
-  return (s ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return (s ?? '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export function mapHhVacancy(raw: HhVacancyRaw): Vacancy | null {
@@ -89,20 +100,20 @@ export function mapHhVacancy(raw: HhVacancyRaw): Vacancy | null {
   const resp = cleanSnippet(raw.snippet?.responsibility ?? undefined);
   return {
     slug: `hh-${raw.id}`,
-    source: "hh",
+    source: 'hh',
     source_id: raw.id,
     title: raw.name,
-    company: raw.employer?.name ?? "Компания",
+    company: raw.employer?.name ?? 'Компания',
     salary: salaryDisplay(raw.salary),
     salary_min: toSalaryNumber(raw.salary?.from),
     salary_max: toSalaryNumber(raw.salary?.to),
     level: inferLevel(raw.name),
     format: inferFormat(raw.schedule?.id),
-    city: raw.area?.name ?? "Россия",
-    posted: relativePosted(raw.published_at ?? ""),
+    city: raw.area?.name ?? 'Россия',
+    posted: relativePosted(raw.published_at ?? ''),
     published_at: parsePublishedAt(raw.published_at),
-    category: raw.professional_roles?.[0]?.name ?? "Работа",
-    about: resp ? `${resp}\n\n${req}` : req || "Описание доступно на hh.ru.",
+    category: raw.professional_roles?.[0]?.name ?? 'Работа',
+    about: resp ? `${resp}\n\n${req}` : req || 'Описание доступно на hh.ru.',
     responsibilities: resp ? [resp] : [],
     requirements: req ? [req] : [],
     bonus: [],
@@ -130,21 +141,21 @@ export function mapHhVacancy(raw: HhVacancyRaw): Vacancy | null {
 export function classifyApplyFailure(
   status: number,
   body: string,
-): { kind: NonNullable<VacancyApplyResult["kind"]>; error: string } {
-  const text = (body ?? "").toLowerCase();
+): { kind: NonNullable<VacancyApplyResult['kind']>; error: string } {
+  const text = (body ?? '').toLowerCase();
 
   const looksClosed =
-    text.includes("closed") ||
-    text.includes("not found") ||
-    text.includes("закрыт") ||
-    text.includes("не найден") ||
-    text.includes("недоступн") ||
-    text.includes("архив") ||
-    text.includes("vacancy not") ||
-    text.includes("not available");
+    text.includes('closed') ||
+    text.includes('not found') ||
+    text.includes('закрыт') ||
+    text.includes('не найден') ||
+    text.includes('недоступн') ||
+    text.includes('архив') ||
+    text.includes('vacancy not') ||
+    text.includes('not available');
 
   if (status === 404 || (status === 400 && looksClosed)) {
-    return { kind: "closed", error: "Вакансия закрыта на hh.ru" };
+    return { kind: 'closed', error: 'Вакансия закрыта на hh.ru' };
   }
   if (status === 401 || status === 403) {
     /*
@@ -160,21 +171,25 @@ export function classifyApplyFailure(
      * аккаунт, проверьте ограничения на hh» — то есть отправлялся совсем не туда.
      */
     return status === 401
-      ? { kind: "token", error: "Токен hh.ru истёк — перепривяжите аккаунт в кабинете" }
-      : { kind: "auth", error: "hh.ru ограничил доступ к аккаунту — проверьте ограничения на hh.ru" };
+      ? { kind: 'token', error: 'Токен hh.ru истёк — перепривяжите аккаунт в кабинете' }
+      : {
+          kind: 'auth',
+          error: 'hh.ru ограничил доступ к аккаунту — проверьте ограничения на hh.ru',
+        };
   }
   if (status === 429 || status === 503) {
-    return { kind: "rate_limit", error: `Платформа ограничивает темп (HTTP ${status})` };
+    return { kind: 'rate_limit', error: `Платформа ограничивает темп (HTTP ${status})` };
   }
   return {
-    kind: "other",
-    error: `${status === 0 ? "сетевая ошибка" : `HTTP ${status}`} ${(body ?? "").slice(0, 180)}`.trim(),
+    kind: 'other',
+    error:
+      `${status === 0 ? 'сетевая ошибка' : `HTTP ${status}`} ${(body ?? '').slice(0, 180)}`.trim(),
   };
 }
 
 export const hhProvider: VacancyProvider = {
-  source: "hh",
-  label: "hh.ru",
+  source: 'hh',
+  label: 'hh.ru',
 
   /*
    * Доступность ПОИСКА.
@@ -208,7 +223,7 @@ export const hhProvider: VacancyProvider = {
      */
     const token = ctx.accessToken?.trim();
     if (!token) {
-      return { ok: false, kind: "auth", error: "Аккаунт hh.ru не привязан" };
+      return { ok: false, kind: 'auth', error: 'Аккаунт hh.ru не привязан' };
     }
 
     const vacancyId = /^hh-/.test(vacancy.slug) ? vacancy.slug.slice(3) : vacancy.source_id;
@@ -218,8 +233,8 @@ export const hhProvider: VacancyProvider = {
     // Один retry при сетевом сбое: hh.ru иногда отвечает 5xx под нагрузкой,
     // и потерянный отклик из-за разового сбоя — это реально потерянная
     // возможность. 4xx (кроме 429) повторами не лечатся.
-    const res = await httpFetch("https://api.hh.ru/negotiations", {
-      method: "POST",
+    const res = await httpFetch('https://api.hh.ru/negotiations', {
+      method: 'POST',
       timeoutMs: FETCH_TIMEOUT,
       attempts: 2,
       /*
@@ -234,9 +249,9 @@ export const hhProvider: VacancyProvider = {
       shouldRetry: (status) => status >= 500,
       headers: {
         Authorization: `Bearer ${token}`,
-        "User-Agent": "EZOffer/1.0",
-        Accept: "application/json",
-        "Content-Type": "application/json",
+        'User-Agent': 'EZOffer/1.0',
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
     });
@@ -282,11 +297,11 @@ export const hhProvider: VacancyProvider = {
     if (!token) {
       return {
         vacancies: [],
-        provider: "hh",
+        provider: 'hh',
         ok: false,
         error: hhSearchConfigured()
-          ? "hh.ru не выдал токен приложения"
-          : "Нет HH_CLIENT_ID/HH_CLIENT_SECRET — поиск по hh.ru недоступен",
+          ? 'hh.ru не выдал токен приложения'
+          : 'Нет HH_CLIENT_ID/HH_CLIENT_SECRET — поиск по hh.ru недоступен',
       };
     }
 
@@ -299,34 +314,46 @@ export const hhProvider: VacancyProvider = {
 
     while (collected.length < want && pages < MAX_PAGES) {
       const params = new URLSearchParams();
-      if (query.text) params.set("text", query.text);
-      if (query.city) params.set("area", query.city);
-      params.set("per_page", String(perPage));
-      if (pages > 0) params.set("page", String(pages));
+      if (query.text) params.set('text', query.text);
+      /*
+        area — это ИДЕНТИФИКАТОР области из справочника hh, а не название.
+        Раньше сюда уходил текст из поля «Город», то есть `area=Москва`, и hh
+        отвечал 400. Дальше первая же неудачная страница давала `ok: false`,
+        а refreshProviders по этому флагу не делал ни запись, ни чистку. Итог:
+        у каждого, кто задал город, источник hh не давал ни одной вакансии —
+        а автоотклик работает только по hh.
+
+        Если город не опознан, `area` не передаётся вовсе: мусорный параметр
+        хуже отсутствия параметра, потому что молча отсекает всю выдачу.
+        */
+      const areaId = await resolveAreaId(query.city);
+      if (areaId) params.set('area', String(areaId));
+      params.set('per_page', String(perPage));
+      if (pages > 0) params.set('page', String(pages));
       // Сортировка по дате: иначе hh отдаёт «витринные» вакансии, а свежие
       // остаются на второй странице и до автоотклика не доходят.
-      params.set("order_by", "publication_time");
+      params.set('order_by', 'publication_time');
 
       const res = await httpFetch(`${BASE}?${params.toString()}`, {
         timeoutMs: FETCH_TIMEOUT,
         headers: {
           Authorization: `Bearer ${token}`,
-          "User-Agent": "EZOffer/1.0 (ezoffer.ru)",
-          Accept: "application/json",
+          'User-Agent': 'EZOffer/1.0 (ezoffer.ru)',
+          Accept: 'application/json',
         },
       });
 
       if (!res.ok) {
         lastError = res.error ?? `HTTP ${res.status}`;
         if (pages === 0) {
-          return { vacancies: [], provider: "hh", ok: false, error: lastError };
+          return { vacancies: [], provider: 'hh', ok: false, error: lastError };
         }
         break; // первая страница есть — возвращаем что собрали
       }
 
       const data = parseJson<HhRaw>(res.body);
       if (data === null) {
-        lastError = "некорректный JSON";
+        lastError = 'некорректный JSON';
         break;
       }
 
@@ -345,10 +372,10 @@ export const hhProvider: VacancyProvider = {
     }
 
     if (collected.length === 0 && lastError) {
-      logError("hh:search", new Error(lastError));
-      return { vacancies: [], provider: "hh", ok: false, error: lastError };
+      logError('hh:search', new Error(lastError));
+      return { vacancies: [], provider: 'hh', ok: false, error: lastError };
     }
 
-    return { vacancies: collected, provider: "hh", ok: true };
+    return { vacancies: collected, provider: 'hh', ok: true };
   },
 };

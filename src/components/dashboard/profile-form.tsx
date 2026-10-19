@@ -1,7 +1,7 @@
-"use client";
+'use client';
 
-import { useState, type FormEvent } from "react";
-import { Field, Panel, btnPrimary, inputCls } from "@/components/dashboard/ui";
+import { useState, type FormEvent } from 'react';
+import { Field, Panel, btnPrimary, inputCls } from '@/components/dashboard/ui';
 
 /*
  * Профиль.
@@ -28,9 +28,9 @@ export function ProfileForm({
   const [draft, setDraft] = useState({
     name,
     email,
-    password: "",
-    currentPassword: "",
-    salary: salaryExpectation ? String(salaryExpectation) : "",
+    password: '',
+    currentPassword: '',
+    salary: salaryExpectation ? String(salaryExpectation) : '',
     city: cityPreference,
   });
   const [saving, setSaving] = useState(false);
@@ -41,9 +41,9 @@ export function ProfileForm({
     setSaving(true);
     setMessage(null);
     try {
-      const res = await fetch("/api/profile", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: draft.name,
           email: draft.email,
@@ -51,19 +51,19 @@ export function ProfileForm({
           currentPassword: draft.email !== email ? draft.currentPassword || undefined : undefined,
           // Пустая строка означает «ожиданий не назвал», а не ноль: при нуле
           // любая вакансия считалась бы выше ожиданий.
-          salaryExpectation: draft.salary.trim() === "" ? null : Number(draft.salary),
+          salaryExpectation: draft.salary.trim() === '' ? null : Number(draft.salary),
           cityPreference: draft.city.trim(),
         }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setMessage({ ok: false, text: data.error ?? "Не удалось сохранить" });
+        setMessage({ ok: false, text: data.error ?? 'Не удалось сохранить' });
         return;
       }
-      setDraft((d) => ({ ...d, password: "", currentPassword: "" }));
-      setMessage({ ok: true, text: "Данные обновлены." });
+      setDraft((d) => ({ ...d, password: '', currentPassword: '' }));
+      setMessage({ ok: true, text: 'Данные обновлены.' });
     } catch {
-      setMessage({ ok: false, text: "Сеть недоступна — данные не сохранены" });
+      setMessage({ ok: false, text: 'Сеть недоступна — данные не сохранены' });
     } finally {
       setSaving(false);
     }
@@ -79,7 +79,7 @@ export function ProfileForm({
             required
             maxLength={60}
             autoComplete="name"
-            className={inputCls}
+            className={`${inputCls} w-full`}
             value={draft.name}
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
           />
@@ -90,7 +90,7 @@ export function ProfileForm({
             required
             maxLength={100}
             autoComplete="email"
-            className={inputCls}
+            className={`${inputCls} w-full`}
             value={draft.email}
             onChange={(e) => setDraft({ ...draft, email: e.target.value })}
           />
@@ -100,22 +100,28 @@ export function ProfileForm({
           Зарплатные ожидания — влияют на оценку вакансий и на подбор.
           Ввод числом без потери фокуса: пустое поле означает «не назвал».
         */}
-        <Field label="Зарплатные ожидания, ₽ (необязательно)" hint="Вакансии ниже этого порога будут получать меньшую оценку">
+        <Field
+          label="Зарплатные ожидания, ₽ (необязательно)"
+          hint="Вакансии ниже этого порога будут получать меньшую оценку"
+        >
           <input
             type="number"
             min={0}
             step={10000}
             inputMode="numeric"
-            className={inputCls}
+            className={`${inputCls} w-full`}
             value={draft.salary}
             onChange={(e) => setDraft({ ...draft, salary: e.target.value })}
             placeholder="180000"
           />
         </Field>
-        <Field label="Предпочитаемый город (необязательно)" hint="Используется в новых поисках под ваш выбор">
+        <Field
+          label="Предпочитаемый город (необязательно)"
+          hint="Используется в новых поисках под ваш выбор"
+        >
           <input
             maxLength={80}
-            className={inputCls}
+            className={`${inputCls} w-full`}
             value={draft.city}
             onChange={(e) => setDraft({ ...draft, city: e.target.value })}
             placeholder="Москва"
@@ -129,7 +135,7 @@ export function ProfileForm({
               minLength={6}
               maxLength={100}
               autoComplete="new-password"
-              className={inputCls}
+              className={`${inputCls} w-full`}
               value={draft.password}
               onChange={(e) => setDraft({ ...draft, password: e.target.value })}
               placeholder="••••••••"
@@ -144,7 +150,7 @@ export function ProfileForm({
                 minLength={6}
                 maxLength={100}
                 autoComplete="current-password"
-                className={inputCls}
+                className={`${inputCls} w-full`}
                 value={draft.currentPassword}
                 onChange={(e) => setDraft({ ...draft, currentPassword: e.target.value })}
                 placeholder="••••••••"
@@ -158,17 +164,17 @@ export function ProfileForm({
             вежливо, не перебивая. Без этого форма выглядит «нерабочей»:
             кнопка нажата, а экран молчит. */}
         <div
-          role={message?.ok ? "status" : "alert"}
-          aria-live={message?.ok ? "polite" : "assertive"}
+          role={message?.ok ? 'status' : 'alert'}
+          aria-live={message?.ok ? 'polite' : 'assertive'}
           className="text-sm md:col-span-2"
         >
           {message ? (
-            <p className={message.ok ? "text-success" : "text-danger"}>{message.text}</p>
+            <p className={message.ok ? 'text-success' : 'text-danger'}>{message.text}</p>
           ) : null}
         </div>
         <div className="md:col-span-2">
           <button type="submit" disabled={saving} className={btnPrimary}>
-            {saving ? "Сохраняем…" : "Сохранить изменения"}
+            {saving ? 'Сохраняем…' : 'Сохранить изменения'}
           </button>
         </div>
       </form>

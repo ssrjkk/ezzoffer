@@ -9,7 +9,7 @@
  *
  * Порядок импортов в тесте: сначала этот файл, потом компонент.
  */
-import { setupDom } from "./dom";
+import { setupDom } from './dom';
 
 export const dom = setupDom();
-export { pressKey } from "./dom";
+export { pressKey } from './dom';

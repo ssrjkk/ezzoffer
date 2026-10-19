@@ -1,17 +1,17 @@
-import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
-import { db } from "@/lib/db";
-import { LettersManager } from "@/components/dashboard/letters-manager";
+import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
+import { getCurrentUser } from '@/lib/auth';
+import { db } from '@/lib/db';
+import { LettersManager } from '@/components/dashboard/letters-manager';
 
-export const metadata: Metadata = { title: "Письма" };
-export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: 'Письма' };
+export const dynamic = 'force-dynamic';
 
 export default async function LettersPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect('/login');
   const letters = db
-    .prepare("SELECT * FROM letters WHERE user_id = ? ORDER BY updated_at DESC")
+    .prepare('SELECT * FROM letters WHERE user_id = ? ORDER BY updated_at DESC')
     .all(user.id) as {
     id: number;
     title: string;

@@ -1,13 +1,13 @@
-import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { getCurrentUser } from "@/lib/auth";
-import { computeSkillGaps } from "@/lib/skill-gaps";
-import { learningPath, skillsWithPaths } from "@/lib/learning-paths";
-import { Panel } from "@/components/dashboard/ui";
-import { Section, SectionHead } from "@/components/ui";
+import type { Metadata } from 'next';
+import { redirect } from 'next/navigation';
+import { getCurrentUser } from '@/lib/auth';
+import { computeSkillGaps } from '@/lib/skill-gaps';
+import { learningPath, skillsWithPaths } from '@/lib/learning-paths';
+import { Panel } from '@/components/dashboard/ui';
+import { Section, SectionHead } from '@/components/ui';
 
-export const metadata: Metadata = { title: "Навыки" };
-export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: 'Навыки' };
+export const dynamic = 'force-dynamic';
 
 /**
  * Пробелы в навыках и что с ними делать.
@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
  */
 export default async function SkillsPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/login");
+  if (!user) redirect('/login');
 
   const report = computeSkillGaps(user.id);
   const withPaths = skillsWithPaths();
@@ -80,7 +80,7 @@ export default async function SkillsPage() {
                 {path.topics.map((topic, i) => (
                   <li key={topic.topic} className="flex gap-3">
                     <span className="mt-0.5 font-mono text-xs tabular-nums text-accent-2">
-                      {String(i + 1).padStart(2, "0")}
+                      {String(i + 1).padStart(2, '0')}
                     </span>
                     <div className="min-w-0">
                       <p className="font-medium text-ink">{topic.topic}</p>
@@ -109,7 +109,7 @@ function GapsBody({ report }: { report: Report }) {
     return (
       <Panel className="mt-6">
         <p className="text-sm leading-relaxed text-muted">
-          Нужно резюме — без него нельзя понять, чего в нём не хватает. Добавьте его в{" "}
+          Нужно резюме — без него нельзя понять, чего в нём не хватает. Добавьте его в{' '}
           <a
             href="/dashboard/resumes"
             className="font-medium text-accent-2 underline-offset-2 hover:underline"
@@ -129,7 +129,7 @@ function GapsBody({ report }: { report: Report }) {
           Пробелов не видно: всё, что требуют вакансии из вашего подбора, уже есть в резюме.
           {report.basis.applications > 0
             ? ` Разобрано откликов: ${report.basis.applications}.`
-            : " Откликов пока нет — список уточнится, как только они появятся."}
+            : ' Откликов пока нет — список уточнится, как только они появятся.'}
         </p>
       </Panel>
     );
@@ -151,7 +151,7 @@ function GapsBody({ report }: { report: Report }) {
               {path ? (
                 <a
                   href={`#${slug(gap.skill)}`}
-                  className="text-sm font-medium text-accent-2 underline-offset-2 hover:underline"
+                  className="-my-1 inline-flex min-h-11 items-center text-sm font-medium text-accent-2 underline-offset-2 hover:underline"
                 >
                   что учить →
                 </a>
@@ -164,8 +164,8 @@ function GapsBody({ report }: { report: Report }) {
 
       {report.covered.length > 0 ? (
         <p className="text-sm leading-relaxed text-muted">
-          Уже закрыто требованиями резюме: {report.covered.slice(0, 12).join(", ")}
-          {report.covered.length > 12 ? " и другие" : ""}.
+          Уже закрыто требованиями резюме: {report.covered.slice(0, 12).join(', ')}
+          {report.covered.length > 12 ? ' и другие' : ''}.
         </p>
       ) : null}
     </div>
@@ -173,5 +173,5 @@ function GapsBody({ report }: { report: Report }) {
 }
 
 function slug(skill: string): string {
-  return `skill-${skill.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  return `skill-${skill.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 }

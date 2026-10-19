@@ -1,6 +1,6 @@
-import test from "node:test";
-import assert from "node:assert/strict";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 
 /**
  * Роуты отвечают на мусор, а не падают.
@@ -15,7 +15,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
  * дошёл до исключения; ответ 2xx — что маршрут принял мусор.
  */
 
-const BASE = process.env.BASE ?? "http://localhost:3121";
+const BASE = process.env.BASE ?? 'http://localhost:3121';
 
 /*
  * ОГРАНИЧЕНИЕ, И КОТОРОЕ ВАЖНЕЕ САМОГО ТЕСТА.
@@ -64,25 +64,25 @@ const walk = (dir: string, prefix: string): void => {
       walk(full, `${prefix}/${entry}`);
       continue;
     }
-    if (entry !== "route.ts") continue;
-    const text = readFileSync(full, "utf8");
-    const methods = [...text.matchAll(/export\s+async\s+function\s+(GET|POST|PUT|PATCH|DELETE)/g)].map((m) => m[1]);
+    if (entry !== 'route.ts') continue;
+    const text = readFileSync(full, 'utf8');
+    const methods = [
+      ...text.matchAll(/export\s+async\s+function\s+(GET|POST|PUT|PATCH|DELETE)/g),
+    ].map((m) => m[1]);
     routes.push({ path: prefix, file: full, methods });
   }
 };
-walk("src/app/api", "/api");
+walk('src/app/api', '/api');
 
 function mutating(route: Route): string[] {
-  return route.methods.filter(
-    (m) => m !== "GET" && !KNOWN_OPEN.some((re) => re.test(route.path)),
-  );
+  return route.methods.filter((m) => m !== 'GET' && !KNOWN_OPEN.some((re) => re.test(route.path)));
 }
 
 async function call(method: string, path: string, body: string): Promise<number | null> {
   try {
     const res = await fetch(`${BASE}${path}`, {
       method,
-      headers: { "content-type": "application/json", origin: BASE },
+      headers: { 'content-type': 'application/json', origin: BASE },
       body,
     });
     return res.status;
@@ -100,9 +100,9 @@ const serverUp = async (): Promise<boolean> => {
   }
 };
 
-test("изменяющие маршруты отвечают 4xx на битое тело", async (t) => {
+test('изменяющие маршруты отвечают 4xx на битое тело', async (t) => {
   if (!(await serverUp())) {
-    t.skip("сервер не поднят");
+    t.skip('сервер не поднят');
     return;
   }
 
@@ -112,24 +112,29 @@ test("изменяющие маршруты отвечают 4xx на битое
   for (const route of routes) {
     for (const m of mutating(route)) {
       checked++;
-      const status = await call(m, route.path, "{не json");
+      const status = await call(m, route.path, '{не json');
       if (status === null) problems.push(`${m} ${route.path}: соединение оборвалось`);
       else if (IDEMPOTENT.some((re) => re.test(route.path))) {
         // Выход тело не читает, поэтому «битое» тело для него не имеет смысла.
         if (status >= 500) problems.push(`${m} ${route.path}: ${status} на выходе`);
-      }
-      else if (status >= 500) problems.push(`${m} ${route.path}: ${status} — необработанный вход дошёл до исключения`);
-      else if (status < 400) problems.push(`${m} ${route.path}: ${status} — мусор принят за данные`);
+      } else if (status >= 500)
+        problems.push(`${m} ${route.path}: ${status} — необработанный вход дошёл до исключения`);
+      else if (status < 400)
+        problems.push(`${m} ${route.path}: ${status} — мусор принят за данные`);
     }
   }
 
   assert.ok(checked >= 10, `проверено только ${checked} обработчиков — обход ничего не собрал`);
-  assert.deepEqual(problems, [], `роуты обращаются с мусором неверно:\n      ${problems.join("\n      ")}`);
+  assert.deepEqual(
+    problems,
+    [],
+    `роуты обращаются с мусором неверно:\n      ${problems.join('\n      ')}`,
+  );
 });
 
-test("мусорный идентификатор в адресе не ведёт к чужому ресурсу", async (t) => {
+test('мусорный идентификатор в адресе не ведёт к чужому ресурсу', async (t) => {
   if (!(await serverUp())) {
-    t.skip("сервер не поднят");
+    t.skip('сервер не поднят');
     return;
   }
 
@@ -138,17 +143,17 @@ test("мусорный идентификатор в адресе не ведё�
    * маршрут: строка подставляется в запрос к базе. Проверяются все формы,
    * которые Number принимал за целое число, и форма за пределом точности.
    */
-  const JUNK = ["0", "-1", "1e3", "0x10", "1.0", "abc", "99999999999999"];
+  const JUNK = ['0', '-1', '1e3', '0x10', '1.0', 'abc', '99999999999999'];
   const problems: string[] = [];
   let checked = 0;
 
   for (const route of routes) {
-    if (!route.path.includes("/[")) continue;
-    const base = route.path.replace(/\/\[[^\]]+\]/, "");
+    if (!route.path.includes('/[')) continue;
+    const base = route.path.replace(/\/\[[^\]]+\]/, '');
     for (const junk of JUNK) {
       for (const m of route.methods) {
         checked++;
-        const status = await call(m, `${base}/${encodeURIComponent(junk)}`, "{}");
+        const status = await call(m, `${base}/${encodeURIComponent(junk)}`, '{}');
         if (status === null) continue;
         if (status >= 500) {
           problems.push(`${m} ${base}/${junk}: ${status} — необработанный идентификатор`);
@@ -158,12 +163,16 @@ test("мусорный идентификатор в адресе не ведё�
   }
 
   assert.ok(checked >= 10, `проверено только ${checked} сочетаний — обход ничего не собрал`);
-  assert.deepEqual(problems, [], `мусорный идентификатор роняет маршрут:\n      ${problems.join("\n      ")}`);
+  assert.deepEqual(
+    problems,
+    [],
+    `мусорный идентификатор роняет маршрут:\n      ${problems.join('\n      ')}`,
+  );
 });
 
-test("запрос без сессии не меняет состояние", async (t) => {
+test('запрос без сессии не меняет состояние', async (t) => {
   if (!(await serverUp())) {
-    t.skip("сервер не поднят");
+    t.skip('сервер не поднят');
     return;
   }
 
@@ -178,15 +187,19 @@ test("запрос без сессии не меняет состояние", as
   let checked = 0;
 
   for (const route of routes) {
-    if (KNOWN_OPEN.some((re) => re.test(route.path)) || IDEMPOTENT.some((re) => re.test(route.path))) continue;
+    if (
+      KNOWN_OPEN.some((re) => re.test(route.path)) ||
+      IDEMPOTENT.some((re) => re.test(route.path))
+    )
+      continue;
     for (const m of mutating(route)) {
       checked++;
       let status: number | null;
       try {
         const res = await fetch(`${BASE}${route.path}`, {
           method: m,
-          headers: { "content-type": "application/json", origin: BASE },
-          body: "{}",
+          headers: { 'content-type': 'application/json', origin: BASE },
+          body: '{}',
         });
         status = res.status;
       } catch {
@@ -202,5 +215,9 @@ test("запрос без сессии не меняет состояние", as
   }
 
   assert.ok(checked >= 10, `проверено только ${checked} обработчиков`);
-  assert.deepEqual(problems, [], `без сессии маршрут отвечает не так:\n      ${problems.join("\n      ")}`);
+  assert.deepEqual(
+    problems,
+    [],
+    `без сессии маршрут отвечает не так:\n      ${problems.join('\n      ')}`,
+  );
 });

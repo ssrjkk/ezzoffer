@@ -1,7 +1,7 @@
-import { requireUser, unauthorized } from "@/lib/api";
-import { db, type User } from "@/lib/db";
-import { hhConfigured, isHhConnected } from "@/lib/hh-oauth";
-import { NO_STORE_HEADERS } from "@/lib/http";
+import { requireUser, unauthorized } from '@/lib/api';
+import { db, type User } from '@/lib/db';
+import { hhConfigured, isHhConnected } from '@/lib/hh-oauth';
+import { NO_STORE_HEADERS } from '@/lib/http';
 
 export async function GET() {
   const user = await requireUser();
@@ -9,7 +9,7 @@ export async function GET() {
 
   // Читаем актуальное состояние напрямую из БД, а не из объекта сессии:
   // токен мог обновиться между запросами. Если строки нет — сессия недействительна.
-  const fresh = db.prepare("SELECT * FROM users WHERE id = ?").get(user.id) as User | undefined;
+  const fresh = db.prepare('SELECT * FROM users WHERE id = ?').get(user.id) as User | undefined;
   if (!fresh) return unauthorized();
   const tokenValid = Boolean(
     fresh.hh_token && fresh.hh_token_expires_at && fresh.hh_token_expires_at > Date.now(),

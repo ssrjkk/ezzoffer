@@ -1,5 +1,5 @@
-import Link from "next/link";
-import { jobs, type Job } from "@/lib/data";
+import Link from 'next/link';
+import { jobs, type Job } from '@/lib/data';
 
 /*
  * Список вакансий.
@@ -15,12 +15,12 @@ import { jobs, type Job } from "@/lib/data";
  * в два блока, но порядок «должность → компания → деньги» сохраняется.
  */
 
-function levelTone(level: Job["level"]): string {
+function levelTone(level: Job['level']): string {
   return {
-    Intern: "text-accent-2",
-    Junior: "text-accent-2",
-    Middle: "text-ink",
-    Senior: "text-ink",
+    Intern: 'text-accent-2',
+    Junior: 'text-accent-2',
+    Middle: 'text-ink',
+    Senior: 'text-ink',
   }[level];
 }
 
@@ -33,7 +33,9 @@ function JobRow({ job }: { job: Job }) {
       <div className="flex flex-col gap-3 md:flex-row md:items-baseline md:gap-8">
         {/* Уровень и компания — узкая колонка */}
         <div className="flex items-baseline gap-3 md:w-44 md:shrink-0 md:flex-col md:gap-1">
-          <span className={`font-mono text-[11px] uppercase tracking-[0.14em] ${levelTone(job.level)}`}>
+          <span
+            className={`font-mono text-[11px] uppercase tracking-[0.14em] ${levelTone(job.level)}`}
+          >
             {job.level}
           </span>
           <span className="text-sm text-muted">{job.company}</span>

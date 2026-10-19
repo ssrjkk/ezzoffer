@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+﻿import type Database from 'better-sqlite3';
 
 /**
  * Колонка «уведомление о состоянии отклика отправлено».
@@ -12,12 +12,12 @@ import type Database from "better-sqlite3";
  * достаточно, но объявлено явно, чтобы поле не потерялось при пересборке
  * таблицы из migrateApplicationsResumeId — там список колонок задан явно.
  */
-export function addNotifiedAtColumn(instance: Pick<Database.Database, "exec" | "prepare">): void {
-  const row = instance.prepare("PRAGMA table_info(applications)").all() as {
+export function addNotifiedAtColumn(instance: Pick<Database.Database, 'exec' | 'prepare'>): void {
+  const row = instance.prepare('PRAGMA table_info(applications)').all() as {
     name: string;
   }[];
-  if (row.some((c) => c.name === "notified_at")) return;
-  instance.exec("ALTER TABLE applications ADD COLUMN notified_at INTEGER");
+  if (row.some((c) => c.name === 'notified_at')) return;
+  instance.exec('ALTER TABLE applications ADD COLUMN notified_at INTEGER');
 }
 
 /**
@@ -34,12 +34,12 @@ export function addNotifiedAtColumn(instance: Pick<Database.Database, "exec" | "
  * людей, и им колонка тоже нужна.
  */
 export function migrateApplicationsOrigin(
-  instance: Pick<Database.Database, "exec" | "prepare">,
+  instance: Pick<Database.Database, 'exec' | 'prepare'>,
 ): void {
-  const cols = instance.prepare("PRAGMA table_info(applications)").all() as {
+  const cols = instance.prepare('PRAGMA table_info(applications)').all() as {
     name: string;
   }[];
-  if (!cols.some((c) => c.name === "origin")) {
+  if (!cols.some((c) => c.name === 'origin')) {
     instance.exec(
       "ALTER TABLE applications ADD COLUMN origin TEXT NOT NULL DEFAULT 'user' " +
         "CHECK (origin IN ('real','simulated','user','ai'))",
@@ -63,13 +63,11 @@ export function migrateApplicationsOrigin(
  * автоотклики». Дефолт demo: никто не становится «живым» молча, миграцией
  * в том числе. Backfill не нужен — безопасное значение и есть дефолт.
  */
-export function migrateUserMode(
-  instance: Pick<Database.Database, "exec" | "prepare">,
-): void {
-  const cols = instance.prepare("PRAGMA table_info(users)").all() as {
+export function migrateUserMode(instance: Pick<Database.Database, 'exec' | 'prepare'>): void {
+  const cols = instance.prepare('PRAGMA table_info(users)').all() as {
     name: string;
   }[];
-  if (cols.some((c) => c.name === "mode")) return;
+  if (cols.some((c) => c.name === 'mode')) return;
   instance.exec(
     "ALTER TABLE users ADD COLUMN mode TEXT NOT NULL DEFAULT 'demo' " +
       "CHECK (mode IN ('demo','live'))",
@@ -92,17 +90,15 @@ export function migrateUserMode(
  *
  * Отдельная функция, а не правка CREATE TABLE: старые базы у людей живут.
  */
-export function migrateResumeVariants(
-  instance: Pick<Database.Database, "exec" | "prepare">,
-): void {
-  const cols = instance.prepare("PRAGMA table_info(resumes)").all() as {
+export function migrateResumeVariants(instance: Pick<Database.Database, 'exec' | 'prepare'>): void {
+  const cols = instance.prepare('PRAGMA table_info(resumes)').all() as {
     name: string;
   }[];
-  if (!cols.some((c) => c.name === "variant_group")) {
-    instance.exec("ALTER TABLE resumes ADD COLUMN variant_group TEXT");
+  if (!cols.some((c) => c.name === 'variant_group')) {
+    instance.exec('ALTER TABLE resumes ADD COLUMN variant_group TEXT');
   }
-  if (!cols.some((c) => c.name === "variant_label")) {
-    instance.exec("ALTER TABLE resumes ADD COLUMN variant_label TEXT");
+  if (!cols.some((c) => c.name === 'variant_label')) {
+    instance.exec('ALTER TABLE resumes ADD COLUMN variant_label TEXT');
   }
 }
 
@@ -117,29 +113,82 @@ export function migrateResumeVariants(
  *
  * Отдельная функция: старые базы у людей живут, а платежей в них не бывало.
  */
-export function migratePayments(
-  instance: Pick<Database.Database, "exec" | "prepare">,
-): void {
-  const tables = instance
-    .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-    .all() as { name: string }[];
+export function migratePayments(instance: Pick<Database.Database, 'exec' | 'prepare'>): void {
+  const tables = instance.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as {
+    name: string;
+  }[];
   const has = (t: string) => tables.some((r) => r.name === t);
 
-  if (!has("payments")) {
+  if (!has('payments')) {
     instance.exec(`
       CREATE TABLE payments (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL REFERENCES users(id),
-        external_id TEXT NOT NULL UNIQUE,
+        external_id TEXT NOT NULL,
         provider TEXT NOT NULL,
         plan_id TEXT NOT NULL,
         amount_rub INTEGER NOT NULL DEFAULT 0,
-        created_at INTEGER NOT NULL
+        created_at INTEGER NOT NULL,
+        UNIQUE (provider, external_id)
       )
     `);
+  } else {
+    /*
+     * Идемпотентность — по паре (провайдер, внешний id), а не по голому id.
+     *
+     * Первая версия схемы держала UNIQUE(external_id) глобально, а формат
+     * paymentId задаёт внешняя сторона: два разных способа оплаты вправе
+     * выдать одинаковый номер. Тогда второй легитимный платёж отклонялся как
+     * «уже записан», и человек оставался без тарифа за свои деньги.
+     *
+     * Пересборка с переносом данных: id сохраняются, поэтому
+     * entitlements.source_payment_id продолжает указывать куда надо.
+     */
+    const idx = instance.prepare('PRAGMA index_list(payments)').all() as {
+      name: string;
+      sql: string | null;
+      unique: number;
+    }[];
+    const scoped = idx.some(
+      (i) => i.unique && i.sql && /provider/i.test(i.sql) && /external_id/i.test(i.sql),
+    );
+    if (!scoped) {
+      instance.exec('PRAGMA foreign_keys = OFF');
+      instance.exec('BEGIN');
+      try {
+        instance.exec(`
+          CREATE TABLE payments_migrated (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            external_id TEXT NOT NULL,
+            provider TEXT NOT NULL,
+            plan_id TEXT NOT NULL,
+            amount_rub INTEGER NOT NULL DEFAULT 0,
+            created_at INTEGER NOT NULL,
+            UNIQUE (provider, external_id)
+          );
+        `);
+        instance.exec(`
+          INSERT INTO payments_migrated (id, user_id, external_id, provider, plan_id, amount_rub, created_at)
+          SELECT id, user_id, external_id, provider, plan_id, amount_rub, created_at FROM payments;
+        `);
+        instance.exec('DROP TABLE payments');
+        instance.exec('ALTER TABLE payments_migrated RENAME TO payments');
+        instance.exec('COMMIT');
+      } catch (err) {
+        try {
+          instance.exec('ROLLBACK');
+        } catch {
+          // Откат не удался — база осталась в исходном состоянии BEGIN'а.
+        }
+        throw err;
+      } finally {
+        instance.exec('PRAGMA foreign_keys = ON');
+      }
+    }
   }
 
-  if (!has("entitlements")) {
+  if (!has('entitlements')) {
     instance.exec(`
       CREATE TABLE entitlements (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -151,7 +200,7 @@ export function migratePayments(
       )
     `);
     instance.exec(
-      "CREATE INDEX IF NOT EXISTS ix_entitlements_user ON entitlements(user_id, expires_at)",
+      'CREATE INDEX IF NOT EXISTS ix_entitlements_user ON entitlements(user_id, expires_at)',
     );
   }
 }
@@ -166,13 +215,11 @@ export function migratePayments(
  * provider_id, а не email: адрес у человека меняется, идентификатор в
  * системе провайдера — нет. Привязка должна переживать смену почты.
  */
-export function migrateOauthAccounts(
-  instance: Pick<Database.Database, "exec" | "prepare">,
-): void {
-  const tables = instance
-    .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-    .all() as { name: string }[];
-  if (tables.some((r) => r.name === "oauth_accounts")) return;
+export function migrateOauthAccounts(instance: Pick<Database.Database, 'exec' | 'prepare'>): void {
+  const tables = instance.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as {
+    name: string;
+  }[];
+  if (tables.some((r) => r.name === 'oauth_accounts')) return;
   instance.exec(`
     CREATE TABLE oauth_accounts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -184,6 +231,78 @@ export function migrateOauthAccounts(
       UNIQUE (provider, provider_id)
     )
   `);
+}
+
+/**
+ * Перешифровка токенов hh на диске (Фаза 1, риск бэкапа).
+ *
+ * До этого access- и refresh-токены лежали открытым текстом, и копия файла
+ * базы давала возможность отправлять отклики от чужого имени. Здесь они
+ * переводятся в AES-256-GCM ключом из EZOFFER_TOKEN_KEY.
+ *
+ * ИДЕМПОТЕНТНОСТЬ — главное требование. Миграция идёт только вперёд и должна
+ * быть безопасна при повторном запуске, потому что вызывается на каждом
+ * старте. Повторно шифровать уже зашифрованное нельзя: это испортило бы
+ * значение без возможности восстановления. Поэтому пропускается всё, что уже
+ * помечено префиксом версии.
+ *
+ * БЕЗ КЛЮЧЯ миграция ничего не делает и ничего не портит. Это осознанно:
+ * ключ ставится на сервере позже, и требование ключа при локальной разработке
+ * или первом запуске сделало бы приложение неработоспособным. Открытые
+ * значения при этом остаются открытыми — и это видно через
+ * encryptionEnabled().
+ *
+ * Значения читаются как есть и перешифровываются в одной транзакции: на
+ * середине процесса, если процесс умрёт, не будет половины переведённых и
+ * половины нет.
+ */
+export function migrateSecretColumns(instance: Pick<Database.Database, 'exec' | 'prepare'>): void {
+  // Ключ нужен ИСКЛЮЧИТЕЛЬНО для миграции, поэтому импортируем здесь: без
+  // ключа модуль secrets работает как обычно, просто ничего не шифрует.
+  const { encryptSecret, encryptionEnabled } = requireSecrets();
+  if (!encryptionEnabled()) return;
+
+  const cols = instance.prepare('PRAGMA table_info(users)').all() as { name: string }[];
+  const has = (n: string) => cols.some((c) => c.name === n);
+  if (!has('hh_token') && !has('hh_refresh_token')) return;
+
+  const fields = ['hh_token', 'hh_refresh_token'].filter(has);
+  const rows = instance.prepare(`SELECT id, ${fields.join(', ')} FROM users`).all() as Record<
+    string,
+    string | number | null
+  >[];
+
+  instance.exec('BEGIN');
+  try {
+    for (const row of rows) {
+      const sets: string[] = [];
+      const values: unknown[] = [];
+      for (const field of fields) {
+        const current = row[field];
+        if (typeof current !== 'string' || current === '') continue;
+        if (current.startsWith('v1:')) continue; // уже зашифровано
+        sets.push(`${field} = ?`);
+        values.push(encryptSecret(current));
+      }
+      if (sets.length === 0) continue;
+      values.push(row.id);
+      instance.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+    }
+    instance.exec('COMMIT');
+  } catch (error) {
+    instance.exec('ROLLBACK');
+    throw new Error(`Не удалось зашифровать токены: ${(error as Error).message}`);
+  }
+}
+
+/** Ленивый доступ к secrets: избегаем циклической зависимости модулей. */
+function requireSecrets(): typeof import('./secrets') {
+  return secretsModule ?? (secretsModule = loadSecrets());
+}
+let secretsModule: typeof import('./secrets') | null = null;
+function loadSecrets(): typeof import('./secrets') {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require('./secrets') as typeof import('./secrets');
 }
 
 /**
@@ -209,25 +328,25 @@ export function migrateOauthAccounts(
  * отдельно от всего остального.
  */
 export function migrateApplicationsResumeId(
-  instance: Pick<Database.Database, "exec" | "prepare">,
+  instance: Pick<Database.Database, 'exec' | 'prepare'>,
 ): void {
-  const row = instance.prepare("PRAGMA table_info(applications)").all() as {
+  const row = instance.prepare('PRAGMA table_info(applications)').all() as {
     name: string;
     type: string;
   }[];
-  const resumeCol = row.find((c) => c.name === "resume_id");
+  const resumeCol = row.find((c) => c.name === 'resume_id');
   // Уже TEXT — миграция уже проходила (или база создана с нуля).
-  if (!resumeCol || resumeCol.type.toUpperCase() !== "INTEGER") return;
+  if (!resumeCol || resumeCol.type.toUpperCase() !== 'INTEGER') return;
   /*
    * origin переживает пересборку. Источник может её не иметь (старая база,
    * прямой вызов без migrateApplicationsOrigin) — тогда строки получают
    * безопасный дефолт 'user', а backfill по источнику доберёт 'real' позже.
    */
-  const hasOrigin = row.some((c) => c.name === "origin");
-  const originSelect = hasOrigin ? "origin" : "'user'";
+  const hasOrigin = row.some((c) => c.name === 'origin');
+  const originSelect = hasOrigin ? 'origin' : "'user'";
 
-  instance.exec("PRAGMA foreign_keys = OFF");
-  instance.exec("BEGIN");
+  instance.exec('PRAGMA foreign_keys = OFF');
+  instance.exec('BEGIN');
   try {
     instance.exec(`
       CREATE TABLE applications_migrated (
@@ -268,8 +387,8 @@ export function migrateApplicationsResumeId(
         response_note, message, external_url, sent_at, viewed_at, responded_at, withdrawn, notified_at
       FROM applications;
     `);
-    instance.exec("DROP TABLE applications");
-    instance.exec("ALTER TABLE applications_migrated RENAME TO applications");
+    instance.exec('DROP TABLE applications');
+    instance.exec('ALTER TABLE applications_migrated RENAME TO applications');
     /*
      * AUTOINCREMENT и перенос id.
      *
@@ -282,15 +401,19 @@ export function migrateApplicationsResumeId(
      * пользователя сканирует таблицу целиком — на реальных объёмах кабинет
      * открывается заметно медленнее, и ни одна ошибка не возникает.
      */
-    instance.exec("CREATE INDEX IF NOT EXISTS idx_applications_user ON applications(user_id)");
-    instance.exec("CREATE INDEX IF NOT EXISTS idx_applications_job ON applications(job_slug)");
-    instance.exec("CREATE INDEX IF NOT EXISTS idx_applications_user_sent ON applications(user_id, sent_at)");
-    instance.exec("CREATE INDEX IF NOT EXISTS idx_applications_user_job ON applications(user_id, job_slug)");
-    instance.exec("COMMIT");
+    instance.exec('CREATE INDEX IF NOT EXISTS idx_applications_user ON applications(user_id)');
+    instance.exec('CREATE INDEX IF NOT EXISTS idx_applications_job ON applications(job_slug)');
+    instance.exec(
+      'CREATE INDEX IF NOT EXISTS idx_applications_user_sent ON applications(user_id, sent_at)',
+    );
+    instance.exec(
+      'CREATE INDEX IF NOT EXISTS idx_applications_user_job ON applications(user_id, job_slug)',
+    );
+    instance.exec('COMMIT');
   } catch (err) {
-    instance.exec("ROLLBACK");
+    instance.exec('ROLLBACK');
     throw err;
   } finally {
-    instance.exec("PRAGMA foreign_keys = ON");
+    instance.exec('PRAGMA foreign_keys = ON');
   }
 }

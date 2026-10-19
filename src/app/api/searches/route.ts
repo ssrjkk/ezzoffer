@@ -1,7 +1,14 @@
-import { requireUser, unauthorized, readJson, toPositiveNumber, validateSalaryRange, badRequest } from "@/lib/api";
-import { db } from "@/lib/db";
-import { matchCount, type SearchRow } from "@/lib/matcher";
-import { NO_STORE_HEADERS } from "@/lib/http";
+import {
+  requireUser,
+  unauthorized,
+  readJson,
+  toPositiveNumber,
+  validateSalaryRange,
+  badRequest,
+} from '@/lib/api';
+import { db } from '@/lib/db';
+import { matchCount, type SearchRow } from '@/lib/matcher';
+import { NO_STORE_HEADERS } from '@/lib/http';
 
 function serialize(row: SearchRow) {
   return { ...row, match_count: matchCount(row) };
@@ -11,7 +18,7 @@ export async function GET() {
   const user = await requireUser();
   if (!user) return unauthorized();
   const rows = db
-    .prepare("SELECT * FROM searches WHERE user_id = ? ORDER BY created_at DESC")
+    .prepare('SELECT * FROM searches WHERE user_id = ? ORDER BY created_at DESC')
     .all(user.id) as SearchRow[];
   return Response.json({ searches: rows.map(serialize) }, { headers: NO_STORE_HEADERS });
 }
@@ -31,12 +38,12 @@ export async function POST(request: Request) {
   }>(request);
   if (error) return error;
 
-  const title = (data?.title?.trim() || "Новый поиск").slice(0, 100);
-  const keywords = (data?.keywords?.trim() ?? "").slice(0, 400);
-  const format = (data?.format?.trim() ?? "").slice(0, 20);
-  const city = (data?.city?.trim() ?? "").slice(0, 60);
-  const level = (data?.level?.trim() ?? "").slice(0, 20);
-  const companyBlacklist = (data?.company_blacklist?.trim() ?? "").slice(0, 400);
+  const title = (data?.title?.trim() || 'Новый поиск').slice(0, 100);
+  const keywords = (data?.keywords?.trim() ?? '').slice(0, 400);
+  const format = (data?.format?.trim() ?? '').slice(0, 20);
+  const city = (data?.city?.trim() ?? '').slice(0, 60);
+  const level = (data?.level?.trim() ?? '').slice(0, 20);
+  const companyBlacklist = (data?.company_blacklist?.trim() ?? '').slice(0, 400);
   const salaryMin = toPositiveNumber(data?.salary_min);
   const salaryMax = toPositiveNumber(data?.salary_max);
 
@@ -62,7 +69,7 @@ export async function POST(request: Request) {
     );
 
   const row = db
-    .prepare("SELECT * FROM searches WHERE id = ?")
+    .prepare('SELECT * FROM searches WHERE id = ?')
     .get(result.lastInsertRowid) as SearchRow;
   return Response.json({ search: serialize(row) }, { status: 201 });
 }
