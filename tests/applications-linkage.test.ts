@@ -65,7 +65,7 @@ test('resume_id записывается из идентификатора, ко
 
 test('выбор резюме даёт hh_id, с откатом на общее подключение аккаунта', () => {
   assert.ok(
-    /let hhResumeId[^=]*=\s*\(resumeRow\?\.hh_id\s*\?\?\s*""\)\.trim\(\)\s*\|\|\s*null/.test(ROUTE),
+    /let hhResumeId[^=]*=\s*\(resumeRow\?\.hh_id\s*\?\?\s*['"]{2}\)\.trim\(\)\s*\|\|\s*null/.test(ROUTE),
     'идентификатор берётся из hh_id фактически выбранного резюме',
   );
   assert.ok(

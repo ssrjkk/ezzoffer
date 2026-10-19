@@ -42,11 +42,20 @@ let jar: Map<string, string>;
 before(async () => {
   jar = new Map<string, string>();
 
-  const res = await fetch(`${BASE}/api/auth/login`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', origin: BASE, referer: `${BASE}/login` },
-    body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: BASE, referer: `${BASE}/login` },
+      body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
+    });
+  } catch {
+    // Сервера нет или он недоступен. Это не ошибка теста: проверки ниже
+    // сами пропустятся, увидев пустой cookie-jar. Раньше исключение из
+    // fetch роняло хук, и весь файл падал как failed, хотя проверять было
+    // нечего.
+    return;
+  }
   if (!res.ok) return;
   for (const raw of res.headers.getSetCookie?.() ?? []) {
     const [pair] = raw.split(';');

@@ -28,19 +28,31 @@ const PASSWORD = process.env.QA_PASSWORD ?? 'testpass123';
 async function login(ctx: BrowserContext): Promise<boolean> {
   // Через context.request, а не fetch: он делит cookie-jar с браузером, и
   // иначе вход прошёл бы, а кабинет открылся гостю.
-  const res = await retryOn429(() =>
-    ctx.request.post(`${BASE}/api/auth/login`, {
-      headers: { 'content-type': 'application/json', origin: BASE, referer: `${BASE}/login` },
-      data: { email: EMAIL, password: PASSWORD },
-    }),
-  );
-  return res.ok();
+  try {
+    const res = await retryOn429(() =>
+      ctx.request.post(`${BASE}/api/auth/login`, {
+        headers: { 'content-type': 'application/json', origin: BASE, referer: `${BASE}/login` },
+        data: { email: EMAIL, password: PASSWORD },
+      }),
+    );
+    return res.ok();
+  } catch {
+    // Сервера нет — это не «неудачный вход», а «проверять нечего».
+    // Вызывающий код пропускает тест.
+    return false;
+  }
 }
 
-let browser: Browser;
+let browser: Browser | undefined;
 
 test.before(async () => {
-  browser = await chromium.launch();
+  try {
+    browser = await chromium.launch();
+  } catch {
+    // Playwright установлен, но браузеры не скачаны (`playwright install`).
+    // Проверки ниже пропустятся сами — падать тут нечего.
+    browser = undefined;
+  }
 });
 
 test.after(async () => {
@@ -48,6 +60,10 @@ test.after(async () => {
 });
 
 test('баннер демо-режима виден в кабинете на каждой странице', async (t) => {
+  if (!browser) {
+    t.skip('браузер не запустился: playwright install не выполнен');
+    return;
+  }
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   if (!(await login(ctx))) {
     await ctx.close();
@@ -93,6 +109,10 @@ test('баннер демо-режима виден в кабинете на к�
 });
 
 test('в настройках есть переключатель режима', async (t) => {
+  if (!browser) {
+    t.skip('браузер не запустился: playwright install не выполнен');
+    return;
+  }
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   if (!(await login(ctx))) {
     await ctx.close();
