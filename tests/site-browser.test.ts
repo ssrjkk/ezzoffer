@@ -35,66 +35,79 @@ const PAGES = [
 async function sweep(): Promise<string[]> {
   const browser = await chromium.launch();
   const problems: string[] = [];
+  try {
+    for (const path of PAGES) {
+      const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+      const page = await ctx.newPage();
+      const failed: string[] = [];
 
-  for (const path of PAGES) {
-    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-    const page = await ctx.newPage();
-    const failed: string[] = [];
+      page.on('console', (m) => {
+        if (m.type() === 'error') failed.push(`ошибка в консоли: ${m.text().slice(0, 120)}`);
+      });
+      page.on('requestfailed', (r) => {
+        // Префетч Next.js отменяется при уходе со страницы — это норма, а не поломка.
+        const err = r.failure()?.errorText ?? '';
+        if (r.url().includes('_rsc=') || err.includes('ERR_ABORTED')) return;
+        failed.push(`запрос не прошёл: ${r.url().slice(0, 80)}`);
+      });
+      page.on('response', (r) => {
+        if (r.status() >= 400) failed.push(`${r.url().slice(0, 80)} -> ${r.status()}`);
+      });
 
-    page.on('console', (m) => {
-      if (m.type() === 'error') failed.push(`ошибка в консоли: ${m.text().slice(0, 120)}`);
-    });
-    page.on('requestfailed', (r) => {
-      // Префетч Next.js отменяется при уходе со страницы — это норма, а не поломка.
-      const err = r.failure()?.errorText ?? '';
-      if (r.url().includes('_rsc=') || err.includes('ERR_ABORTED')) return;
-      failed.push(`запрос не прошёл: ${r.url().slice(0, 80)}`);
-    });
-    page.on('response', (r) => {
-      if (r.status() >= 400) failed.push(`${r.url().slice(0, 80)} -> ${r.status()}`);
-    });
+      // Страница у человека без JavaScript.
+      const noJs = await ctx.newPage();
+      await noJs.route('**/*', (route) =>
+        route.request().resourceType() === 'script' ? route.abort() : route.continue(),
+      );
+      await noJs.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
+      const blankNoJs = await noJs.evaluate(() => document.body.innerText.trim().length);
+      await noJs.close();
 
-    // Страница у человека без JavaScript.
-    const noJs = await ctx.newPage();
-    await noJs.route('**/*', (route) =>
-      route.request().resourceType() === 'script' ? route.abort() : route.continue(),
-    );
-    await noJs.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
-    const blankNoJs = await noJs.evaluate(() => document.body.innerText.trim().length);
-    await noJs.close();
+      const res = await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' });
+      const status = res?.status() ?? 0;
 
-    const res = await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' });
-    const status = res?.status() ?? 0;
+      const info = await page.evaluate(() => {
+        const imgs = [...document.querySelectorAll('img')];
+        return {
+          h1: document.querySelectorAll('h1').length,
+          title: document.title.trim(),
+          lang: document.documentElement.getAttribute('lang'),
+          brokenImgs: imgs.filter((img) => img.complete && img.naturalWidth === 0).length,
+          emptyLinks: [...document.querySelectorAll('a')].filter(
+            (a) =>
+              !a.textContent?.trim() &&
+              !a.getAttribute('aria-label') &&
+              !a.querySelector('img,svg'),
+          ).length,
+        };
+      });
 
-    const info = await page.evaluate(() => {
-      const imgs = [...document.querySelectorAll('img')];
-      return {
-        h1: document.querySelectorAll('h1').length,
-        title: document.title.trim(),
-        lang: document.documentElement.getAttribute('lang'),
-        brokenImgs: imgs.filter((img) => img.complete && img.naturalWidth === 0).length,
-        emptyLinks: [...document.querySelectorAll('a')].filter(
-          (a) =>
-            !a.textContent?.trim() && !a.getAttribute('aria-label') && !a.querySelector('img,svg'),
-        ).length,
-      };
-    });
+      if (status >= 400) problems.push(`${path} -> ${status}`);
+      if (!info.lang) problems.push(`${path}: нет атрибута lang`);
+      if (!info.title) problems.push(`${path}: пустой заголовок вкладки`);
+      if (info.h1 === 0) problems.push(`${path}: нет заголовка первого уровня`);
+      if (info.h1 > 1)
+        problems.push(`${path}: заголовок первого уровня встречается ${info.h1} раз`);
+      if (info.brokenImgs) problems.push(`${path}: не загрузилось ${info.brokenImgs} изображений`);
+      if (info.emptyLinks) problems.push(`${path}: ${info.emptyLinks} ссылок без подписи`);
+      if (blankNoJs < 400) problems.push(`${path}: без JavaScript остаётся ${blankNoJs} символов`);
+      for (const f of failed.slice(0, 3)) problems.push(`${path}: ${f}`);
 
-    if (status >= 400) problems.push(`${path} -> ${status}`);
-    if (!info.lang) problems.push(`${path}: нет атрибута lang`);
-    if (!info.title) problems.push(`${path}: пустой заголовок вкладки`);
-    if (info.h1 === 0) problems.push(`${path}: нет заголовка первого уровня`);
-    if (info.h1 > 1) problems.push(`${path}: заголовок первого уровня встречается ${info.h1} раз`);
-    if (info.brokenImgs) problems.push(`${path}: не загрузилось ${info.brokenImgs} изображений`);
-    if (info.emptyLinks) problems.push(`${path}: ${info.emptyLinks} ссылок без подписи`);
-    if (blankNoJs < 400) problems.push(`${path}: без JavaScript остаётся ${blankNoJs} символов`);
-    for (const f of failed.slice(0, 3)) problems.push(`${path}: ${f}`);
+      await ctx.close();
+    }
 
-    await ctx.close();
+    return problems;
+  } finally {
+    /*
+     * Браузер закрывается в finally, а не в конце функции.
+     *
+     * Раньше close() стоял после цикла, и любое исключение из goto (например,
+     * когда сервер не поднят) выпрыгивало из функции, оставляя процесс Chromium
+     * жить. Тест в этом случае проходил, но процесс не завершался: `npm test`
+     * висел до бесконечности, а в CI job упирался в таймаут.
+     */
+    await browser.close();
   }
-
-  await browser.close();
-  return problems;
 }
 
 test('страницы открываются в настоящем браузере без изъянов', async (t) => {
