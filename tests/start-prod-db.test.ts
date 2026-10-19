@@ -30,7 +30,7 @@ test('локальный запуск указывает путь к БД явн
 test('путь к БД по умолчанию указывает в корень репозитория', () => {
   assert.match(
     START,
-    /EZOFFER_DB_PATH\s*\?\?\s*path\.join\(root,\s*"data",\s*"ezoffer\.db"\)/,
+    /EZOFFER_DB_PATH\s*\?\?\s*path\.join\(root,\s*['"]data['"],\s*['"]ezoffer\.db['"]\)/,
     'путь по умолчанию должен быть data/ezoffer.db рядом с package.json, а не внутри .next/standalone',
   );
 });
