@@ -26,6 +26,9 @@ before(async () => {
     GITHUB_CLIENT_ID: 'gh-id',
     GITHUB_CLIENT_SECRET: 'gh-secret',
     SITE_URL: 'https://ezoffer.example',
+    // Telegram-вход «готов» только с bot token: задаём его явно, иначе
+    // проверка читала бы окружение машины, а не код.
+    TELEGRAM_BOT_TOKEN: '123456:test-bot-token',
   });
   db = (await import('../src/lib/db')).db;
   db.prepare(

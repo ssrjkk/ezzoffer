@@ -15,17 +15,17 @@ import {
 import { envStr } from './env';
 
 /**
- * ╨Я╤Г╤В╤М ╨║ ╤Д╨░╨╣╨╗╤Г ╨С╨Ф.
+ * Путь к файлу БД.
  *
- * ╨Ъ╨╛╨╝╨┐╨╛╨╜╨╡╨╜╤В╤Л ╤Б╨╛╨▒╨╕╤А╨░╤О╤В╤Б╤П ╨▓ ╤А╨░╨╜╤В╨░╨╣╨╝╨╡ ╨╜╨░╨╝╨╡╤А╨╡╨╜╨╜╨╛, ╨┐╨╛ ╤З╨░╤Б╤В╤П╨╝: Turbopack
- * ╤Б╤В╨░╤В╨╕╤З╨╡╤Б╨║╨╕ ╨░╨╜╨░╨╗╨╕╨╖╨╕╤А╤Г╨╡╤В path.join(cwd, "data", "ezoffer.db") ╨╕ ╨▓╨║╨╗╤О╤З╨░╨╗
- * ╨╗╨╛╨║╨░╨╗╤М╨╜╤Г╤О ezoffer.db (╤Е╤Н╤И╨╕ ╨┐╨░╤А╨╛╨╗╨╡╨╣, OAuth-╤В╨╛╨║╨╡╨╜╤Л) ╨▓ .next/standalone ╨╕
- * Docker-╨╛╨▒╤А╨░╨╖. ╨Ф╨╕╨╜╨░╨╝╨╕╤З╨╡╤Б╨║╨░╤П ╤Б╨▒╨╛╤А╨║╨░ ╨┤╨╡╨╗╨░╨╡╤В ╨┐╤Г╤В╤М ╨╜╨╡╨┐╤А╨╛╨╖╤А╨░╤З╨╜╤Л╨╝ ╨┤╨╗╤П ╨░╨╜╨░╨╗╨╕╨╖╨░╤В╨╛╤А╨░,
- * ╨┐╨╛╤Н╤В╨╛╨╝╤Г tracing ╨╜╨╡ ╨╝╨╛╨╢╨╡╤В ╨▓╤Л╨▓╨╡╤Б╤В╨╕ ╤Б╤В╨░╤В╨╕╤З╨╡╤Б╨║╨╕╨╣ ╨┐╤Г╤В╤М ╨║ ╨┤╨░╨╜╨╜╤Л╨╝.
+ * Компоненты собираются в рантайме намеренно, по частям: Turbopack
+ * статически анализирует path.join(cwd, "data", "ezoffer.db") и включал
+ * локальную ezoffer.db (хэши паролей, OAuth-токены) в .next/standalone и
+ * Docker-образ. Динамическая сборка делает путь непрозрачным для анализатора,
+ * поэтому tracing не может вывести статический путь к данным.
  *
- * ╨Я╤Г╤Б╤В╨░╤П ╤Б╤В╤А╨╛╨║╨░ ╨▓ env (╤З╨░╤Б╤В╨░╤П ╨┐╨╛╤Б╨╗╨╡ ╨║╨╛╨┐╨╕╤А╨╛╨▓╨░╨╜╨╕╤П .env.example, ╨│╨┤╨╡ ╨┐╨╡╤А╨╡╨╝╨╡╨╜╨╜╨░╤П
- * ╨╛╨▒╤К╤П╨▓╨╗╨╡╨╜╨░ ╨┐╤Г╤Б╤В╨╛╨╣) ╨╜╨╡ ╨┤╨╛╨╗╨╢╨╜╨░ ╨┐╤А╨╡╨▓╤А╨░╤Й╨░╤В╤М╤Б╤П ╨▓ ╨┐╤Г╤В╤М "" тАФ better-sqlite3 ╨╛╤В╨║╤А╤Л╨╗ ╨▒╤Л
- * ╨▓╤А╨╡╨╝╨╡╨╜╨╜╤Г╤О ╨С╨Ф ╨▓ ╨┐╨░╨╝╤П╤В╨╕, ╨╕ ╨▓╤Б╨╡ ╨┤╨░╨╜╨╜╤Л╨╡ ╨┐╤А╨╛╨┐╨░╨╗╨╕ ╨▒╤Л ╨┐╤А╨╕ ╤А╨╡╤Б╤В╨░╤А╤В╨╡.
+ * Пустая строка в env (частая после копирования .env.example, где переменная
+ * объявлена пустой) не должна превращаться в путь "" — better-sqlite3 открыл бы
+ * временную БД в памяти, и все данные пропали бы при рестарте.
  */
 export function resolveDbPath(
   env: Record<string, string | undefined>,
@@ -73,8 +73,8 @@ CREATE TABLE IF NOT EXISTS sessions (
   expires_at INTEGER NOT NULL
 );
 
--- ╨г╨▒╨╛╤А╨║╨░ ╨┐╤А╨╛╤Б╤А╨╛╤З╨╡╨╜╨╜╤Л╤Е ╤Б╨╡╤Б╤Б╨╕╨╣ ╨╕╨┤╤С╤В ╨┐╨╛ expires_at, ╨░ ╨┐╨╛╨╕╤Б╨║ ╨░╨║╤В╨╕╨▓╨╜╨╛╨╣ ╤Б╨╡╤Б╤Б╨╕╨╕ тАФ ╨┐╨╛
--- token (PK). ╨С╨╡╨╖ ╤Н╤В╨╕╤Е ╨╕╨╜╨┤╨╡╨║╤Б╨╛╨▓ purgeExpiredAuthRows ╤Б╨║╨░╨╜╨╕╤А╨╛╨▓╨░╨╗ ╨▓╤Б╤О ╤В╨░╨▒╨╗╨╕╤Ж╤Г.
+-- Уборка просроченных сессий идёт по expires_at, а поиск активной сессии — по
+-- token (PK). Без этих индексов purgeExpiredAuthRows сканировал всю таблицу.
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 
@@ -227,8 +227,8 @@ CREATE TABLE IF NOT EXISTS vacancies (
 
 CREATE INDEX IF NOT EXISTS idx_vacancies_source ON vacancies(source);
 
--- ╨Ф╨╛╨┐╨╛╨╗╨╜╨╕╤В╨╡╨╗╤М╨╜╤Л╨╡ ╨╕╨╜╨┤╨╡╨║╤Б╤Л ╨┤╨╗╤П ╨▓╤Л╨▒╨╛╤А╨╛╨║, ╨║╨╛╤В╨╛╤А╤Л╨╡ ╨╕╨┤╤Г╤В ╨┐╨╛ ╤Б╨╛╤Б╤В╨░╨▓╨╜╨╛╨╝╤Г ╨║╨╗╤О╤З╤Г.
--- ╨С╨╡╨╖ ╨╜╨╕╤Е purgeExpiredAuthRows ╨╕ todayCount ╤Б╨║╨░╨╜╨╕╤А╨╛╨▓╨░╨╗╨╕ ╤В╨░╨▒╨╗╨╕╤Ж╤Г ╤Ж╨╡╨╗╨╕╨║╨╛╨╝.
+-- Дополнительные индексы для выборок, которые идут по составному ключу.
+-- Без них purgeExpiredAuthRows и todayCount сканировали таблицу целиком.
 CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_oauth_states_expires ON oauth_states(expires_at);
@@ -248,7 +248,7 @@ export function createDatabase(filePath: string): Database.Database {
     } catch (err) {
       logInfo(
         'db',
-        'WAL ╨╜╨╡╨┤╨╛╤Б╤В╤Г╨┐╨╡╨╜, ╨╕╤Б╨┐╨╛╨╗╤М╨╖╤Г╨╡╨╝ ╨┤╨╡╤Д╨╛╨╗╤В╨╜╤Л╨╣ ╤А╨╡╨╢╨╕╨╝ ╨╢╤Г╤А╨╜╨░╨╗╨░',
+        'WAL недоступен, используем дефолтный режим журнала',
         { error: String(err) },
       );
     }
@@ -258,7 +258,7 @@ export function createDatabase(filePath: string): Database.Database {
   migrate(instance);
   logInfo(
     'db',
-    filePath === ':memory:' ? '╨╛╤В╨║╤А╤Л╤В╨░ in-memory ╨С╨Ф' : `╨╛╤В╨║╤А╤Л╤В╨░ ╨С╨Ф: ${filePath}`,
+    filePath === ':memory:' ? 'открыта in-memory БД' : `открыта БД: ${filePath}`,
   );
   return instance;
 }
@@ -268,7 +268,7 @@ function columnNames(instance: Database.Database, table: string): Set<string> {
   return new Set(rows.map((r) => r.name));
 }
 
-/** ╨Ш╨┤╨╡╨╝╨┐╨╛╤В╨╡╨╜╤В╨╜╤Л╨╡ ╨╝╨╕╨│╤А╨░╤Ж╨╕╨╕ ╨┤╨╗╤П ╤Б╤Г╤Й╨╡╤Б╤В╨▓╤Г╤О╤Й╨╕╤Е ╨С╨Ф (CREATE TABLE IF NOT EXISTS ╨╜╨╡ ╨┤╨╛╨▒╨░╨▓╨╗╤П╨╡╤В ╨║╨╛╨╗╨╛╨╜╨║╨╕). */
+/** Идемпотентные миграции для существующих БД (CREATE TABLE IF NOT EXISTS не добавляет колонки). */
 function migrate(instance: Database.Database): void {
   const userCols = columnNames(instance, 'users');
   const additions: [string, string][] = [];

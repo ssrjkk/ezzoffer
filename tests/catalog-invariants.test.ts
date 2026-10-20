@@ -1,5 +1,6 @@
 import test, { before } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 /**
  * Инварианты на всём живом каталоге.
@@ -9,12 +10,17 @@ import assert from 'node:assert/strict';
  * «Грузчик», «Водитель категории Е» и «Продавец-кассир», а в направлении
  * «управление продуктом» — «Head of Global Logistics» и «Dispatch Specialist».
  *
- * Здесь проверяется весь каталог целиком, со всех источников сразу. Данные
- * меняются день о дню, поэтому проверка не привязана к конкретным заголовкам и
- * не может стать зелёной навсегда на старом снимке.
+ * Здесь проверяется весь каталог целиком, со всех источников сразу.
  *
- * Если сеть недоступна, проверка пропускается: миграция каталога не должна
- * ронять сборку.
+ * Проверка идёт по снимку каталога (tests/fixtures/
+ * catalog-snapshot.json): набор строк должен быть одинаковым на любой машине и
+ * в любой день, иначе сборка падает из-за того, что площадки вчера выложили
+ * новую вакансию. Снимок обновляют отдельно, когда продукт осознанно меняет
+ * классификацию.
+ *
+ * Живые данные проверяются тем же кодом, но только по явному флагу
+ * EZOFFER_LIVE_CATALOG=1 (ночной прогон .github/workflows/nightly.yml): там
+ * падение — сигнал разобрать новую формулировку, а не сломанная сборка.
  */
 
 type Row = {
@@ -38,10 +44,18 @@ before(async () => {
   process.env.EZOFFER_SILENT = '1';
   db = (await import('../src/lib/db')).db as never;
   direction = await import('../src/lib/direction');
-  await (await import('../src/lib/vacancies')).refreshProviders({ limit: 100 });
+  if (process.env.EZOFFER_LIVE_CATALOG === '1') {
+    process.env.EZOFFER_DB_PATH = ':memory:';
+    await (await import('../src/lib/vacancies')).refreshProviders({ limit: 100 });
+  }
 });
 
 function catalog(): Row[] {
+  if (process.env.EZOFFER_LIVE_CATALOG !== '1') {
+    return JSON.parse(
+      readFileSync(new URL('./fixtures/catalog-snapshot.json', import.meta.url), 'utf-8'),
+    ) as Row[];
+  }
   return db
     .prepare(`SELECT slug, source, title, category, about, level, employment FROM vacancies`)
     .all() as Row[];
@@ -96,12 +110,7 @@ test('инварианты каталога', async (t) => {
     }
 
     /* Профессии вне IT не должны получать цифровое направление. */
-    if (
-      dir !== 'other' &&
-      /(^|\W)(трактор|кассир|курьер|водител|грузчик|электрик|продав|врач|учител|бухгалтер|повар|охранник)(\W|$)/i.test(
-        r.title,
-      )
-    ) {
+    if (dir !== 'other' && direction.NON_IT_PROFESSION.test(r.title)) {
       add('профессия не из IT получила направление', r.title);
     }
 

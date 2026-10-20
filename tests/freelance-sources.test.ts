@@ -28,7 +28,10 @@ before(async () => {
   direction = await import('../src/lib/direction');
 });
 
-/** Живой фид fl.ru. Пропускается, если сеть недоступна: это не повод ронять сборку. */
+/**
+ * Живой фид fl.ru. Только в ночном прогоне (EZOFFER_LIVE_CATALOG=1): фид отдаёт
+ * что угодно, и в сборке он падал бы из-за чужих заголовков, а не из-за продукта.
+ */
 async function liveFlItems(): Promise<
   { title: string; description: string; category: string }[] | null
 > {
@@ -119,6 +122,10 @@ test('одинаковые ссылки не превращаются в две 
 });
 
 test('на живом фиде IT-заказы есть, а мусор в ленту не проходит', async (t) => {
+  if (process.env.EZOFFER_LIVE_CATALOG !== '1') {
+    t.skip('фид fl.ru проверяется ночным прогоном, не сборкой');
+    return;
+  }
   const items = await liveFlItems();
   if (!items || items.length === 0) {
     t.skip('сеть недоступна, фид не проверен');
