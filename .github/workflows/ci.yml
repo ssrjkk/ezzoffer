@@ -62,10 +62,14 @@ jobs:
   # Отдельный аудит: npm audit в основном job падал бы на любой транзитивной
   # уязвимости и блокировал бы релиз, хотя в зависимостях может быть только
   # dev-инструмент (eslint), недоступный в рантайме.
+  #
+  # Джоба отдельная, но не заглушённая: production-граф проверен и чист
+  # (`npm audit --omit=dev` → 0 уязвимостей), поэтому падение здесь — это
+  # настоящая новая CVE, а не известный шум. `continue-on-error` убран: с ним
+  # джоба светилась бы жёлтым и не валила прогон.
   audit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
