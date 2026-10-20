@@ -1,3 +1,4 @@
+import { htmlToText } from '../text-decode';
 export function sanitizeExternalUrl(value: string | null | undefined): string | null {
   if (!value) return null;
   const trimmed = value.trim();
@@ -106,17 +107,5 @@ export function parseSalaryText(
 }
 
 export function cleanHtml(value: string): string {
-  return value
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&#039;/g, "'")
-    .replace(/&quot;/g, '"')
-    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code) || 63))
-    .replace(/\s+/g, ' ')
-    .trim();
+  return htmlToText(value);
 }

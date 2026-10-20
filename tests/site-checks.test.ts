@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { htmlToText } from '../src/lib/text-decode';
 
 /**
  * Внешний вид: ссылки и обещания.
@@ -43,14 +44,7 @@ async function getHtml(path: string): Promise<string | null> {
 }
 
 function visibleText(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/g, ' ')
-    .replace(/<style[\s\S]*?<\/style>/g, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&#\d+;/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return htmlToText(html);
 }
 
 function hrefs(html: string): string[] {

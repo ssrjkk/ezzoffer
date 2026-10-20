@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 
 /**
  * Проверка по правилам безопасности Next.js.
@@ -137,13 +137,13 @@ async function audit(): Promise<{ ok: string[]; findings: string[] }> {
   const leaked: string[] = [];
   const importRe = /^\s*import\s[\s\S]*?from\s*["']([^"']+)["']/gm;
   const walk = (dir: string): void => {
-    for (const entry of readdirSync(dir)) {
-      const full = `${dir}/${entry}`;
-      if (statSync(full).isDirectory()) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) {
         walk(full);
         continue;
       }
-      if (!/\.(ts|tsx)$/.test(entry)) continue;
+      if (!/\.(ts|tsx)$/.test(entry.name)) continue;
       const text = readFileSync(full, 'utf8');
       if (!/^\s*["']use client["']/m.test(text)) continue;
       importRe.lastIndex = 0;

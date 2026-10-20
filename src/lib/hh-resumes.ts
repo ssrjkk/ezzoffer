@@ -1,5 +1,6 @@
 import { envOpt } from './env';
 import { logError } from './logger';
+import { htmlToText } from './text-decode';
 
 /**
  * Резюме на hh.ru: список и содержимое.
@@ -162,15 +163,7 @@ export async function fetchHhResumeContent(
 
 /** Убирает разметку hh и схлопывает пробелы. */
 function clean(text: string): string {
-  return text
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/<[^>]+>/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return htmlToText(text);
 }
 
 /** Настроен ли импорт: нужны те же ключи, что и для привязки аккаунта. */

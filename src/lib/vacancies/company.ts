@@ -3,6 +3,7 @@ import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from 
 import { sanitizeExternalUrl, toSalaryNumber } from './util';
 import { parsePublishedAt } from './published';
 import { filterOutboundUrls } from '../ssrf';
+import { decodeEntities } from '../text-decode';
 import { httpFetch } from '../http-client';
 
 const FETCH_TIMEOUT = 25_000;
@@ -38,14 +39,7 @@ export function companyFeedsConfigured(): boolean {
 }
 
 function decodeXmlEntities(s: string): string {
-  return s
-    .replace(/&amp;/gi, '&')
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&quot;/gi, '"')
-    .replace(/&apos;/gi, "'")
-    .replace(/&#39;/gi, "'")
-    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code) || 63));
+  return decodeEntities(s);
 }
 
 function extractText(xml: string, tag: string): string {

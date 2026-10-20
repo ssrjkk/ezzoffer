@@ -3,6 +3,7 @@ import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from 
 import { sanitizeExternalUrl, toSalaryNumber } from './util';
 import { parsePublishedAt } from './published';
 import { httpFetch } from '../http-client';
+import { htmlToText } from '../text-decode';
 
 const BASE = 'https://www.rabota.ru/vacancy/';
 const FETCH_TIMEOUT = 25_000;
@@ -154,18 +155,7 @@ function salaryDisplay(raw: RabotaJsonLd): {
 }
 
 function cleanDescription(value: string): string {
-  return value
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code) || 63))
-    .replace(/\s+/g, ' ')
-    .trim();
+  return htmlToText(value);
 }
 
 export function mapRabotaVacancy(raw: RabotaJsonLd, idx: number): Vacancy | null {

@@ -1,5 +1,6 @@
 import test, { before } from 'node:test';
 import assert from 'node:assert/strict';
+import { htmlToText } from '../src/lib/text-decode';
 
 /**
  * Кабинет живого человека.
@@ -117,11 +118,7 @@ test('все страницы кабинета открыты и содержа�
       problems.push(`${p} -> ${status}${location ? ` (редирект на ${location})` : ''}`);
       continue;
     }
-    const text = html
-      .replace(/<script[\s\S]*?<\/script>/g, ' ')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    const text = htmlToText(html);
 
     if (text.length < 200) problems.push(`${p}: почти пустая страница (${text.length} символов)`);
     if (/Application error|Internal Server Error/i.test(html))

@@ -4,6 +4,7 @@ import { httpFetch } from '../http-client';
 import { logError } from '../logger';
 import { detectDirection, inferFreelanceLevel } from '../direction';
 import { extractSkills } from '../skills';
+import { htmlToText } from '../text-decode';
 
 /**
  * Заказы с фриланс-досок: fl.ru и Kwork.
@@ -75,22 +76,7 @@ function pick(block: string, tag: string): string | undefined {
 }
 
 function decodeXml(s: string): string {
-  return s
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&laquo;/g, '«')
-    .replace(/&raquo;/g, '»')
-    .replace(/&mdash;/g, '—')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#0?39;/g, "'")
-    .replace(/&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)))
-    .replace(/&amp;/g, '&')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return htmlToText(s);
 }
 
 /** «для всех», «предложить услугу» и прочее — не заказы. */

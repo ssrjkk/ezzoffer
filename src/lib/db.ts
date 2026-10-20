@@ -34,7 +34,9 @@ export function resolveDbPath(
   const configured = envStr(env, 'EZOFFER_DB_PATH', '');
   if (configured) return configured;
   const parts = ['data', 'ezoffer.db'];
-  return path.join(cwd, ...parts);
+  // turbopackIgnore: путь к БД намеренно непрозрачен для анализатора, и сборке
+  // не нужно тащить из-за него весь проект в standalone-образ.
+  return path.join(/* turbopackIgnore: true */ cwd, ...parts);
 }
 
 const DB_PATH = resolveDbPath(process.env);

@@ -25,6 +25,7 @@ import {
   writeFileSync,
   existsSync,
   readFileSync,
+  renameSync,
   rmSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -126,14 +127,27 @@ if (existsSync(notFound)) {
 
 // robots.txt: статическая копия указывает на основной домен, а не на страницу проекта.
 const robots = path.join(outDir, 'robots.txt');
-if (existsSync(robots)) {
-  const body = readFileSync(robots, 'utf8')
+let robotsBody;
+try {
+  // Файл читаем один раз и сразу в память: проверка existsSync + повторное
+  // чтение оставляло окно, в котором файл могли подменить между вызовами.
+  robotsBody = readFileSync(robots, 'utf8');
+} catch (err) {
+  if (err.code !== 'ENOENT') throw err;
+}
+if (robotsBody !== undefined) {
+  const body = robotsBody
     .replace(
       /^Sitemap:.*$/m,
       `Sitemap: ${process.env.SITE_URL ?? 'https://ezoffer.ru'}/sitemap.xml`,
     )
     .replace(/^Disallow: \/dashboard.*$/m, 'Disallow: /\nDisallow: /api/');
-  writeFileSync(robots, body);
+  // Пишем через временный файл и rename: страница проекта не остаётся на
+  // несколько миллисекунд полупустой, если сборку прервут между стиранием и
+  // записью, и читатель никогда не видит частичный robots.txt.
+  const tmp = `${robots}.tmp`;
+  writeFileSync(tmp, body);
+  renameSync(tmp, robots);
 }
 
 const bytes = readdirSync(outDir).length;

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 
 /**
  * Роуты отвечают на мусор, а не падают.
@@ -58,13 +58,13 @@ type Route = { path: string; file: string; methods: string[] };
 
 const routes: Route[] = [];
 const walk = (dir: string, prefix: string): void => {
-  for (const entry of readdirSync(dir)) {
-    const full = `${dir}/${entry}`;
-    if (statSync(full).isDirectory()) {
-      walk(full, `${prefix}/${entry}`);
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) {
+      walk(full, `${prefix}/${entry.name}`);
       continue;
     }
-    if (entry !== 'route.ts') continue;
+    if (entry.name !== 'route.ts') continue;
     const text = readFileSync(full, 'utf8');
     const methods = [
       ...text.matchAll(/export\s+async\s+function\s+(GET|POST|PUT|PATCH|DELETE)/g),

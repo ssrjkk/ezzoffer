@@ -77,7 +77,7 @@ function resolveFont(): FontSpec | null {
   if (fontCache !== undefined) return fontCache;
   const dir = pdfFontDir();
   fontCache = dir
-    ? (FONT_CANDIDATES.find((font) => fileExists(join(dir, font.file))) ?? null)
+    ? (FONT_CANDIDATES.find((font) => fileExists(join(/* turbopackIgnore: true */ dir, font.file))) ?? null)
     : null;
   return fontCache;
 }
@@ -97,7 +97,7 @@ function fontPath(): string | null {
   const dir = pdfFontDir();
   if (!font || !dir) return null;
   // Повторной проверки нет: resolveFont уже убедился, что файл существует.
-  return join(dir, font.file);
+  return join(/* turbopackIgnore: true */ dir, font.file);
 }
 
 export type ResumePdf = {

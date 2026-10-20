@@ -29,8 +29,13 @@ test('непустой SITE_URL уважается, хвостовой слэш 
 
 test('все URL sitemap абсолютные даже с пустым SITE_URL (regression)', () => {
   for (const url of buildUrls('', ['/jobs/a', '/blog/b'])) {
-    assert.ok(url.startsWith('http'), `${url} должен быть абсолютным`);
-    assert.ok(!url.startsWith('//'), `${url} не должен быть protocol-relative`);
+    // Протокол читаем через URL, а не `startsWith('http')`: подстроку «http»
+    // проходит и «httpfoo://…», и относительный путь, начинающийся с http.
+    assert.equal(new URL(url).protocol, 'https:', `${url} должен быть абсолютным https`);
+    assert.ok(
+      url === 'https://ezoffer.ru' || url.startsWith('https://ezoffer.ru/'),
+      `${url} потерял базовый домен`,
+    );
   }
 });
 
