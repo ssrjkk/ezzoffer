@@ -73,5 +73,9 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci --ignore-scripts
+      # `--omit=dev`: в dev-цепочке eslint-config-next → fast-glob → braces
+      # сидит GHSA-vfj7-8cjw-p6xm, а исправленной braces 3.x нет на registry
+      # (3.0.3 — последний выпуск). Production-граф обязан быть чистым, и шаг
+      # падает на любой новой CVE.
       - name: Аудит production-зависимостей
-        run: npm audit --omit=dev || true
+        run: npm audit --omit=dev --audit-level=low
