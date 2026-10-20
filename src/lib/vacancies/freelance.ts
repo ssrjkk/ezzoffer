@@ -230,6 +230,17 @@ export function mapFreelanceItem(item: FreelanceInput): Vacancy | null {
   const category = decodeXml(item.category ?? '');
   const published = item.pubDate ? Date.parse(item.pubDate) : NaN;
   const direction = detectDirection(category, title, description);
+  /*
+   * Заказ без опознанного направления в ленту не попадает.
+   *
+   * Фильтр выше решает «IT ли это по словам», классификатор ниже — «какое именно
+   * направление». Разойтись им достаточно одного раздела площадки: заказ
+   * «Скопировать и разместить корточки товаров … для продавца» висит в
+   * «Программирование / Парсинг данных», проходит по слову «Программирование», а
+   * направления не получает никакого — в ленте для разработчика лежит копирование
+   * карточек. Порог здесь, а не в ночном тесте: тест видит уже отданные данные.
+   */
+  if (direction === 'other') return null;
   const level: Level = inferFreelanceLevel(title);
 
   return {
@@ -257,6 +268,7 @@ export function mapFreelanceItem(item: FreelanceInput): Vacancy | null {
   };
 }
 
+/** Подпись раздела, когда площадка его не отдаёт. `other` сюда не доходит: такой заказ отрезан выше. */
 const DIRECTION_FALLBACK: Record<string, string> = {
   frontend: 'Разработка сайтов',
   backend: 'Программирование',
@@ -268,7 +280,6 @@ const DIRECTION_FALLBACK: Record<string, string> = {
   qa: 'Тестирование',
   pm: 'Управление и аналитика',
   sales: 'Продажи и маркетинг',
-  other: 'Фриланс',
 };
 
 function relativePublished(ms: number): string {
