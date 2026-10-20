@@ -3,7 +3,7 @@ import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from 
 import { httpFetch } from '../http-client';
 import { logError } from '../logger';
 import { detectDirection, inferFreelanceLevel } from '../direction';
-import { extractSkills } from '../skills';
+import { extractSkills, isItSkill } from '../skills';
 import { htmlToText } from '../text-decode';
 
 /**
@@ -123,10 +123,16 @@ function isItOrder(item: RawItem): boolean {
    * целиком, как «Инжиниринг»: иначе маркер из заголовка проводил такой заказ в
    * IT-ленту — «Размещение SEO-статей на vc.ru и DTF.ru» проходило по слову
    * «seo». Настоящие SEO-аудит и продвижение лежат в «Реклама и Маркетинг».
+   *
+   * «Аутсорсинг и консалтинг» — тоже бизнес-раздел: менеджеры по продажам,
+   * внедрение CRM, поиск клиентов. Отсекается целиком: заказ «Привлечение
+   * B2B-заказов на разработку ПО» из «Аутсорсинг и консалтинг / Менеджер по
+   * продажам» — это продажи, а не разработка.
    */
   if (
     /^\s*инжиниринг(?=[\s\/-]|$)/i.test(item.category) ||
     /^\s*тексты(?=[\s\/-]|$)/i.test(item.category) ||
+    /^\s*аутсорсинг(?=[\s\/-]|$)/i.test(item.category) ||
     /(озвучка|дубляж|фоторабот|видеомонтаж)/i.test(head)
   ) {
     return false;
@@ -165,11 +171,19 @@ function isItOrder(item: RawItem): boolean {
     );
   }
 
-  if (extractSkills(item.title).length > 0) return true;
+  /*
+   * Навык из словаря — признак IT-работы, но только если он не из бизнес-раздела.
+   *
+   * Словарь содержит и «B2B», и «CRM», и «HR»: пользователю они нужны, чтобы
+   * понимать, чего ему не хватает. Но для отбора заказа «Привлечение B2B-заказов
+   * на разработку ПО» — это продажи, а не разработка, и по слову «B2B» он
+   * проходил в ленту для разработчика.
+   */
+  if (extractSkills(item.title).some(isItSkill)) return true;
 
   // Описание длиннее двух предложений почти всегда про задачу, а навыки в нём
   // могли не попасть в словарь («сделать табличку на макросах»).
-  return item.description.length > 180 && extractSkills(item.description).length > 0;
+  return item.description.length > 180 && extractSkills(item.description).some(isItSkill);
 }
 
 /**

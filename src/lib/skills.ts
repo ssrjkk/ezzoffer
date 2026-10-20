@@ -29,6 +29,15 @@ type SkillDef = {
   label: string;
   /** Что считать этим навыком: английское, русское, сокращения. */
   aliases: string[];
+  /**
+   * Навык вне IT: продажи, маркетинг, HR, поддержка, финансы.
+   *
+   * Словарь полезен пользователю — он показывает, чего ему не хватает, и среди
+   * профессий есть B2B, CRM, SEO, HR. Но для отбора вакансий такие слова не
+   * являются признаком IT-работы: «Привлечение B2B-заказов на разработку ПО» —
+   * это продажи, и по слову «B2B» заказ проходил в ленту для разработчика.
+   */
+  nonIt?: true;
 };
 
 /** Категория — чтобы объяснять пользователю, ЧЕГО ему не хватает. */
@@ -199,20 +208,23 @@ const SKILLS: (SkillDef & { category: SkillCategory })[] = [
     label: 'Продажи',
     category: 'other',
     aliases: ['sales', 'продажи', 'продаж', 'холодные звонки'],
+    nonIt: true,
   },
-  { label: 'B2B', category: 'other', aliases: ['b2b'] },
-  { label: 'B2C', category: 'other', aliases: ['b2c'] },
+  { label: 'B2B', category: 'other', aliases: ['b2b'], nonIt: true },
+  { label: 'B2C', category: 'other', aliases: ['b2c'], nonIt: true },
   {
     label: 'Лидогенерация',
     category: 'other',
     aliases: ['lead generation', 'лидогенерация', 'лидогенерации', 'лид-генерация'],
+    nonIt: true,
   },
-  { label: 'CRM', category: 'other', aliases: ['crm', 'битрикс24', 'amo', 'amoCRM'] },
-  { label: 'SEO', category: 'other', aliases: ['seo'] },
+  { label: 'CRM', category: 'other', aliases: ['crm', 'битрикс24', 'amo', 'amoCRM'], nonIt: true },
+  { label: 'SEO', category: 'other', aliases: ['seo'], nonIt: true },
   {
     label: 'Контекстная реклама',
     category: 'other',
     aliases: ['контекст', 'директ', 'ppc', 'яндекс директ'],
+    nonIt: true,
   },
   {
     label: 'Таргетинг',
@@ -226,22 +238,26 @@ const SKILLS: (SkillDef & { category: SkillCategory })[] = [
       'таргетированные',
       'таргетированных',
     ],
+    nonIt: true,
   },
-  { label: 'SMM', category: 'other', aliases: ['smm', 'соцсети', 'социальные сети'] },
+  { label: 'SMM', category: 'other', aliases: ['smm', 'соцсети', 'социальные сети'], nonIt: true },
   {
     label: 'Контент-маркетинг',
     category: 'other',
     aliases: ['контент', 'копирайтинг', 'copywriting', 'контент-маркетинг'],
+    nonIt: true,
   },
   {
     label: 'Рекрутинг',
     category: 'other',
     aliases: ['recruiting', 'recruitment', 'рекрутинг', 'подбор персонала', 'рекрутер'],
+    nonIt: true,
   },
   {
     label: 'HR',
     category: 'other',
     aliases: ['hr', 'персонал', 'кадровое дело', 'кадров', 'hr-менеджер'],
+    nonIt: true,
   },
   {
     label: 'Финансы',
@@ -255,33 +271,38 @@ const SKILLS: (SkillDef & { category: SkillCategory })[] = [
       'финансовая',
       'финансовое',
     ],
+    nonIt: true,
   },
   {
     label: 'Юриспруденция',
     category: 'other',
     aliases: ['юрист', 'юридическ', 'legal', 'юриспруденция', 'юридическая'],
+    nonIt: true,
   },
   {
     label: 'Поддержка',
     category: 'other',
     aliases: ['customer support', 'техподдержка', 'поддержка', 'help desk', 'поддержки'],
+    nonIt: true,
   },
   {
     label: 'Логистика',
     category: 'other',
     aliases: ['логистик', 'supply chain', 'закупк', 'склад', 'логист'],
+    nonIt: true,
   },
   {
     label: 'Аналитика',
     category: 'other',
     aliases: ['аналитик', 'data analyst', 'аналитика', 'аналитик данных', 'бизнес-аналитик'],
+    nonIt: true,
   },
   {
     label: 'Тестирование',
     category: 'other',
     aliases: ['тестирование', 'qa', 'тестировщик', 'автотесты', 'инженер по тестированию'],
   },
-  { label: 'Маркетинг', category: 'other', aliases: ['маркетинг', 'маркетолог', 'marketing'] },
+  { label: 'Маркетинг', category: 'other', aliases: ['маркетинг', 'маркетолог', 'marketing'], nonIt: true },
   {
     label: 'AI/ML',
     category: 'data',
@@ -428,6 +449,19 @@ export function extractSkills(text: string): string[] {
 export function skillCategory(label: string): SkillCategory | null {
   const entry = SKILLS.find((s) => s.label === label);
   return entry ? entry.category : null;
+}
+
+/**
+ * Навык как признак IT-работы.
+ *
+ * Продажи, маркетинг, HR, поддержка и финансы — профессии вне IT. В отчёте о
+ * нехватке навыков они нужны пользователю, но в отборе вакансий слово «B2B» или
+ * «SEO» не делает заказ работой для разработчика: «Привлечение B2B-заказов на
+ * разработку ПО» — это продажи, и по этому слову заказ проходил в ленту.
+ */
+export function isItSkill(label: string): boolean {
+  const entry = SKILLS.find((s) => s.label === label);
+  return entry ? entry.nonIt !== true : false;
 }
 
 /** Все известные навыки — для тестов словаря и подсказок в интерфейсе. */

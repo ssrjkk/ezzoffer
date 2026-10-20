@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
-    branches: [master]
+    branches: [main]
 
 # Новый коммит отменяет предыдущий прогон: экономит минуты и не даёт
 # «зелёному» статусу от устаревшей сборки.
