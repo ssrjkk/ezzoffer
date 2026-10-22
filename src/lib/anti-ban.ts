@@ -103,22 +103,28 @@ export type Pacing = {
   configure(patch: Partial<PacingConfig>): void;
 };
 
+/**
+ * Всё время здесь — московское, а не серверное.
+ *
+ * Раньше часы брались из таймзоны процесса (setHours/getHours): в контейнере
+ * с TZ=UTC окно 9–20 превращалось в 12:00–23:00 МСК, а суточный лимит и
+ * «сегодня» статистики (Europe/Moscow) жили в других сутках, чем паузер.
+ * Москва без перехода на летнее время — всегда UTC+3, поэтому считаем через
+ * UTC-сдвиг, а не через таймзону процесса: одинаково в Docker и локально.
+ */
+const MSK_OFFSET_MS = 3 * 60 * 60 * 1000;
+
 function startOfLocalHour(now: number, hour: number): number {
-  const d = new Date(now);
-  d.setHours(hour, 0, 0, 0);
-  return d.getTime();
+  const d = new Date(now + MSK_OFFSET_MS);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hour) - MSK_OFFSET_MS;
 }
 
 function hourFloor(now: number): number {
-  const d = new Date(now);
-  d.setMinutes(0, 0, 0);
-  return d.getTime();
+  return Math.floor((now + MSK_OFFSET_MS) / 3_600_000) * 3_600_000 - MSK_OFFSET_MS;
 }
 
 function dayFloor(now: number): number {
-  const d = new Date(now);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
+  return Math.floor((now + MSK_OFFSET_MS) / 86_400_000) * 86_400_000 - MSK_OFFSET_MS;
 }
 
 export function createPacing(
@@ -171,7 +177,7 @@ export function createPacing(
       }
 
       // Ночь: пауза до начала рабочего дня.
-      const hour = new Date(t).getHours();
+      const hour = new Date(t + MSK_OFFSET_MS).getUTCHours();
       if (hour < cfg.workStartHour || hour >= cfg.workEndHour) {
         const start = startOfLocalHour(t, cfg.workStartHour);
         const retry = start <= t ? start + 24 * HOUR : start;

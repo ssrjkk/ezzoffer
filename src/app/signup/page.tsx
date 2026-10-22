@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   title: 'Регистрация',
   description:
     'Создайте аккаунт EZOffer и получите 24 часа бесплатного доступа без привязки карты.',
+  robots: { index: false, follow: false },
 };
 
 export const dynamic = 'force-dynamic';

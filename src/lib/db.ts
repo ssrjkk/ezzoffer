@@ -5,6 +5,7 @@ import { logInfo } from './logger';
 import {
   migrateApplicationsResumeId,
   addNotifiedAtColumn,
+  addNotifiedClaimColumn,
   migrateApplicationsOrigin,
   migrateUserMode,
   migrateResumeVariants,
@@ -212,7 +213,13 @@ CREATE TABLE IF NOT EXISTS applications (
   viewed_at INTEGER,
   responded_at INTEGER,
   withdrawn INTEGER NOT NULL DEFAULT 0,
-  notified_at INTEGER
+  notified_at INTEGER,
+  -- Заявка на отправку уведомления (claim). Отдельно от notified_at намеренно:
+  -- notified_at означает «отправлено», claim — «взято в работу». kill -9 между
+  -- ними оставлял бы строку с меткой навсегда; claim со сроком давности
+  -- позволяет подобрать зависшее (см. ALERT_CLAIM_TTL_MS), а отправленное —
+  -- никогда не трогает.
+  notified_claim_at INTEGER
 );
 
 -- События воронки (Фаза 3 пользуется этой таблицей как журналом только для
@@ -450,6 +457,7 @@ function migrate(instance: Database.Database): void {
    * нет, а перенос уже читает.
    */
   addNotifiedAtColumn(instance);
+  addNotifiedClaimColumn(instance);
   migrateApplicationsOrigin(instance);
   migrateApplicationsResumeId(instance);
   // Избранное: уникальность по (пользователь, вакансия) выражена в самой

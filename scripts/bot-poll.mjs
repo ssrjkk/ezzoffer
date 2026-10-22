@@ -92,7 +92,14 @@ async function main() {
       continue;
     }
     for (const update of data.result ?? []) {
-      offset = Math.max(offset, (update.update_id ?? 0) + 1);
+      /*
+       * Offset двигается только после успешной доставки в очередь.
+       *
+       * Раньше offset = max+1 ставился ДО fetch на вебхук: падение сети между
+       * ними означало, что Telegram апдейт больше не отдаст (offset ушёл), а в
+       * tg_inbox его нет — сообщение терялось молча. Дубликат при повторе не
+       * страшен: вебхук складывает по первичному ключу (INSERT OR IGNORE).
+       */
       try {
         const res = await fetch(`${BASE}/api/telegram/webhook`, {
           method: 'POST',
@@ -104,9 +111,15 @@ async function main() {
           signal: AbortSignal.timeout(15_000),
         });
         console.log(`update ${update.update_id} -> ${res.status}`);
+        if (!res.ok) {
+          console.error(`доставка update ${update.update_id} отклонена: HTTP ${res.status}`);
+          break;
+        }
       } catch (err) {
         console.error(`доставка update ${update.update_id} не удалась:`, err instanceof Error ? err.message : err);
+        break;
       }
+      offset = Math.max(offset, (update.update_id ?? 0) + 1);
     }
   }
 }

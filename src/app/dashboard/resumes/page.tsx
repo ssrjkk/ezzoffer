@@ -29,7 +29,8 @@ export default async function ResumesPage() {
     <div>
       <h1 className="font-serif text-2xl leading-snug text-ink">Резюме</h1>
       <p className="mt-1 text-sm text-muted">
-        Создайте резюме, и AI усилит его под требования рынка. Отклики отправляются от его имени.
+        Создайте резюме — улучшим его под требования рынка (AI-провайдером, если подключён,
+        иначе встроенными правилами). Отклики отправляются от его имени.
       </p>
       <div className="mt-6">
         <ResumesManager initial={resumes} />

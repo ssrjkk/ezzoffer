@@ -7,6 +7,7 @@ import { authMethods, authMethodReady } from '@/lib/auth-methods';
 export const metadata: Metadata = {
   title: 'Вход',
   description: 'Вход в аккаунт EZOffer.',
+  robots: { index: false, follow: false },
 };
 
 export const dynamic = 'force-dynamic';

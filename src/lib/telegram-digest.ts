@@ -231,12 +231,21 @@ export async function sendDigests(): Promise<number> {
  * Отметка живёт в самой строке отклика: приглашение по конкретной вакансии
  * должно уйти ровно один раз, и таблица откликов — единственное место, где
  * это состояние переживает перезапуск процесса.
+ *
+ * Зависшие заявки подбираются по TTL claim'а: kill -9 между заявкой
+ * (notified_claim_at) и отправкой оставлял бы строку занятой навсегда.
+ * Claim старше ALERT_CLAIM_TTL_MS считается протухшим и разбирается заново.
+ * Отправленное (notified_at NOT NULL) сюда не попадает никогда — повторных
+ * приглашений TTL не вызывает.
  */
-export function pendingAlerts(limit = 20): ApplicationRow[] {
+const ALERT_CLAIM_TTL_MS = 60 * 60 * 1000;
+
+export function pendingAlerts(limit = 20, now = Date.now()): ApplicationRow[] {
   return db
     .prepare(
       `SELECT * FROM applications
        WHERE notified_at IS NULL
+         AND (notified_claim_at IS NULL OR notified_claim_at < ?)
          AND (
            (response = 'interview' AND responded_at IS NOT NULL)
            OR (response = 'decline' AND responded_at IS NOT NULL)
@@ -245,7 +254,7 @@ export function pendingAlerts(limit = 20): ApplicationRow[] {
        ORDER BY sent_at DESC
        LIMIT ?`,
     )
-    .all(Date.now() - 60_000, limit) as ApplicationRow[];
+    .all(now - ALERT_CLAIM_TTL_MS, now - 60_000, limit) as ApplicationRow[];
 }
 
 /*
@@ -306,21 +315,32 @@ export async function sendAlerts(
      *
      * Раньше два процесса выбирали одни и те же pending-строки и оба слали
      * одно приглашение дважды. Теперь строка занимается условием
-     * `notified_at IS NULL`: второй получает changes = 0 и пропускает.
+     * `notified_at IS NULL` + свежий claim: второй получает changes = 0 и
+     * пропускает. Заявка живёт в отдельной колонке notified_claim_at, а не в
+     * notified_at: kill -9 между заявкой и отправкой оставлял бы строку
+     * «отмеченной» навсегда, и приглашение терялось бы молча. Протухший claim
+     * (старше ALERT_CLAIM_TTL_MS) подбирает pendingAlerts как свободный —
+     * а отправленное (notified_at NOT NULL) не трогает никогда.
      * Неудача сбрасывает заявку обратно в NULL — приглашение попробуется
      * следующим тиком, а не потеряется молча.
      */
     const at = Date.now();
     const claimed = db
-      .prepare('UPDATE applications SET notified_at = ? WHERE id = ? AND notified_at IS NULL')
-      .run(at, row.id);
+      .prepare(
+        `UPDATE applications SET notified_claim_at = ?
+         WHERE id = ? AND notified_at IS NULL
+           AND (notified_claim_at IS NULL OR notified_claim_at < ?)`,
+      )
+      .run(at, row.id, at - ALERT_CLAIM_TTL_MS);
     if (claimed.changes === 0) continue;
 
     if (await notifyUser(row.user_id, lines.join('\n'))) {
       mark.run(at, row.id);
+      db.prepare('UPDATE applications SET notified_claim_at = NULL WHERE id = ?').run(row.id);
       sent++;
     } else {
       unmark.run(row.id);
+      db.prepare('UPDATE applications SET notified_claim_at = NULL WHERE id = ?').run(row.id);
     }
   }
 

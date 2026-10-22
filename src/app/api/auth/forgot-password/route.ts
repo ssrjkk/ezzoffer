@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { randomBytes } from 'node:crypto';
 import { db } from '@/lib/db';
 import { readJson } from '@/lib/api';
+import { hashOneTimeToken } from '@/lib/auth';
 import { rateLimit, clientIp } from '@/lib/rate-limit';
 import { sendMail, siteUrl } from '@/lib/mail';
 
@@ -55,9 +56,11 @@ export async function POST(request: Request) {
   if (user) {
     const token = randomBytes(32).toString('hex');
     const expires = Date.now() + RESET_TTL_MS;
+    // В БД — хеш: сырой токен живёт только в письме. Копия базы не даёт ссылок
+    // «сбросить чужой пароль».
     db.prepare(
       'UPDATE users SET password_reset_token = ?, password_reset_expires = ? WHERE id = ?',
-    ).run(token, expires, user.id);
+    ).run(hashOneTimeToken(token), expires, user.id);
 
     const link = `${siteUrl()}/reset-password?token=${token}`;
     await sendMail({

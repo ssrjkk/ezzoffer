@@ -301,7 +301,7 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
       {resumes.length === 0 ? (
         <EmptyState
           title="Пока нет резюме"
-          text="Создайте первое резюме — AI подскажет ключевые навыки и усилит его под вакансии."
+          text="Создайте первое резюме — подскажем ключевые навыки и усилим его под вакансии (AI-провайдер или встроенные правила)."
         />
       ) : (
         <div className="space-y-3">

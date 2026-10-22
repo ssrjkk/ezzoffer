@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
-import { migrateApplicationsResumeId } from '../src/lib/db-migrations';
+import { migrateApplicationsResumeId, addNotifiedClaimColumn } from '../src/lib/db-migrations';
 
 /**
  * Пересборка applications при смене типа resume_id.
@@ -213,5 +213,27 @@ test('пустая таблица переезжает без ошибок', () 
   const db = makeDb();
   migrateApplicationsResumeId(db);
   assert.equal((db.prepare('SELECT COUNT(*) AS c FROM applications').get() as { c: number }).c, 0);
+  db.close();
+});
+
+test('claim-колонка добавляется в старую базу и не дублируется', () => {
+  /*
+   * Базы, пережившие resume-миграцию (resume_id уже TEXT), пересборку не
+   * проходят — им колонка нужна через ALTER. Проверяем на схеме без неё.
+   */
+  const db = makeDb();
+  db.prepare(
+    `INSERT INTO applications (user_id, job_slug, status, sent_at) VALUES (1, 'hh-old', 'sent', 100)`,
+  ).run();
+  addNotifiedClaimColumn(db);
+  addNotifiedClaimColumn(db);
+  const cols = db.prepare('PRAGMA table_info(applications)').all() as { name: string }[];
+  assert.equal(
+    cols.filter((c) => c.name === 'notified_claim_at').length,
+    1,
+    'колонка продублирована или не создана',
+  );
+  const count = db.prepare('SELECT COUNT(*) AS c FROM applications').get() as { c: number };
+  assert.equal(count.c, 1, 'миграция потеряла строки');
   db.close();
 });

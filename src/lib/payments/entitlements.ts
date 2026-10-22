@@ -73,19 +73,26 @@ export function grant(event: VerifiedEvent): boolean {
    * тарифа сжигало остаток («было 20 дней, купил ещё 30 — стало 30 вместо
    * 50»), а оплата другого тарифа поверх активного молча роняла оплаченные
    * дни. Теперь живой остаток того же плана сохраняется.
+   *
+   * Чтение — ВНУТРИ транзакции: SELECT до неё видел остаток, который
+   * параллельная доставка уже продлила, и второй платёж того же плана
+   * терял дни (оба считали от одного R). SQLite-транзакции сериализуемы,
+   * второй писатель ждёт первого и видит свежий остаток.
    */
-  const current = db
-    .prepare('SELECT plan, plan_expires_at FROM users WHERE id = ?')
-    .get(event.userId) as { plan: string; plan_expires_at: number | null } | undefined;
-  const liveRemainder =
-    current && current.plan === event.planId && (current.plan_expires_at ?? 0) > paidAt
-      ? current.plan_expires_at as number
-      : paidAt;
-  const expiresAt = item.permanent ? null : liveRemainder + item.days * 86_400_000;
-
   let applied = false;
   try {
     db.transaction(() => {
+      const current = db
+        .prepare('SELECT plan, plan_expires_at FROM users WHERE id = ?')
+        .get(event.userId) as
+        | { plan: string; plan_expires_at: number | null }
+        | undefined;
+      const liveRemainder =
+        current && current.plan === event.planId && (current.plan_expires_at ?? 0) > paidAt
+          ? (current.plan_expires_at as number)
+          : paidAt;
+      const expiresAt = item.permanent ? null : liveRemainder + item.days * 86_400_000;
+
       db.prepare(
         `INSERT INTO payments (user_id, external_id, provider, plan_id, amount_rub, created_at)
          VALUES (?, ?, ?, ?, ?, ?)`,

@@ -128,6 +128,25 @@ export default function AboutPage() {
       </Section>
 
       <Section>
+        <SectionHead
+          eyebrow="Контакты"
+          title={<>Напишите нам</>}
+          sub="Поддержка — через Telegram-бота: отвечает человек вручную, обычно в течение пары дней."
+        />
+        <p className="measure mt-2 text-base leading-relaxed text-muted">
+          <a
+            href="https://t.me/ezzoffer_bot"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-ink underline decoration-line underline-offset-2 hover:text-accent"
+          >
+            @ezzoffer_bot в Telegram
+          </a>{' '}
+          — туда же приходят уведомления об откликах после привязки аккаунта.
+        </p>
+      </Section>
+
+      <Section>
         <div className="bg-ink px-8 py-12 md:px-14 md:py-16">
           <h2 className="font-serif text-2xl leading-snug text-paper md:text-3xl">
             Готовы попробовать?

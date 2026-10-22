@@ -78,6 +78,25 @@ test('регистрация создаёт неподтверждённый а�
   assert.match(row.email_verification_token ?? '', /^[0-9a-f]{64}$/, 'токен обязан быть');
 });
 
+test('в базе лежит хеш токена, а не сам токен', async () => {
+  /*
+   * Копия БД не должна давать готовых ссылок «подтвердить чужую почту»:
+   * сырой токен живёт только в письме, в колонке — его sha256.
+   */
+  const { createHash } = await import('node:crypto');
+  const { issueVerificationToken } = await import('../src/lib/auth/verify');
+  clean();
+  const { post } = await import('./helpers/route-session');
+  const { POST } = await import('../src/app/api/auth/register/route');
+  await POST(post({ name: 'Хеш', email: 'hash@example.test', password: 'secret-1' }));
+  const { id } = userRow('hash@example.test');
+  const raw = issueVerificationToken(id);
+  assert.match(raw, /^[0-9a-f]{64}$/, 'сырой токен обязан быть hex');
+  const stored = userRow('hash@example.test').email_verification_token!;
+  assert.equal(stored, createHash('sha256').update(raw).digest('hex'), 'в БД обязан лежать хеш');
+  assert.notEqual(stored, raw, 'сырой токен в базе — утечка подтверждения');
+});
+
 test('вход до подтверждения неотличим от неверного пароля', async () => {
   const { post } = await import('./helpers/route-session');
   const { POST } = await import('../src/app/api/auth/login/route');
@@ -90,7 +109,13 @@ test('вход до подтверждения неотличим от неве�
 
 test('ссылка из письма подтверждает и пускает', async () => {
   const { post } = await import('./helpers/route-session');
-  const token = userRow('fresh@example.test').email_verification_token!;
+  const { issueVerificationToken } = await import('../src/lib/auth/verify');
+  const { POST: register } = await import('../src/app/api/auth/register/route');
+  await register(post({ name: 'Новый', email: 'fresh@example.test', password: 'secret-1' }));
+  const { id } = userRow('fresh@example.test');
+  // Сырой токен из письма в тестах недоступен (письмо уходит в SMTP), поэтому
+  // перевыпускаем: это тот же путь, что и регистрация, — хеш в базе, raw наружу.
+  const token = issueVerificationToken(id);
 
   const { GET } = await import('../src/app/api/auth/verify/route');
   const confirm = await GET(new Request(`http://localhost/api/auth/verify?token=${token}`));
@@ -130,9 +155,12 @@ test('повторная регистрация подтверждённого �
   const { POST } = await import('../src/app/api/auth/register/route');
 
   // Подтверждаем напрямую, чтобы не зависеть от порядка тестов.
+  const { issueVerificationToken } = await import('../src/lib/auth/verify');
   const row = userRow('retry@example.test');
   const { GET } = await import('../src/app/api/auth/verify/route');
-  await GET(new Request(`http://localhost/api/auth/verify?token=${row.email_verification_token}`));
+  await GET(
+    new Request(`http://localhost/api/auth/verify?token=${issueVerificationToken(row.id)}`),
+  );
 
   const taken = await POST(
     post({ name: 'Третий', email: 'retry@example.test', password: 'secret-4' }),

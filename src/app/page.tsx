@@ -18,7 +18,7 @@ import { JsonLd } from '@/components/json-ld';
 import { envBaseUrl } from '@/lib/env';
 
 export const metadata: Metadata = pageMeta('/', {
-  title: 'Поиск работы без стресса и отказов',
+  title: 'Поиск работы без рутины',
   description:
     'Подбор вакансий по резюме, автоотклик с сопроводительным письмом и уведомления о приглашениях и отказах.',
 });

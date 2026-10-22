@@ -347,6 +347,42 @@ test('приглашение на собеседование уходит ров
   assert.ok(row.notified_at, 'отметка об отправке не проставлена');
 });
 
+test('зависший claim уведомления подбирается по TTL, а не теряется', async () => {
+  /*
+   * kill -9 между claim (notified_claim_at) и отправкой оставлял строку
+   * занятой навсегда: выборка видела только NULL notified_at... точнее, видела
+   * занятую строку как чужую и пропускала. Протухший claim (старше часа)
+   * разбирается заново, а отправленное (notified_at NOT NULL) — никогда.
+   */
+  const uid = seedUser();
+  const appId = seedInvitation(uid);
+  db.prepare('UPDATE applications SET notified_claim_at = ? WHERE id = ?').run(
+    Date.now() - 2 * 3600_000,
+    appId,
+  );
+  const sent = await sendAlerts((s) => `Вакансия ${s}`);
+  assert.equal(sent, 1, 'протухший claim не подобран');
+  const row = db.prepare('SELECT notified_at, notified_claim_at FROM applications WHERE id = ?').get(
+    appId,
+  ) as { notified_at: number | null; notified_claim_at: number | null };
+  assert.ok(row.notified_at && row.notified_at > Date.now() - 60_000, 'метка не обновлена');
+  assert.equal(row.notified_claim_at, null, 'claim не снят после отправки');
+});
+
+test('старое отправленное приглашение TTL не воскрешает', async () => {
+  const uid = seedUser();
+  const appId = seedInvitation(uid);
+  const { pendingAlerts } = await import('../src/lib/telegram-digest');
+  // Отправлено 2 часа назад: выборка обязана вернуть пусто — иначе каждый тик
+  // слал бы дубликаты приглашений.
+  db.prepare('UPDATE applications SET notified_at = ? WHERE id = ?').run(
+    Date.now() - 2 * 3600_000,
+    appId,
+  );
+  assert.equal(pendingAlerts().length, 0, 'отправленное приглашение попало в очередь снова');
+  assert.equal(await sendAlerts((s) => `Вакансия ${s}`), 0, 'дубликат приглашения отправлен');
+});
+
 test('в тексте приглашения есть вакансия и куда идти', async () => {
   const uid = seedUser();
   seedInvitation(uid, { responseNote: 'Компания Ромашка пригласила на собеседование' });

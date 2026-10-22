@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/auth';
 import { isPlanActive, planDailyLimit, planLabel, daysLeft } from '@/lib/plans';
@@ -5,6 +6,11 @@ import { catalogItem } from '@/lib/payments/catalog';
 import { DashboardNav } from '@/components/dashboard/nav';
 import { MobileNav } from '@/components/dashboard/mobile-nav';
 import { DemoBanner } from '@/components/dashboard/demo-banner';
+
+/** Кабинет — только для залогиненных: в поиске ему нечего делать. */
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser();

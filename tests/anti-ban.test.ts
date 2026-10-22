@@ -31,6 +31,22 @@ test('pacing блокирует ночью', () => {
   assert.ok(d.retryAfterMs > 0);
 });
 
+test('рабочие часы — московские, а не серверные', () => {
+  /*
+   * Регрессия сплит-брейна: окна считались в таймзоне процесса, а квоты —
+   * по Москве. В контейнере с TZ=UTC окно 9–20 уезжало на 12:00–23:00 МСК.
+   * Абсолютные UTC-метки: тест обязан проходить при любой TZ процесса.
+   */
+  // 06:00Z = 09:00 МСК — начало рабочего дня.
+  const morning = createPacing({ minDelayMs: 0, maxDelayMs: 0 }, () => Date.UTC(2026, 8, 28, 6, 0, 0));
+  assert.equal(morning.decide().allowed, true, '09:00 МСК обязано быть рабочим временем');
+  // 05:59Z = 08:59 МСК — ещё ночь.
+  const edge = createPacing({ minDelayMs: 0, maxDelayMs: 0 }, () => Date.UTC(2026, 8, 28, 5, 59, 0));
+  const d = edge.decide();
+  assert.equal(d.allowed, false);
+  assert.equal(d.reason, 'night');
+});
+
 test('pacing выдерживает паузу между откликами (regression)', () => {
   // Раньше decide() возвращал delayMs, но никто его не применял, и recordSent
   // не ставил cooldown — отклики уходили подряд без всякой паузы.

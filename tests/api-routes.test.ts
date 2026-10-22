@@ -584,7 +584,9 @@ test('POST /api/plan не выдаёт тариф без явного флага
 
 test('POST /api/plan не сбрасывает действующий тариф даже во флаге (regression)', async () => {
   const saved = process.env.DEMO_MODE_PLAN;
+  const savedSite = process.env.SITE_URL;
   process.env.DEMO_MODE_PLAN = '1';
+  process.env.SITE_URL = 'http://localhost:3000';
   try {
     const until = Date.now() + 20 * 86_400_000;
     makeUser(1, 'me@example.test');
@@ -605,6 +607,33 @@ test('POST /api/plan не сбрасывает действующий тариф
   } finally {
     if (saved === undefined) delete process.env.DEMO_MODE_PLAN;
     else process.env.DEMO_MODE_PLAN = saved;
+    if (savedSite === undefined) delete process.env.SITE_URL;
+    else process.env.SITE_URL = savedSite;
+  }
+});
+
+test('POST /api/plan не работает с флагом на публичном домене', async () => {
+  /*
+   * Скопированный в прод .env с DEMO_MODE_PLAN=1 раздавал бы платные тарифы
+   * бесплатно. Флаг действует только на localhost: на публичном SITE_URL
+   * ответ обязан быть 403, как без флага.
+   */
+  const saved = process.env.DEMO_MODE_PLAN;
+  const savedSite = process.env.SITE_URL;
+  process.env.DEMO_MODE_PLAN = '1';
+  process.env.SITE_URL = 'https://ezoffer.example';
+  try {
+    makeUser(1, 'me@example.test');
+    db.prepare("UPDATE users SET plan = 'none', plan_expires_at = NULL WHERE id = 1").run();
+    loginAs({ id: 1, plan: 'none', plan_expires_at: null });
+    const { POST } = await import('../src/app/api/plan/route');
+    const res = await POST(post({ planId: 'expert', period: 30 }));
+    assert.equal(res.status, 403, `демо-тариф выдан на публичном домене: ${await res.text()}`);
+  } finally {
+    if (saved === undefined) delete process.env.DEMO_MODE_PLAN;
+    else process.env.DEMO_MODE_PLAN = saved;
+    if (savedSite === undefined) delete process.env.SITE_URL;
+    else process.env.SITE_URL = savedSite;
   }
 });
 

@@ -54,7 +54,7 @@ export const metadata: Metadata = {
   // .env.example доходило до new URL("") и роняло сборку на Invalid URL.
   metadataBase: new URL(siteUrl),
   title: {
-    default: 'EZOffer — поиск работы без стресса и отказов',
+    default: 'EZOffer — поиск работы без рутины',
     template: '%s | EZOffer',
   },
   description:
@@ -68,17 +68,17 @@ export const metadata: Metadata = {
     'вакансии',
   ],
   openGraph: {
-    title: 'EZOffer — поиск работы без стресса и отказов',
+    title: 'EZOffer — поиск работы без рутины',
     description:
-      'Подберём вакансии, улучшим резюме с AI и отправим отклики за вас. Пробный период 24 часа без карты.',
+      'Подберём вакансии, улучшим резюме и отправим отклики за вас. Пробный период 24 часа без карты.',
     locale: 'ru_RU',
     type: 'website',
     siteName: 'EZOffer',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'EZOffer — поиск работы без стресса и отказов',
-    description: 'Подберём вакансии, улучшим резюме с AI и отправим отклики за вас.',
+    title: 'EZOffer — поиск работы без рутины',
+    description: 'Подберём вакансии, улучшим резюме и отправим отклики за вас.',
   },
 };
 

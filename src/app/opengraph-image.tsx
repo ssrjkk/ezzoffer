@@ -23,7 +23,7 @@ export default function OpengraphImage() {
       >
         <div style={{ fontSize: 28, letterSpacing: 6, color: '#8a8478' }}>EZOFFER</div>
         <div style={{ fontSize: 64, fontWeight: 700, lineHeight: 1.1, marginTop: 24 }}>
-          Поиск работы без стресса и отказов
+          Поиск работы без рутины
         </div>
         <div style={{ fontSize: 30, marginTop: 24, color: '#4a453c' }}>
           Подбор по резюме · письма · автоотклики · 24 часа бесплатно

@@ -1,4 +1,5 @@
 import { mock } from 'node:test';
+import { createHash } from 'node:crypto';
 import type { User } from '../../src/lib/db';
 
 /**
@@ -102,6 +103,8 @@ mock.module('../../src/lib/auth.ts', {
     }),
     purgeExpiredAuthRows: (): void => undefined,
     resetAuthPurge: (): void => undefined,
+    hashOneTimeToken: (token: string): string =>
+      createHash('sha256').update(token).digest('hex'),
   },
 });
 

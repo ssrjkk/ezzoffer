@@ -28,7 +28,8 @@ export function DemoBanner({ mode }: { mode: 'demo' | 'live' }) {
         <p className="font-mono text-[11px] uppercase tracking-[0.12em] text-warn">Демо-режим</p>
         <p className="mt-1 text-sm text-ink">
           Цифры и статусы откликов здесь демонстрационные, а не реальные: они не отражают ответы
-          площадок. Реальные отклики появятся после подключения аккаунта hh.ru.
+          площадок. Реальные отклики появятся после подключения аккаунта hh.ru и включения
+          live-режима в настройках.
         </p>
       </div>
       <a

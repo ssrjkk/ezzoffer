@@ -65,7 +65,7 @@ export function Hero() {
             <h1 className="display mt-7 text-[2.75rem] text-balance sm:text-6xl md:text-7xl">
               Поиск работы
               <br />
-              <span className="text-accent">без стресса</span> и отказов
+              <span className="text-accent">без рутины</span>
             </h1>
 
             <p className="measure mt-8 text-lg leading-relaxed text-muted">

@@ -643,7 +643,7 @@ export function JobExplorer() {
           <div className="mb-4 rounded-sm border border-accent/20 bg-accent/5 p-4">
             <div className="mb-2 flex items-center gap-2">
               <Sparkles className="size-4 text-accent" />
-              <span className="text-sm font-semibold text-ink">AI-рекомендации</span>
+              <span className="text-sm font-semibold text-ink">Рекомендации</span>
             </div>
             <ul className="space-y-1.5">
               {aiRecommendations.map((rec, i) => (

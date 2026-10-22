@@ -21,6 +21,24 @@ export function addNotifiedAtColumn(instance: Pick<Database.Database, 'exec' | '
 }
 
 /**
+ * Колонка заявки на отправку уведомления (claim).
+ *
+ * См. комментарий у колонки в db.ts: notified_at — «отправлено», claim —
+ * «взято в работу». Без отдельной колонки зависший claim (kill -9 между
+ * заявкой и отправкой) неотличим от отправленного — и приглашение терялось
+ * молча навсегда.
+ */
+export function addNotifiedClaimColumn(
+  instance: Pick<Database.Database, 'exec' | 'prepare'>,
+): void {
+  const row = instance.prepare('PRAGMA table_info(applications)').all() as {
+    name: string;
+  }[];
+  if (row.some((c) => c.name === 'notified_claim_at')) return;
+  instance.exec('ALTER TABLE applications ADD COLUMN notified_claim_at INTEGER');
+}
+
+/**
  * Колонка происхождения отклика (Фаза 1: правда о происхождении).
  *
  * real — отправлен через API площадки; user — человек зафиксировал вручную
@@ -504,6 +522,13 @@ export function migrateApplicationsResumeId(
    */
   const hasOrigin = row.some((c) => c.name === 'origin');
   const originSelect = hasOrigin ? 'origin' : "'user'";
+  /*
+   * Старые базы могли не проходить addNotifiedClaimColumn (порядок миграций
+   * или прямой вызов): отсутствующую колонку выбираем как NULL, а не падаем
+   * с «no such column». Тот же приём, что с origin выше.
+   */
+  const hasClaim = row.some((c) => c.name === 'notified_claim_at');
+  const claimSelect = hasClaim ? 'notified_claim_at' : 'NULL';
 
   instance.exec('PRAGMA foreign_keys = OFF');
   instance.exec('BEGIN');
@@ -526,7 +551,8 @@ export function migrateApplicationsResumeId(
         viewed_at INTEGER,
         responded_at INTEGER,
         withdrawn INTEGER NOT NULL DEFAULT 0,
-        notified_at INTEGER
+        notified_at INTEGER,
+        notified_claim_at INTEGER
       );
     `);
     /*
@@ -541,10 +567,10 @@ export function migrateApplicationsResumeId(
     instance.exec(`
       INSERT INTO applications_migrated
         (id, user_id, job_slug, search_id, resume_id, letter_id, status, origin, response,
-         response_note, message, external_url, sent_at, viewed_at, responded_at, withdrawn, notified_at)
+         response_note, message, external_url, sent_at, viewed_at, responded_at, withdrawn, notified_at, notified_claim_at)
       SELECT
         id, user_id, job_slug, search_id, CAST(resume_id AS TEXT), letter_id, status, ${originSelect}, response,
-        response_note, message, external_url, sent_at, viewed_at, responded_at, withdrawn, notified_at
+        response_note, message, external_url, sent_at, viewed_at, responded_at, withdrawn, notified_at, ${claimSelect}
       FROM applications;
     `);
     instance.exec('DROP TABLE applications');

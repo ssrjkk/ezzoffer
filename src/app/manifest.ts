@@ -20,7 +20,7 @@ const ACCENT = '#9a2a22';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'EZOffer — поиск работы без стресса и отказов',
+    name: 'EZOffer — поиск работы без рутины',
     short_name: 'EZOffer',
     description:
       'Подбор вакансий по резюме, автоотклик с сопроводительным письмом и уведомления в Telegram.',

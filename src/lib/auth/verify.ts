@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { db } from '../db';
 import { sendMail, siteUrl } from '../mail';
 import { logInfo } from '../logger';
+import { hashOneTimeToken } from '../auth';
 
 /**
  * Подтверждение почты.
@@ -45,9 +46,11 @@ const RESEND_LIMIT = 5;
 
 export function issueVerificationToken(userId: number, now = Date.now()): string {
   const token = randomBytes(32).toString('hex');
+  // В БД — хеш: сырой токен живёт только в письме. Копия базы не даёт ссылок
+  // «подтвердить чужую почту».
   db.prepare(
     'UPDATE users SET email_verification_token = ?, email_verification_expires = ? WHERE id = ?',
-  ).run(token, now + VERIFY_TTL_MS, userId);
+  ).run(hashOneTimeToken(token), now + VERIFY_TTL_MS, userId);
   return token;
 }
 
@@ -83,8 +86,10 @@ export function confirmEmail(token: string, now = Date.now()): number | null {
   if (!/^[0-9a-f]{64}$/.test(normalized)) return null;
 
   const row = db
-    .prepare('SELECT id, email_verification_expires FROM users WHERE email_verification_token = ?')
-    .get(normalized) as { id: number; email_verification_expires: number | null } | undefined;
+    .prepare(
+      'SELECT id, email_verification_expires FROM users WHERE email_verification_token = ?',
+    )
+    .get(hashOneTimeToken(normalized)) as { id: number; email_verification_expires: number | null } | undefined;
   if (!row) return null;
 
   // Гасим в обоих случаях — см. комментарий выше.

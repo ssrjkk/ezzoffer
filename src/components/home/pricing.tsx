@@ -79,7 +79,7 @@ export function PricingSection({ compact = false }: { compact?: boolean }) {
         eyebrow="Подписочная модель"
         title={
           <>
-            Тариф, который <span className="text-accent">окупается на первом оффере</span>
+            Тариф, который <span className="text-accent">снимает рутину</span>
           </>
         }
         sub="Попробуйте весь функционал бесплатно и выберите подходящий период"

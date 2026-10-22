@@ -35,9 +35,21 @@ const VALID_PERIODS = [7, 14, 30];
  *
  * Строгое сравнение с "1": пустая переменная в .env — это отсутствие, а не
  * согласие. `Boolean(process.env.X)` был бы тем же, что и без проверки.
+ *
+ * Плюс привязка к локальному хосту: скопированный в прод .env с
+ * DEMO_MODE_PLAN=1 раздавал бы платные тарифы бесплатно любому
+ * зарегистрированному. SITE_URL прода — публичный домен, и на нём флаг
+ * молча не работает. Обходного выключателя нет намеренно: демо-режим
+ * существует только для локального стенда.
  */
 export function demoPlanEnabled(env: Record<string, string | undefined> = process.env): boolean {
-  return env.DEMO_MODE_PLAN === '1';
+  if (env.DEMO_MODE_PLAN !== '1') return false;
+  try {
+    const host = new URL(env.SITE_URL ?? 'http://localhost:3000').hostname.toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch {
+    return false;
+  }
 }
 
 export async function POST(request: Request) {

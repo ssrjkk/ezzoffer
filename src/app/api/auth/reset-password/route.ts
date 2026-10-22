@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { hashPassword } from '@/lib/password';
+import { hashOneTimeToken } from '@/lib/auth';
 import { readJson, badRequest } from '@/lib/api';
 import { rateLimit } from '@/lib/rate-limit';
 
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
 
   const user = db
     .prepare('SELECT id FROM users WHERE password_reset_token = ? AND password_reset_expires > ?')
-    .get(token, Date.now()) as { id: number } | undefined;
+    .get(hashOneTimeToken(token), Date.now()) as { id: number } | undefined;
 
   if (!user) {
     return badRequest('Ссылка недействительна или истекла');
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
             SET password_hash = ?, password_reset_token = NULL, password_reset_expires = NULL
           WHERE id = ? AND password_reset_token = ?`,
       )
-      .run(newHash, user.id, token);
+      .run(newHash, user.id, hashOneTimeToken(token));
     if (result.changes === 0) return false;
 
     // Смена пароля обрывает все сессии: украденная сессия не должна
