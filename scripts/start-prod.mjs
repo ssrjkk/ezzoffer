@@ -3,12 +3,42 @@
  * Копирует .next/static и public в .next/standalone и запускает сервер.
  */
 import { spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const standalone = path.join(root, '.next', 'standalone');
+
+/**
+ * Минимальный парсер .env (без зависимостей).
+ *
+ * standalone-сервер переменных из файлов не читает — это делает `next dev`,
+ * а здесь голый node. Без этого токен бота, SMTP и SITE_URL из .env до
+ * процесса не доходили, и локальный прод вёл себя иначе, чем описано в
+ * .env.example. Уже заданные переменные окружения важнее файловых.
+ */
+function loadDotEnv(file) {
+  if (!existsSync(file)) return;
+  for (const line of readFileSync(file, 'utf8').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let value = trimmed.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (!(key in process.env)) process.env[key] = value;
+  }
+}
+
+loadDotEnv(path.join(root, '.env'));
+loadDotEnv(path.join(root, '.env.local'));
 
 if (!existsSync(path.join(standalone, 'server.js'))) {
   console.error('Сборка не найдена. Сначала выполните: npm run build');

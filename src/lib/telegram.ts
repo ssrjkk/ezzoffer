@@ -24,7 +24,15 @@ const CODE_TTL_MS = 15 * 60 * 1000;
  */
 export type InlineButton = {
   text: string;
-  /** Данные колбэка. Не требуется для кнопки-ссылки. */
+  /**
+   * Данные колбэка. Не требуется для кнопки-ссылки.
+   *
+   * Поле называется `data`, а не `callback_data`: внутреннее имя короче, а в
+   * wire-формат его перекладывает `toTelegramKeyboard` при отправке. Напрямую
+   * этот объект в Telegram слать нельзя — API не знает поля `data` и отвечает
+   * 400 на каждое сообщение с кнопками (так бот и молчал на /start: текст был
+   * в порядке, а клавиатура — нет).
+   */
   data?: string;
   /** Ссылка вместо действия. */
   url?: string;
@@ -46,6 +54,31 @@ export type SendOptions = {
    */
   html?: boolean;
 };
+
+/**
+ * Клавиатура во wire-формат Telegram.
+ *
+ * Внутренний `InlineButton.data` превращается в `callback_data`: API принимает
+ * только это имя, а неизвестное поле `data` делает кнопку невалидной — и весь
+ * запрос падает с 400. Кнопка обязана нести ровно один из `callback_data` /
+ * `url`; кнопка ни с чем отбрасывается, а не отправляется битой.
+ */
+export function toTelegramKeyboard(keyboard: InlineKeyboard): {
+  inline_keyboard: { text: string; callback_data?: string; url?: string }[][];
+} {
+  const rows = keyboard.inline_keyboard
+    .map((row) =>
+      row
+        .map((b) => ({
+          text: b.text.slice(0, 64),
+          ...(b.data !== undefined ? { callback_data: b.data.slice(0, 64) } : {}),
+          ...(b.url !== undefined ? { url: b.url } : {}),
+        }))
+        .filter((b) => b.callback_data !== undefined || b.url !== undefined),
+    )
+    .filter((row) => row.length > 0);
+  return { inline_keyboard: rows };
+}
 
 /** Экранирование для HTML-режима Telegram. */
 export function escapeHtml(text: string): string {
@@ -108,7 +141,7 @@ export async function editTelegramMessage(
         message_id: messageId,
         text: text.slice(0, TELEGRAM_TEXT_LIMIT),
         parse_mode: opts.html ? 'HTML' : undefined,
-        reply_markup: opts.keyboard,
+        reply_markup: opts.keyboard ? toTelegramKeyboard(opts.keyboard) : undefined,
         disable_web_page_preview: true,
       }),
       cache: 'no-store',
@@ -138,6 +171,13 @@ export function telegramWebhookSecret(): string | null {
  * Отправка сообщения в Telegram с таймаутом и ограничением длины текста:
  * без таймаута зависший API держал бы запрос открытым, а текст длиннее лимита
  * Telegram отверг бы с 400.
+ *
+ * Два падения, которые здесь уже ловили, и оба молчали одинаково:
+ * кнопки с полем `data` вместо `callback_data` (чинятся в toTelegramKeyboard)
+ * и сырые `<уголки>` в тексте при parse_mode=HTML (чинятся экранированием).
+ * Поэтому здесь двойная защита: в лог пишется описание ошибки от Telegram
+ * (без него 400 и 401 неразличимы), а 400 при HTML-режиме повторяется
+ * простым текстом — кривое выделение лучше недоставленного ответа.
  */
 export async function sendTelegramMessage(
   chatId: string,
@@ -147,36 +187,59 @@ export async function sendTelegramMessage(
   const token = envToken();
   if (!token) return false;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: text.slice(0, TELEGRAM_TEXT_LIMIT),
-        parse_mode: opts.html ? 'HTML' : undefined,
-        reply_markup: opts.keyboard,
-        disable_web_page_preview: true,
-      }),
-      cache: 'no-store',
-      signal: controller.signal,
-    });
-    if (!res.ok) {
-      logInfo('telegram', `отправка не удалась: HTTP ${res.status}`, { chatId });
-      return false;
+  const send = async (plain: boolean): Promise<{ ok: boolean; status: number; error: string }> => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
+    try {
+      const bodyText = plain ? text.replace(/<[^>]*>/g, '') : text;
+      const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: bodyText.slice(0, TELEGRAM_TEXT_LIMIT),
+          parse_mode: !plain && opts.html ? 'HTML' : undefined,
+          reply_markup: opts.keyboard ? toTelegramKeyboard(opts.keyboard) : undefined,
+          disable_web_page_preview: true,
+        }),
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      let error = '';
+      if (!res.ok) {
+        try {
+          error = (await res.text()).slice(0, 200);
+        } catch {
+          error = 'не удалось прочитать ответ';
+        }
+      }
+      return { ok: res.ok, status: res.status, error };
+    } catch (err) {
+      return { ok: false, status: 0, error: err instanceof Error ? err.message : 'unknown' };
+    } finally {
+      clearTimeout(timer);
     }
+  };
+
+  const first = await send(false);
+  if (first.ok) {
     logInfo('telegram', 'сообщение отправлено', { chatId });
     return true;
-  } catch (err) {
-    logInfo('telegram', `ошибка отправки: ${err instanceof Error ? err.message : 'unknown'}`, {
-      chatId,
-    });
-    return false;
-  } finally {
-    clearTimeout(timer);
   }
+  if (first.status === 400 && opts.html) {
+    const second = await send(true);
+    logInfo(
+      'telegram',
+      second.ok ? 'HTML отклонён, отправлено простым текстом' : 'отправка не удалась дважды',
+      { chatId, first: first.error },
+    );
+    return second.ok;
+  }
+  logInfo('telegram', `отправка не удалась: HTTP ${first.status}`, {
+    chatId,
+    error: first.error,
+  });
+  return false;
 }
 
 /** Код привязки: 6 цифр, чтобы его можно было продиктовать в чат. */

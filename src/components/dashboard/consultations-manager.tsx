@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { formatShortDateTime } from '@/lib/format-date';
 import {
   Badge,
   EmptyState,
@@ -23,9 +24,9 @@ const THEMES = [
 ];
 
 const themeHint: Record<string, string> = {
-  'Разбор резюме': 'Эксперт оценит ATS-скоринг, ключевые навыки и структуру, подскажет правки.',
+  'Разбор резюме': 'Человек посмотрит структуру, навыки и цифры и подскажет правки.',
   'Стратегия поиска работы':
-    'Выстроим план: какие вакансии, отклики и сроки дадут результат за 3–4 недели.',
+    'Выстроим план на ближайшие недели: какие вакансии, сколько откликов в день и на что делать акцент.',
   'Подготовка к собеседованию': 'Потренируем ответы на вопросы и разберём типичные ловушки HR.',
   'Анализ отказов и воронки':
     'Посмотрим вашу статистику в кабинете и найдём точку роста конверсии.',
@@ -39,6 +40,28 @@ export function ConsultationsManager({ initial }: { initial: Consultation[] }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [markingId, setMarkingId] = useState<number | null>(null);
+
+  const markDone = async (id: number) => {
+    setMarkingId(id);
+    try {
+      const res = await fetch('/api/consultations', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, done: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? 'Не удалось обновить заявку');
+        return;
+      }
+      setItems((prev) => prev.map((c) => (c.id === id ? { ...c, done: 1 } : c)));
+    } catch {
+      setError('Сеть недоступна — отметка не сохранена');
+    } finally {
+      setMarkingId(null);
+    }
+  };
 
   const book = async (e: FormEvent) => {
     e.preventDefault();
@@ -58,7 +81,7 @@ export function ConsultationsManager({ initial }: { initial: Consultation[] }) {
       }
       setItems((prev) => [data.consultation, ...prev]);
       setNote('');
-      setNotice('Заявка принята. Эксперт свяжется с вами в течение дня для выбора времени.');
+      setNotice('Заявка принята. Отвечаем вручную — обычно в течение пары дней, не мгновенно.');
     } catch {
       setError('Сеть недоступна — заявка не отправлена');
     } finally {
@@ -111,7 +134,7 @@ export function ConsultationsManager({ initial }: { initial: Consultation[] }) {
         {items.length === 0 ? (
           <EmptyState
             title="Записей нет"
-            text="Выберите тему слева и оставьте заявку — это бесплатно в рамках тарифов «Про» и «Эксперт»."
+            text="Выберите тему слева и оставьте заявку. Пока услуга бесплатна для всех: отвечает человек вручную, обычно в течение пары дней."
           />
         ) : (
           items.map((c) => (
@@ -123,15 +146,19 @@ export function ConsultationsManager({ initial }: { initial: Consultation[] }) {
                 </Badge>
               </div>
               {c.note ? <p className="text-sm text-muted">{c.note}</p> : null}
-              <p className="text-xs text-muted">
-                Заявка от{' '}
-                {new Date(c.booked_at).toLocaleString('ru-RU', {
-                  day: '2-digit',
-                  month: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
-              </p>
+              <p className="text-xs text-muted">Заявка от {formatShortDateTime(c.booked_at)}</p>
+              {!c.done ? (
+                <div>
+                  <button
+                    type="button"
+                    disabled={markingId === c.id}
+                    onClick={() => void markDone(c.id)}
+                    className="mt-1 font-mono text-[11px] uppercase tracking-[0.14em] text-accent underline-offset-4 hover:underline disabled:opacity-60"
+                  >
+                    {markingId === c.id ? 'Сохраняем…' : 'Отметить проведённой'}
+                  </button>
+                </div>
+              ) : null}
             </div>
           ))
         )}

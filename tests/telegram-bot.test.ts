@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseCommand, replyFor, markUpdateSeen, resetSeenUpdates } from '../src/lib/telegram-bot';
+import { parseCommand, replyFor } from '../src/lib/telegram-bot';
 import type { User } from '../src/lib/db';
 
 function user(over: Partial<User> = {}): User {
@@ -148,54 +148,12 @@ test('ответы не содержат незакрытых фигурных �
 });
 
 /**
- * Telegram ретраит доставку апдейта при не-2xx ответе, поэтому один и тот же
- * update_id может прийти повторно. Без отсечки команда выполнялась бы дважды
- * и пользователь получил бы дубликат ответа.
- */
-test('повторный апдейт с тем же update_id отбрасывается (regression)', () => {
-  resetSeenUpdates();
-  assert.equal(markUpdateSeen(42), true, 'первый апдейт обрабатывается');
-  assert.equal(markUpdateSeen(42), false, 'дубликат отбрасывается');
-  assert.equal(markUpdateSeen(43), true, 'новый апдейт обрабатывается');
-});
-
-test('апдейт без update_id обрабатывается всегда', () => {
-  resetSeenUpdates();
-  assert.equal(markUpdateSeen(undefined), true);
-  assert.equal(markUpdateSeen(undefined), true);
-});
-
-test('набор seen-апдейтов ограничен по размеру', () => {
-  resetSeenUpdates();
-  for (let i = 0; i < 1500; i++) markUpdateSeen(i);
-  // После вытеснения самые старые id забыты, и память не растёт бесконечно.
-  assert.equal(markUpdateSeen(0), true, 'давно забытый id снова считается новым');
-  assert.equal(markUpdateSeen(1499), false, 'свежий id всё ещё помнится');
-  resetSeenUpdates();
-});
-
-/*
- * Регрессия: окно повтора открывалось на каждый рестарт.
+ * Дедупликация — на первичном ключе tg_inbox, а не на in-memory множестве.
  *
- * Множество обработанных update_id жило только в памяти процесса, а рестарты
- * здесь регулярны (деплой, планировщик, падения). Задержанный ретрай Telegram,
- * пришедший после рестарта, обрабатывался как новый апдейт — команда
- * выполнялась второй раз.
- *
- * Теперь множество подкреплено таблицей meta: id переживает рестарт.
- * Эмулировать рестарт напрямую нельзя (модуль один на процесс), но запись в
- * meta проверяется: раз id там, новый процесс его загрузит.
+ * Раньше повторы отсекал Set в памяти (+ копия в meta): старый id, вытесненный
+ * за пределом 1000, при повторе считался новым и команда выполнялась дважды.
+ * Теперь арбитр — строка inbox: INSERT OR IGNORE отклоняет дубликат на уровне
+ * базы, и «окно повтора» не зависит ни от памяти процесса, ни от рестартов.
+ * Проверяется поведением в telegram-inbox.test.ts (вебхук + processInbox),
+ * а не юнит-тестом внутреннего множества — его больше нет.
  */
-test('обработанный update_id переживает рестарт через meta (regression)', async () => {
-  resetSeenUpdates();
-  assert.equal(markUpdateSeen(777001), true);
-
-  const { db } = await import('../src/lib/db');
-  const row = db.prepare("SELECT value FROM meta WHERE key = 'tg:seen-updates'").get() as
-    { value: string } | undefined;
-  assert.ok(row?.value, "id обязан persist'иться в meta, иначе рестарт его забудет");
-  const ids = JSON.parse(row.value) as number[];
-  assert.ok(ids.includes(777001), 'именно этот id должен быть в meta');
-
-  resetSeenUpdates();
-});

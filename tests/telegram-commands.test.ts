@@ -79,7 +79,7 @@ beforeEach(() => {
    * поэтому дети удаляются раньше родителя — иначе SQLITE_CONSTRAINT_FOREIGNKEY.
    */
   db.exec(
-    'DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies;',
+    'DELETE FROM apply_events; DELETE FROM auth_attempts; DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies;',
   );
   resetCatalogCache();
 });

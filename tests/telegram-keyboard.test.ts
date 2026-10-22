@@ -100,7 +100,7 @@ beforeEach(() => {
    * удаляются раньше родителя — иначе SQLITE_CONSTRAINT_FOREIGNKEY.
    */
   db.exec(
-    'DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies;',
+    'DELETE FROM apply_events; DELETE FROM auth_attempts; DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies;',
   );
   // getCatalog() кэширует выборку на 30 секунд и сам сбрасывается только при
   // записи через upsertMany. Прямая вставка в SQL кэш не трогает, и каталог
@@ -115,7 +115,6 @@ beforeEach(() => {
   sent = [];
   edited = [];
   answered = [];
-  bot.resetSeenUpdates();
 });
 
 function seedUser(over: Record<string, unknown> = {}): void {
@@ -184,10 +183,21 @@ test('у справки есть кнопки', async () => {
   await bot.handleUpdate({ update_id: 2, message: { chat: { id: 777 }, text: '/помощь' } });
 
   const kb = sent[sent.length - 1]!.keyboard as
-    { inline_keyboard: { text: string; data?: string; url?: string }[][] } | undefined;
+    { inline_keyboard: { text: string; callback_data?: string; url?: string }[][] } | undefined;
   assert.ok(kb, 'у справки нет кнопок — человек обязан помнить команды');
   const labels = kb!.inline_keyboard.flat().map((b) => b.text);
   assert.ok(labels.length >= 2, `кнопок слишком мало: ${JSON.stringify(labels)}`);
+  /*
+   * Регрессия: кнопки уходили в Telegram с полем `data`, которого API не
+   * знает, — каждый ответ с клавиатурой падал с 400, и бот молчал на /start.
+   * В проводе обязан быть `callback_data`, а `data` — никогда.
+   */
+  const raw = JSON.stringify(kb);
+  assert.ok(!raw.includes('"data":'), `в проводе осталось поле data: ${raw}`);
+  assert.ok(
+    kb!.inline_keyboard.flat().some((b) => b.callback_data),
+    'ни у одной кнопки нет callback_data — нажатия работать не будут',
+  );
 });
 
 test('подбор даёт кнопку на каждую вакансию', async () => {
@@ -197,12 +207,14 @@ test('подбор даёт кнопку на каждую вакансию', as
 
   await bot.handleUpdate({ update_id: 3, message: { chat: { id: 777 }, text: '/подбор' } });
   const kb = sent[sent.length - 1]!.keyboard as
-    { inline_keyboard: { text: string; data?: string }[][] } | undefined;
+    { inline_keyboard: { text: string; callback_data?: string }[][] } | undefined;
   assert.ok(kb, 'у подбора нет кнопок');
 
-  const applyButtons = kb!.inline_keyboard.flat().filter((b) => b.data?.startsWith('apply:'));
+  const applyButtons = kb!.inline_keyboard
+    .flat()
+    .filter((b) => b.callback_data?.startsWith('apply:'));
   assert.ok(applyButtons.length >= 2, `кнопок отклика ${applyButtons.length} вместо 2`);
-  assert.equal(applyButtons[0]!.data, 'apply:1');
+  assert.equal(applyButtons[0]!.callback_data, 'apply:1');
 });
 
 test('подпись кнопки содержит номер и название', () => {
@@ -228,8 +240,12 @@ test('подбор ограничен пятью вакансиями и гов�
   for (let i = 0; i < 9; i++) seedVacancy(`hh-m${i}`, `React-разработчик ${i}`);
 
   await bot.handleUpdate({ update_id: 4, message: { chat: { id: 777 }, text: '/подбор' } });
-  const kb = sent[sent.length - 1]!.keyboard as { inline_keyboard: { data?: string }[][] };
-  const applyButtons = kb.inline_keyboard.flat().filter((b) => b.data?.startsWith('apply:'));
+  const kb = sent[sent.length - 1]!.keyboard as {
+    inline_keyboard: { callback_data?: string }[][];
+  };
+  const applyButtons = kb.inline_keyboard
+    .flat()
+    .filter((b) => b.callback_data?.startsWith('apply:'));
   assert.ok(
     applyButtons.length <= 5,
     `показано ${applyButtons.length} вакансий — список не читают`,
@@ -382,4 +398,90 @@ test('сообщения бота не содержат незакрытой р�
     const close = (s.text.match(/<\/b>/g) ?? []).length;
     assert.equal(open, close, `незакрытое выделение: ${s.text.slice(0, 120)}`);
   }
+});
+
+test('справка без сырых уголков: HTML-режим не уронит /start', () => {
+  /*
+   * Вторая причина молчавшего бота: /start уходил с parse_mode=HTML, а в
+   * тексте справки стоял литерал `<код>` — Telegram не знает такого тега и
+   * отвечал 400. Справка обязана не содержать разметкоподобных кусков вовсе:
+   * выделение добавляет withModeNotice позже и только валидное.
+   */
+  const reply = bot.replyFor('start', '', null);
+  assert.ok(!/<[a-zA-Zа-яА-ЯёЁ]/.test(reply.text), `сырые уголки в справке: ${reply.text}`);
+});
+
+test('битый HTML отправляется простым текстом, а не теряется', async () => {
+  const { sendTelegramMessage } = await import('../src/lib/telegram');
+  const bodies: Record<string, unknown>[] = [];
+  const saved = globalThis.fetch;
+  globalThis.fetch = (async (_url: string | URL, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+    bodies.push(body);
+    if (body.parse_mode === 'HTML') {
+      return {
+        ok: false,
+        status: 400,
+        text: async () => '{"ok":false,"description":"Bad Request: can\'t parse entities"}',
+      } as unknown as Response;
+    }
+    return { ok: true, status: 200, text: async () => '{}' } as unknown as Response;
+  }) as typeof globalThis.fetch;
+  try {
+    const ok = await sendTelegramMessage('777', 'Пришлите <код>: /связать 123456', { html: true });
+    assert.equal(ok, true, 'ответ потерян вместо фолбэка на простой текст');
+    assert.equal(bodies.length, 2, `ожидались 2 попытки, было ${bodies.length}`);
+    assert.equal(bodies[1]!.parse_mode, undefined, 'повтор ушёл опять с HTML — будет тот же 400');
+    assert.ok(!/<код>/.test(String(bodies[1]!.text)), 'теги утекли в простой текст');
+  } finally {
+    globalThis.fetch = saved;
+  }
+});
+
+test('кнопка кабинета не тащит локальный URL в Telegram', async () => {
+  /*
+   * Третья причина молчавшего бота: кнопка «Открыть кабинет» несла
+   * http://localhost:3000/dashboard — Telegram отклоняет такие URL 400
+   * («Wrong HTTP URL»), причём падает весь запрос, а не одна кнопка.
+   * Телефон пользователя localhost всё равно не откроет, поэтому без
+   * публичного SITE_URL ряда нет вообще, а не «битая ссылка».
+   */
+  const { commandKeyboard } = await import('../src/lib/telegram-keyboard');
+  const kb = commandKeyboard();
+  const urls = kb.inline_keyboard.flat().map((b) => b.url).filter(Boolean) as string[];
+  for (const url of urls) {
+    const host = new URL(url).hostname.toLowerCase();
+    assert.ok(
+      host !== 'localhost' && host !== '::1' && !/^127\./.test(host),
+      `локальный URL в кнопке уронит весь ответ 400: ${url}`,
+    );
+  }
+});
+
+test('wire-формат клавиатуры: data превращается в callback_data', async () => {
+  /*
+   * Прямая регрессия молчавшего бота: кнопки уходили с полем `data`,
+   * которого Bot API не знает, — Telegram отвечал 400 на каждое сообщение
+   * с клавиатурой, включая /start. Тест бьёт в сериализатор, а не в моки:
+   * моки fetch принимают что угодно и 400 не покажут.
+   */
+  const { toTelegramKeyboard } = await import('../src/lib/telegram');
+  const wire = toTelegramKeyboard({
+    inline_keyboard: [
+      [
+        { text: 'Пауза', data: 'menu:pause' },
+        { text: 'Кабинет', url: 'https://example.test/dashboard' },
+      ],
+      [{ text: 'Битая' }],
+    ],
+  });
+  assert.deepEqual(wire, {
+    inline_keyboard: [
+      [
+        { text: 'Пауза', callback_data: 'menu:pause' },
+        { text: 'Кабинет', url: 'https://example.test/dashboard' },
+      ],
+    ],
+  });
+  assert.ok(!JSON.stringify(wire).includes('"data":'), 'поле data утекло в провод');
 });

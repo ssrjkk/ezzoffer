@@ -48,29 +48,51 @@ export function mainKeyboard(): InlineKeyboard {
 
 /** Команды списком — вместо набора /подбор, /статистика, /пауза. */
 export function commandKeyboard(): InlineKeyboard {
-  return {
-    inline_keyboard: [
-      [
-        { text: 'Подбор вакансий', data: 'menu:search' },
-        { text: 'Статистика', data: 'menu:stats' },
-      ],
-      [
-        { text: 'Собеседование', data: 'menu:interview' },
-        { text: 'Избранное', data: 'menu:bookmarks' },
-      ],
-      [
-        { text: 'Пауза', data: 'menu:pause' },
-        { text: 'Продолжить', data: 'menu:resume' },
-      ],
-      [{ text: 'Открыть кабинет', url: dashboardUrl() }],
+  const rows: InlineKeyboard['inline_keyboard'] = [
+    [
+      { text: 'Подбор вакансий', data: 'menu:search' },
+      { text: 'Статистика', data: 'menu:stats' },
     ],
-  };
+    [
+      { text: 'Собеседование', data: 'menu:interview' },
+      { text: 'Избранное', data: 'menu:bookmarks' },
+    ],
+    [
+      { text: 'Пауза', data: 'menu:pause' },
+      { text: 'Продолжить', data: 'menu:resume' },
+    ],
+  ];
+  /*
+   * Кнопка кабинета — только с публичным SITE_URL.
+   *
+   * Telegram отвергает в кнопках localhost-ссылки 400 («Wrong HTTP URL»),
+   * причём падает ВЕСЬ запрос, а не одна кнопка: из-за неё не доходило даже
+   * /start. Локальный стенд живёт на http://localhost:3000, и тащить его URL
+   * в кнопку бессмысленно дважды: телефон пользователя его всё равно не
+   * откроет. Без публичного адреса ряд просто не показываем.
+   */
+  const url = dashboardUrl();
+  if (url) rows.push([{ text: 'Открыть кабинет', url }]);
+  return { inline_keyboard: rows };
 }
 
 const DASHBOARD = (process.env.SITE_URL?.trim() || '').replace(/\/+$/, '');
 
-/** Ссылка на кабинет. Без SITE_URL кнопку не показываем: битая ссылка хуже её отсутствия. */
-function dashboardUrl(): string {
+/**
+ * Ссылка на кабинет. Пусто — если SITE_URL не задан или непубличный:
+ * кнопку с таким URL Telegram отклонит вместе со всем сообщением.
+ */
+function dashboardUrl(): string | null {
+  if (!DASHBOARD) return null;
+  let host = '';
+  try {
+    host = new URL(DASHBOARD).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  if (host === 'localhost' || host === '::1' || host === '0.0.0.0' || /^127\./.test(host)) {
+    return null;
+  }
   return `${DASHBOARD}/dashboard`;
 }
 

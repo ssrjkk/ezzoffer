@@ -139,6 +139,56 @@ export function formatDigest(user: { id: number }, w: DigestWindow): string | nu
 }
 
 /**
+ * Предупреждения об истечении тарифа.
+ *
+ * Тариф раньше гас молча: человек узнавал об этом, когда отклики переставали
+ * уходить. Предупреждение приходит один раз на каждый срок — отметка
+ * `plan:warned:<expires_at>` не даёт спамить каждый тик, а смена тарифа
+ * (новый expires_at) разрешает следующее предупреждение сама.
+ */
+const WARN_BEFORE_MS = 3 * 24 * 60 * 60 * 1000;
+
+export async function sendExpiryWarnings(now: number = Date.now()): Promise<number> {
+  const users = db
+    .prepare(
+      `SELECT id, plan, plan_expires_at FROM users
+       WHERE plan_expires_at IS NOT NULL AND plan_expires_at > ?
+         AND telegram_chat_id IS NOT NULL`,
+    )
+    .all(now) as { id: number; plan: string; plan_expires_at: number }[];
+  let sent = 0;
+  for (const u of users) {
+    const left = u.plan_expires_at - now;
+    if (left <= 0 || left > WARN_BEFORE_MS) continue;
+    const key = `plan:warned:${u.id}:${u.plan_expires_at}`;
+    const marked = db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as
+      | { value: string }
+      | undefined;
+    if (marked) continue;
+    const days = Math.max(1, Math.ceil(left / 86_400_000));
+    const ok = await notifyUser(
+      u.id,
+      `Тариф «${u.plan}» заканчивается через ${days} ${plural(days, 'день', 'дня', 'дней')}. ` +
+        'Продлите его в кабинете, чтобы автоотклики не встали: /dashboard/settings',
+    );
+    if (ok) {
+      db.prepare('INSERT OR IGNORE INTO meta (key, value) VALUES (?, ?)').run(key, String(now));
+      sent++;
+    }
+  }
+  return sent;
+}
+
+function plural(n: number, one: string, few: string, many: string): string {
+  const abs = Math.abs(n) % 100;
+  const last = abs % 10;
+  if (abs > 10 && abs < 20) return many;
+  if (last > 1 && last < 5) return few;
+  if (last === 1) return one;
+  return many;
+}
+
+/**
  * Рассылает дайджесты об откликах всем привязанным чатам.
  *
  * Возвращает, сколько сообщений ушло. Ошибка отправки одного чата не должна
@@ -234,6 +284,7 @@ export async function sendAlerts(
   if (rows.length === 0) return 0;
 
   const mark = db.prepare('UPDATE applications SET notified_at = ? WHERE id = ?');
+  const unmark = db.prepare('UPDATE applications SET notified_at = NULL WHERE id = ?');
   let sent = 0;
 
   for (const row of rows) {
@@ -250,9 +301,26 @@ export async function sendAlerts(
       lines.push('', 'Подготовьтесь: разбор вакансии и вопросы по вашему резюме — /dashboard');
     }
 
+    /*
+     * Заявка — атомарным UPDATE до отправки, а не после.
+     *
+     * Раньше два процесса выбирали одни и те же pending-строки и оба слали
+     * одно приглашение дважды. Теперь строка занимается условием
+     * `notified_at IS NULL`: второй получает changes = 0 и пропускает.
+     * Неудача сбрасывает заявку обратно в NULL — приглашение попробуется
+     * следующим тиком, а не потеряется молча.
+     */
+    const at = Date.now();
+    const claimed = db
+      .prepare('UPDATE applications SET notified_at = ? WHERE id = ? AND notified_at IS NULL')
+      .run(at, row.id);
+    if (claimed.changes === 0) continue;
+
     if (await notifyUser(row.user_id, lines.join('\n'))) {
-      mark.run(Date.now(), row.id);
+      mark.run(at, row.id);
       sent++;
+    } else {
+      unmark.run(row.id);
     }
   }
 

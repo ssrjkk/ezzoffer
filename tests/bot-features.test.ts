@@ -62,12 +62,11 @@ beforeEach(() => {
   db.exec(
     // Порядок обязателен: bookmarks и applications ссылаются на users, поэтому
     // дети удаляются раньше родителя — иначе SQLITE_CONSTRAINT_FOREIGNKEY.
-    'DELETE FROM bookmarks; DELETE FROM applications; DELETE FROM letters; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies;',
+    'DELETE FROM apply_events; DELETE FROM auth_attempts; DELETE FROM bookmarks; DELETE FROM applications; DELETE FROM letters; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies;',
   );
   resetCatalogCache();
   resetPacing();
   sent = [];
-  bot.resetSeenUpdates();
 });
 
 function seedUser(): void {

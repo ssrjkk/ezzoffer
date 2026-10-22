@@ -100,7 +100,7 @@ export function TelegramConnect() {
           квадратом с прямыми углами. Второй оттенок (#1C7ED6) в градиенте
           ничего не сообщал и только создавал ощущение объёма.
         */}
-          <span className="grid size-9 shrink-0 place-items-center bg-[#229ED9] text-white">
+          <span className="grid size-9 shrink-0 place-items-center bg-telegram text-white">
             <svg viewBox="0 0 24 24" className="size-4" fill="currentColor" aria-hidden>
               <path d="M21.9 4.3 18.7 19.4c-.2 1-.9 1.3-1.8.8l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-4.9 8.9-8c.4-.3-.1-.5-.6-.2L6.2 12.7 1.4 11.2c-1-.3-1-1 .2-1.5l19.1-7.4c.9-.3 1.6.2 1.2 2z" />
             </svg>

@@ -29,6 +29,7 @@ import { BOT_COMMANDS, BOT_MESSAGES } from './bot-data';
 import { computeSkillGaps } from './skill-gaps';
 import { findGigs } from './gigs';
 import { learningPath } from './learning-paths';
+import { logError } from './logger';
 
 /**
  * Обработчик апдейтов Telegram.
@@ -61,85 +62,100 @@ export type TelegramUpdate = {
 };
 
 /**
- * Защита от повторной обработки апдейта.
+ * Дедупликация апдейтов — единая точка: первичный ключ tg_inbox.
  *
- * Telegram ретраит доставку при не-2xx ответе, поэтому один и тот же update_id
- * может прийти несколько раз. Без проверки команда выполнялась повторно: для
- * /связать это не страшно (код одноразовый), а вот уведомления и статистика
- * рассылались бы дважды.
+ * Раньше здесь жили три механизма сразу: in-memory Set в этом файле, его
+ * копия в meta (`tg:seen-updates`, последние 1000 id) и отдельный INSERT OR
+ * IGNORE в вебхуке. Они дублировали друг друга и расходились по краям:
+ * Set забывал старые id (повтор через 1001 сообщение считался новым),
+ * а meta-список никто не чистил. Теперь арбитр один — строка inbox:
+ * повторный update_id отклоняется ключом, обработанные чистятся через сутки.
  *
- * Храним последние обработанные id в памяти процесса: update_id у Telegram
- * монотонно возрастает, поэтому достаточно отсекать всё, что уже встречалось.
- *
- * Память подкреплена таблицей meta: при рестарте процесса множество
- * восстанавливается из неё. Без этого окно повтора открывалось на каждый
- * рестарт — а рестарты здесь регулярны (деплой, планировщик, падения).
- * Задержанный ретрай Telegram после рестарта обрабатывался как новый апдейт:
- * команда выполнялась второй раз.
- *
- * Запись в meta идёт на каждый НОВЫЙ апдейт — это одна вставка на сообщение,
- * для локального SQLite дёшево. Семантика та же, что была: последние 1000 id.
+ * handleUpdate сознательно БЕЗ проверки повторов: его зовёт только
+ * processInbox (строка уже занята) и тесты. Кто проверяет — тот и владеет.
  */
-const seenUpdates = new Set<number>();
-const SEEN_UPDATES_LIMIT = 1000;
-const SEEN_UPDATES_META_KEY = 'tg:seen-updates';
-let seenUpdatesLoaded = false;
 
-function loadSeenUpdates(): void {
-  if (seenUpdatesLoaded) return;
-  seenUpdatesLoaded = true;
-  try {
-    const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(SEEN_UPDATES_META_KEY) as
-      { value: string } | undefined;
-    if (!row?.value) return;
-    const ids = JSON.parse(row.value) as unknown;
-    if (!Array.isArray(ids)) return;
-    for (const id of ids) {
-      if (typeof id === 'number' && Number.isFinite(id)) seenUpdates.add(id);
+/** Сколько раз битый апдейт повторить, прежде чем сдаться. */
+const INBOX_MAX_ATTEMPTS = 5;
+
+/**
+ * Разбор очереди входящих апдейтов Telegram.
+ *
+ * Вебхук только складывает тело в tg_inbox и отвечает 200: сетевая работа
+ * (ответы, hh-вызовы из /отклик) идёт здесь, в тике планировщика, а не в
+ * HTTP-запросе от Telegram. Раньше handleUpdate выполнялся прямо в вебхуке:
+ * долгий ответ приводил к ретраям, а ретраи — к риску отключения вебхука
+ * со стороны Telegram.
+ *
+ * Захват пачки — одним statement (UPDATE ... WHERE update_id IN (SELECT ...)):
+ * два процесса не разберут одну строку. Неудача сбрасывает заявку (claimed_at
+ * в NULL) для повтора; после INBOX_MAX_ATTEMPTS попыток строка помечается
+ * выполненной, чтобы одно битое сообщение не крутилось вечно.
+ */
+export async function processInbox(limit = 20): Promise<{ processed: number; failed: number }> {
+  const now = Date.now();
+  const size = Math.min(Math.max(1, Math.floor(limit)), 100);
+  db.prepare(
+    `UPDATE tg_inbox SET claimed_at = ? WHERE update_id IN (
+       SELECT update_id FROM tg_inbox
+       WHERE claimed_at IS NULL AND done_at IS NULL AND attempts < ?
+       ORDER BY update_id LIMIT ?
+     )`,
+  ).run(now, INBOX_MAX_ATTEMPTS, size);
+  const rows = db
+    .prepare('SELECT update_id, body, attempts FROM tg_inbox WHERE claimed_at = ?')
+    .all(now) as { update_id: number; body: string; attempts: number }[];
+
+  let processed = 0;
+  let failed = 0;
+  for (const row of rows) {
+    let update: TelegramUpdate | null = null;
+    try {
+      const parsed: unknown = JSON.parse(row.body);
+      if (parsed && typeof parsed === 'object' && 'update_id' in parsed) {
+        update = parsed as TelegramUpdate;
+      }
+    } catch {
+      update = null;
     }
-  } catch {
-    // Нет таблицы, битый JSON — начинаем с пустого множества, как раньше.
-  }
-}
-
-function persistSeenUpdates(): void {
-  try {
-    db.prepare(
-      'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
-    ).run(SEEN_UPDATES_META_KEY, JSON.stringify([...seenUpdates].slice(-SEEN_UPDATES_LIMIT)));
-  } catch {
-    // Защита от повторов — не условие обработки: молча пропускаем.
-  }
-}
-
-/** Возвращает false, если апдейт уже обрабатывался. */
-export function markUpdateSeen(updateId: number | undefined): boolean {
-  if (updateId === undefined) return true;
-  loadSeenUpdates();
-  if (seenUpdates.has(updateId)) return false;
-  seenUpdates.add(updateId);
-  // Сдерживаем рост памяти: при переполнении вытесняем самые старые записи.
-  if (seenUpdates.size > SEEN_UPDATES_LIMIT) {
-    const excess = seenUpdates.size - SEEN_UPDATES_LIMIT;
-    let removed = 0;
-    for (const id of seenUpdates) {
-      seenUpdates.delete(id);
-      if (++removed >= excess) break;
+    if (!update || typeof update.update_id !== 'number') {
+      finishInboxRow(row.update_id);
+      failed++;
+      continue;
+    }
+    try {
+      const res = await handleUpdate(update);
+      if (res === false) {
+        // Команда выполнена, а ответ не ушёл (сбой сети к Telegram):
+        // заявку отпускаем для повтора следующим тиком.
+        db.prepare('UPDATE tg_inbox SET claimed_at = NULL WHERE update_id = ?').run(row.update_id);
+        failed++;
+        continue;
+      }
+      finishInboxRow(row.update_id);
+      processed++;
+    } catch (err) {
+      logError('telegram:inbox', err instanceof Error ? err : new Error(String(err)), {
+        updateId: row.update_id,
+      });
+      if (row.attempts + 1 >= INBOX_MAX_ATTEMPTS) {
+        finishInboxRow(row.update_id);
+      } else {
+        db.prepare(
+          'UPDATE tg_inbox SET attempts = attempts + 1, claimed_at = NULL WHERE update_id = ?',
+        ).run(row.update_id);
+      }
+      failed++;
     }
   }
-  persistSeenUpdates();
-  return true;
+  return { processed, failed };
 }
 
-/** Сброс для тестов. */
-export function resetSeenUpdates(): void {
-  seenUpdates.clear();
-  seenUpdatesLoaded = true;
-  try {
-    db.prepare('DELETE FROM meta WHERE key = ?').run(SEEN_UPDATES_META_KEY);
-  } catch {
-    // Тестовая БД без meta — нечего чистить.
-  }
+function finishInboxRow(updateId: number): void {
+  db.prepare('UPDATE tg_inbox SET done_at = ?, claimed_at = NULL WHERE update_id = ?').run(
+    Date.now(),
+    updateId,
+  );
 }
 
 export type Reply = {
@@ -538,7 +554,7 @@ const HELP = [
   '/советы — что сделать прямо сейчас',
   '/навыки — чего не хватает в резюме по вашим откликам',
   '/подработка — частичная занятость и заказы с фриланс-досок',
-  '/связать <код> — привязать аккаунт из кабинета',
+  '/связать «код» — привязать аккаунт из кабинета',
   '/выйти — отвязать этот чат',
   '/помощь — эта справка',
   '',
@@ -1023,10 +1039,8 @@ async function handleCallback(update: TelegramUpdate): Promise<boolean | null> {
  * Возвращает результат отправки ответа (true — сообщение ушло).
  */
 export async function handleUpdate(update: TelegramUpdate): Promise<boolean | null> {
-  // Telegram повторно доставляет апдейт при не-2xx ответе; обрабатывать его
-  // второй раз нельзя, иначе пользователь получит дубликат ответа.
-  if (!markUpdateSeen(update.update_id)) return null;
-
+  // Без проверки повторов: дедупликация — на первичном ключе tg_inbox,
+  // handleUpdate вызывается только владельцем строки (processInbox) и тестами.
   if (update.callback_query) return handleCallback(update);
 
   const chatId = update.message?.chat?.id;

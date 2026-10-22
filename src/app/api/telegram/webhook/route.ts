@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { timingSafeEqual } from 'node:crypto';
+import { db } from '@/lib/db';
 import { telegramConfigured, telegramWebhookSecret, purgeExpiredCodes } from '@/lib/telegram';
-import { handleUpdate, type TelegramUpdate } from '@/lib/telegram-bot';
-import { logError, logInfo } from '@/lib/logger';
+import type { TelegramUpdate } from '@/lib/telegram-bot';
+import { logInfo } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -41,22 +42,35 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Некорректный JSON' }, { status: 400 });
   }
 
-  // Telegram ждёт 200 даже при ошибке обработки, иначе будет ретраить апдейт.
-  try {
-    const reply = await handleUpdate(update);
-    if (reply) {
-      // Нажатие кнопки и обычное сообщение различаются в логах: без этого
-      // нельзя отличить «человек нажал кнопку и ничего не произошло» от
-      // «сообщение дошло и осталось без ответа».
-      logInfo('telegram', update.callback_query ? 'нажатие кнопки' : 'апдейт обработан', {
-        updateId: update.update_id,
-      });
-    }
-  } catch (err) {
-    logError('telegram:webhook', err);
-  } finally {
-    purgeExpiredCodes();
+  // Только приём в очередь — никакой обработки в запросе.
+  //
+  // Раньше handleUpdate выполнялся прямо здесь: ответ зависел от сетевых
+  // вызовов (ответ пользователю, hh-запросы из /отклик), и долгий ответ
+  // приводил к ретраям Telegram, а ретраи — к риску отключения вебхука.
+  // Теперь разбор идёт в тике планировщика (processInbox), а маршрут
+  // отвечает 200 сразу после записи. Повторный update_id отклоняется
+  // первичным ключом — это и есть дедупликация, единой точкой.
+  if (typeof update.update_id !== 'number') {
+    return Response.json({ ok: true });
   }
+  const stored = db
+    .prepare(
+      'INSERT OR IGNORE INTO tg_inbox (update_id, body, received_at) VALUES (?, ?, ?)',
+    )
+    .run(update.update_id, JSON.stringify(update).slice(0, 20000), Date.now());
+  if (stored.changes === 0) {
+    return Response.json({ ok: true, duplicate: true });
+  }
+  // Чистка обработанных старше суток — раз в ~100 апдейтов, не на каждом.
+  if (update.update_id % 100 === 0) {
+    db.prepare('DELETE FROM tg_inbox WHERE done_at IS NOT NULL AND done_at < ?').run(
+      Date.now() - 24 * 60 * 60 * 1000,
+    );
+  }
+  logInfo('telegram', update.callback_query ? 'нажатие кнопки' : 'апдейт в очереди', {
+    updateId: update.update_id,
+  });
+  purgeExpiredCodes();
 
   return Response.json({ ok: true });
 }

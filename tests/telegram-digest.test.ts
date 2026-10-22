@@ -83,7 +83,7 @@ const net = captureFetch();
 
 beforeEach(() => {
   db.exec(
-    'DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM meta;',
+    'DELETE FROM apply_events; DELETE FROM auth_attempts; DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM meta;',
   );
   resetNotificationState();
   net.bodies.length = 0;
@@ -454,6 +454,56 @@ test('упавшая отправка не помечает отклиск ка�
     1,
     'после сбоя уведомление не повторилось — приглашение потеряно',
   );
+});
+
+// ------------------------------------------------------------------ сроки тарифа
+
+test('предупреждение об истечении тарифа уходит один раз на срок', async () => {
+  const { sendExpiryWarnings } = await import('../src/lib/telegram-digest');
+  const uid = seedUser();
+  db.prepare('UPDATE users SET plan_expires_at = ?, plan = ? WHERE id = ?').run(
+    Date.now() + 2 * 86_400_000,
+    'pro',
+    uid,
+  );
+
+  assert.equal(await sendExpiryWarnings(), 1, 'предупреждение не ушло');
+  assert.match(lastText, /заканчивается через 2 дн/i, `текст без срока: «${lastText}»`);
+  assert.match(lastText, /dashboard\/settings/i, 'не сказано, где продлить');
+
+  assert.equal(await sendExpiryWarnings(), 0, 'предупреждение ушло повторно');
+});
+
+test('далёкий срок не спамит', async () => {
+  const { sendExpiryWarnings } = await import('../src/lib/telegram-digest');
+  const uid = seedUser();
+  db.prepare('UPDATE users SET plan_expires_at = ?, plan = ? WHERE id = ?').run(
+    Date.now() + 30 * 86_400_000,
+    'pro',
+    uid,
+  );
+  assert.equal(await sendExpiryWarnings(), 0, 'предупреждение о сроке через месяц');
+});
+
+test('новый срок после продления предупреждается заново', async () => {
+  const { sendExpiryWarnings } = await import('../src/lib/telegram-digest');
+  const uid = seedUser();
+  db.prepare('UPDATE users SET plan_expires_at = ?, plan = ? WHERE id = ?').run(
+    Date.now() + 2 * 86_400_000,
+    'pro',
+    uid,
+  );
+  assert.equal(await sendExpiryWarnings(), 1);
+  // Продлили: другой expires_at — новое предупреждение разрешено.
+  db.prepare('UPDATE users SET plan_expires_at = ? WHERE id = ?').run(
+    Date.now() + 30 * 86_400_000,
+    uid,
+  );
+  db.prepare('UPDATE users SET plan_expires_at = ? WHERE id = ?').run(
+    Date.now() + 1 * 86_400_000,
+    uid,
+  );
+  assert.equal(await sendExpiryWarnings(), 1, 'после продления предупреждение не пришло');
 });
 
 async function lastSentText(): Promise<string> {
