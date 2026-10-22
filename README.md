@@ -73,6 +73,9 @@ npm run start:prod # production-сервер (standalone) http://localhost:3000
 npm run lint      # eslint
 npm test          # тесты (node --test, без внешних сервисов)
 npm run seed      # демо-аккаунт с заполненным кабинетом (demo@ezoffer.ru / demo123)
+npm run bot:poll    # опрос Telegram для локального стенда (вместо вебхука)
+npm run bot:menu    # кнопка меню + описание бота (один раз после смены команд)
+npm run check:links # все внутренние ссылки сайта (sitemap + дашборд)
 ```
 
 > **Windows / better-sqlite3.** Версия 12.11.1 зафиксирована в `package.json` и имеет

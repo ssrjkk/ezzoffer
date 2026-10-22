@@ -458,6 +458,35 @@ test('кнопка кабинета не тащит локальный URL в Te
   }
 });
 
+test('голые 6 цифр от непривязанного чата привязывают без /связать', async () => {
+  /*
+   * Человек копирует код из кабинета и шлёт его как есть — требовать при этом
+   * команду «/связать» значит терять половину привязок на ровном месте.
+   */
+  db.prepare(
+    `INSERT INTO users (id, email, password_hash, plan, plan_expires_at, created_at, mode)
+     VALUES (9, 'bare@test', 'h', 'pro', ?, ?, 'live')`,
+  ).run(Date.now() + 100_000, Date.now());
+  const { issueLinkCode } = await import('../src/lib/telegram');
+  const code = issueLinkCode(9);
+  await bot.handleUpdate({ update_id: 7001, message: { chat: { id: 555 }, text: code } });
+  const row = db.prepare('SELECT telegram_chat_id FROM users WHERE id = 9').get() as {
+    telegram_chat_id: string | null;
+  };
+  assert.equal(row.telegram_chat_id, '555', 'чат не привязался по голому коду');
+  assert.match(sent[sent.length - 1]!.text, /привязан/i, 'нет подтверждения привязки');
+});
+
+test('цифры от привязанного чата не дёргают привязку', async () => {
+  seedUser();
+  await bot.handleUpdate({ update_id: 7002, message: { chat: { id: 777 }, text: '123456' } });
+  const row = db.prepare('SELECT telegram_chat_id FROM users WHERE id = 1').get() as {
+    telegram_chat_id: string | null;
+  };
+  assert.equal(row.telegram_chat_id, '777', 'привязка перезаписана случайными цифрами');
+  assert.match(sent[sent.length - 1]!.text, /Пришлите команду/, 'ожидалась обычная подсказка');
+});
+
 test('wire-формат клавиатуры: data превращается в callback_data', async () => {
   /*
    * Прямая регрессия молчавшего бота: кнопки уходили с полем `data`,

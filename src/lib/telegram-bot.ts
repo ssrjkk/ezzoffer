@@ -1103,6 +1103,18 @@ export async function handleUpdate(update: TelegramUpdate): Promise<boolean | nu
 
   // Первое сообщение без команды — тоже приглашение.
   if (!parsed) {
+    /*
+     * Голые 6 цифр от непривязанного чата — это код из кабинета, который
+     * человек прислал без «/связать»: требовать команду здесь — бюрократия
+     * ради бюрократии. Привязанным чатам цифры не трогаем: у них это может
+     * быть что угодно, а перебор кодов от чужого имени нам не нужен.
+     */
+    if (/^\d{6}$/.test(text.trim()) && !userByChatId(chat)) {
+      return handleUpdate({
+        update_id: update.update_id,
+        message: { ...update.message, text: `/связать ${text.trim()}` },
+      } as TelegramUpdate);
+    }
     return sendTelegramMessage(chat, `Пришлите команду, например /start.\n\n${HELP}`);
   }
 
