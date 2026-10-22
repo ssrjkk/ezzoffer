@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Logo } from './site-header';
+import { ServiceStatus } from './service-status';
 
 /*
  * Подвал.
@@ -59,10 +60,7 @@ export function SiteFooter() {
               Подбор вакансий, подходящее резюме и автоотклик с сопроводительным письмом. Пробный
               период 24 часа без привязки карты.
             </p>
-            <p className="mt-5 flex items-center gap-2 font-mono text-xs uppercase tracking-[0.1em] text-muted">
-              <span className="inline-block size-1.5 rounded-full bg-success" aria-hidden />
-              Сервис работает штатно
-            </p>
+            <ServiceStatus />
           </div>
           {columns.map((col) => (
             <div key={col.title}>
@@ -99,19 +97,14 @@ export function SiteFooter() {
 
         <div className="mt-12 flex flex-col gap-4 border-t border-line pt-6 font-mono text-xs text-muted md:flex-row md:items-center md:justify-between">
           <p>© {new Date().getFullYear()} EZOffer. Все права защищены.</p>
+          {/*
+            Ссылок «Условия сервиса» и «Политика конфиденциальности» здесь
+            больше нет: отдельных страниц с этими текстами нет, а вести
+            с такими подписями в FAQ — значит обещать документ, которого нет.
+            Когда тексты появятся (нужен юрист, а не копирайтер), ссылки
+            вернутся с честными адресами.
+          */}
           <div className="flex flex-wrap gap-x-6 gap-y-1">
-            <Link
-              href="/faq"
-              className="inline-flex min-h-11 items-center transition-colors hover:text-ink"
-            >
-              Условия сервиса
-            </Link>
-            <Link
-              href="/faq"
-              className="inline-flex min-h-11 items-center transition-colors hover:text-ink"
-            >
-              Политика конфиденциальности
-            </Link>
             <Link
               href="/about"
               className="inline-flex min-h-11 items-center transition-colors hover:text-ink"

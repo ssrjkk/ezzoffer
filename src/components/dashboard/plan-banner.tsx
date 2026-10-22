@@ -110,6 +110,7 @@ export function TodayLimitBar({ today, todayLimit }: { today: number; todayLimit
         aria-valuenow={today}
         aria-valuemin={0}
         aria-valuemax={todayLimit}
+        aria-valuetext={`${today} из ${todayLimit} откликов использовано`}
         aria-label="Использование дневного лимита откликов"
       >
         <div
@@ -119,7 +120,7 @@ export function TodayLimitBar({ today, todayLimit }: { today: number; todayLimit
       </div>
 
       <p className="mt-2 text-xs text-muted">
-        {spent ? 'Лимит исчерпан — сброс в полночь' : `Осталось ${todayLimit - today} откликов`}
+        {spent ? 'Лимит исчерпан — сброс в полночь по Москве' : `Осталось ${todayLimit - today} откликов`}
       </p>
     </div>
   );

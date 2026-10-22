@@ -30,6 +30,26 @@ export function globalHourlyCap(): number {
   return num(process.env.AUTOAPPLY_HOURLY_CAP, 12);
 }
 
+/**
+ * Глобальные рубильники автооткликов.
+ *
+ * AUTOAPPLY_ENABLED=0 — полная остановка отправки (планировщик и ручные
+ * запуски отвечают «выключено», ничего не трогая). Нужен, чтобы остановить
+ * сервис одним флагом, а не выключением поиска за поиском.
+ *
+ * AUTOAPPLY_DRY_RUN=1 — холостой прогон: подбор, ранжирование и письма идут
+ * как обычно, но вместо POST в hh пишется отметка dry_run. Нужен для
+ * проверки логики на живых данных без внешних эффектов. Историю откликов не
+ * трогает: фиктивные строки в applications врали бы воронке.
+ */
+export function autoapplyEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  return env.AUTOAPPLY_ENABLED !== '0';
+}
+
+export function autoapplyDryRun(env: Record<string, string | undefined> = process.env): boolean {
+  return env.AUTOAPPLY_DRY_RUN === '1';
+}
+
 /** Минимальный интервал между откликами, секунды. */
 export function minApplyIntervalSec(): number {
   return num(process.env.AUTOAPPLY_MIN_INTERVAL_SEC, 45);

@@ -27,13 +27,21 @@ export function planDailyLimit(plan: string): number {
   }
 }
 
-/** Число резюме, доступных по тарифу. 0 = не ограничено (0 активный тариф блокирует по isPlanActive). */
+/**
+ * Число резюме, доступных по тарифу. 0 = не ограничено.
+ *
+ * Значения — те же, что в каталоге тарифов (payments/catalog.ts): расхождение
+ * когда-то показывало человеку «5 резюме» на витрине и резало на первом.
+ * Источник правды для enforcement — эта функция, витрина обязана повторять
+ * её числа, а не наоборот.
+ */
 export function planResumeLimit(plan: string): number {
   switch (plan) {
     case 'start':
-      return 1;
-    case 'trial':
+      return 5;
     case 'pro':
+      return 20;
+    case 'trial':
     case 'beta_life':
     case 'expert':
       return 0;

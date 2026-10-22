@@ -36,7 +36,7 @@ export default async function DashboardPage() {
           <div>
             <div className="flex flex-wrap items-center gap-3">
               <h1 className="font-serif text-2xl leading-snug sm:text-3xl">
-                Добро пожаловать{user.name ? `, ${user.name}` : ''}
+                {greeting()}{user.name ? `, ${user.name}` : ''}
               </h1>
               <Badge tone={active ? 'success' : 'warn'}>{active ? 'Активен' : 'Не активен'}</Badge>
             </div>
@@ -135,6 +135,19 @@ export default async function DashboardPage() {
 
 type Series = Stats['series'];
 type SeriesKey = 'sent' | 'viewed' | 'responded' | 'invited';
+
+/** Приветствие по московскому времени: «Добро пожаловать» в полночь звучит как автоответчик. */
+function greeting(nowMs: number = Date.now()): string {
+  const hour = Number(
+    new Intl.DateTimeFormat('ru-RU', { timeZone: 'Europe/Moscow', hour: 'numeric' }).format(
+      new Date(nowMs),
+    ),
+  );
+  if (hour >= 5 && hour < 12) return 'Доброе утро';
+  if (hour >= 12 && hour < 18) return 'Добрый день';
+  if (hour >= 18 && hour < 24) return 'Добрый вечер';
+  return 'Доброй ночи';
+}
 
 /**
  * Раньше карточки и «недельная» таблица были зашиты на константы (+12%, 12/18/15/20…),

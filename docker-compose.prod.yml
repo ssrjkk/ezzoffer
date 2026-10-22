@@ -18,6 +18,9 @@ services:
       - NODE_ENV=production
       - SITE_URL=${SITE_URL:-https://ezoffer.ru}
       - PORT=3000
+      # Московское время внутри контейнера: границы суток, лимиты и «рабочие
+      # часы» считаются по Москве. Без TZ сервер живёт в UTC и всё едет на 3 часа.
+      - TZ=Europe/Moscow
       - EZOFFER_DB_PATH=/app/data/ezoffer.db
       - EZOFFER_SILENT=0
       # OAuth-приложение hh.ru. Пусто — работает всё, кроме автооткликов.

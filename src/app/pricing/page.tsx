@@ -1,12 +1,13 @@
 import type { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 import { Section, SectionHead } from '@/components/ui';
 import { PricingSection } from '@/components/home/pricing';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta('/pricing', {
   title: 'Тарифы',
   description:
     'Тарифы EZOffer: Старт, Про и Эксперт. Пробный период 24 часа без карты, отмена в один клик.',
-};
+});
 
 export default function PricingPage() {
   return (

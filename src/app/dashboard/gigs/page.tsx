@@ -13,7 +13,6 @@ import {
 import type { Direction, WorkMode } from '@/lib/direction';
 import type { Level } from '@/lib/data';
 import { Panel } from '@/components/dashboard/ui';
-import { Section, SectionHead } from '@/components/ui';
 
 export const metadata: Metadata = { title: 'Подработка и фриланс' };
 export const dynamic = 'force-dynamic';
@@ -65,19 +64,21 @@ export default async function GigsPage({ searchParams }: { searchParams: Promise
   };
 
   return (
-    <>
-      <Section className="border-t-0 pt-16 md:pt-24">
-        <SectionHead
-          center={false}
-          eyebrow="Подработка"
-          level="h1"
-          title={
-            <>
-              Работа <span className="text-accent">по часам</span> и заказы
-            </>
-          }
-          sub="Подработка с частичной занятостью и заказы с фриланс-досок. Это разные вещи, поэтому и фильтра два: заказ — не подработка."
-        />
+    <div>
+      {/*
+        Без публичного Section: у кабинета своя сетка (max-w-6xl + свои поля),
+        а Section приносил container-x с другим max-w и своими отступами —
+        на этих двух страницах поля и вертикаль не совпадали с остальными
+        восемью разделами. Заголовок — как везде в кабинете: h1 + подпись.
+      */}
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted">Подработка</p>
+      <h1 className="mt-2 font-serif text-2xl leading-snug text-ink">
+        Работа <span className="text-accent">по часам</span> и заказы
+      </h1>
+      <p className="mt-1 max-w-prose text-sm text-muted">
+        Подработка с частичной занятостью и заказы с фриланс-досок. Это разные вещи, поэтому и
+        фильтра два: заказ — не подработка.
+      </p>
 
         <div className="mt-6 flex flex-wrap gap-2">
           <FilterChip
@@ -139,8 +140,7 @@ export default async function GigsPage({ searchParams }: { searchParams: Promise
             </>
           )}
         </div>
-      </Section>
-    </>
+    </div>
   );
 }
 

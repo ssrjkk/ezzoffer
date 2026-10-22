@@ -60,7 +60,7 @@ export function serializeApplication(row: ApplicationRow) {
 
 function serializeApplicationWith(
   row: ApplicationRow,
-  vacancy: ReturnType<typeof getVacancyBySlug>,
+  vacancy: VacancyCard | null,
 ) {
   return {
     id: row.id,
@@ -104,7 +104,7 @@ export function listApplications(userId: number, limit = 200) {
   const rows = db
     .prepare('SELECT * FROM applications WHERE user_id = ? ORDER BY sent_at DESC, id DESC LIMIT ?')
     .all(userId, Math.min(Math.max(1, Math.floor(limit)), 200)) as ApplicationRow[];
-  return rows.map((row) => serializeApplicationWith(row, getVacancyBySlug(row.job_slug)));
+  return serializeWithVacancies(rows);
 }
 
 /**
@@ -144,7 +144,40 @@ export function listApplicationsPage(
   const last = page[page.length - 1];
 
   return {
-    items: page.map((row) => serializeApplicationWith(row, getVacancyBySlug(row.job_slug))),
+    items: serializeWithVacancies(page),
     nextCursor: hasMore && last ? { sentAt: last.sent_at, id: last.id } : null,
   };
+}
+
+/**
+ * Пакетная подгрузка вакансий одним запросом.
+ *
+ * Раньше каждая строка тянула getVacancyBySlug — то есть по SELECT на отклик:
+ * открытие кабинета с 200 откликами делало 200 запросов подряд. Здесь один
+ * IN-запрос на страницу, дальше — Map в памяти.
+ *
+ * Читаем только скалярные поля для карточки: JSON-колонки (requirements и
+ * т.п.) здесь не разбираются, чтобы не тащить парсинг ради списка.
+ */
+type VacancyCard = {
+  slug: string;
+  title: string;
+  company: string;
+  salary: string;
+  level: string;
+  format: string;
+  city: string;
+  source: string;
+  source_url: string | null;
+};
+
+function serializeWithVacancies(rows: ApplicationRow[]) {
+  if (rows.length === 0) return [];
+  const slugs = [...new Set(rows.map((r) => r.job_slug))];
+  const placeholders = slugs.map(() => '?').join(',');
+  const found = db
+    .prepare(`SELECT * FROM vacancies WHERE slug IN (${placeholders})`)
+    .all(...slugs) as VacancyCard[];
+  const bySlug = new Map(found.map((v) => [v.slug, v]));
+  return rows.map((row) => serializeApplicationWith(row, bySlug.get(row.job_slug) ?? null));
 }

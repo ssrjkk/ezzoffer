@@ -6,8 +6,9 @@ services:
     ports:
       - '3000:3000'
     environment:
-      - SITE_URL=https://ezoffer.ru
+      - SITE_URL=${SITE_URL:-http://localhost:3000}
       - PORT=3000
+      - TZ=Europe/Moscow
       - HH_ACCESS_TOKEN=${HH_ACCESS_TOKEN:-}
     volumes:
       - ./data:/app/data

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Badge, Panel, btnPrimary, btnGhost, StatusMessage } from '@/components/dashboard/ui';
+import { formatRelativeDay, formatShortDateTime } from '@/lib/format-date';
 import type { LastRunReport } from '@/lib/autoapply-report';
 
 /**
@@ -29,16 +30,7 @@ const TONE: Record<LastRunReport['reasons'][number]['tone'], string> = {
  * ограничение через неделю. Поэтому дальше первых двух дней выводится дата.
  */
 function untilText(at: number): string {
-  const date = new Date(at);
-  const now = new Date();
-  const time = date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-  if (date.toDateString() === now.toDateString()) return `сегодня в ${time}`;
-
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  if (date.toDateString() === tomorrow.toDateString()) return `завтра в ${time}`;
-
-  return `${date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' })}, ${time}`;
+  return formatRelativeDay(at);
 }
 
 export function AutoApplyPause({ initialPaused }: { initialPaused: boolean }) {
@@ -198,12 +190,7 @@ export function AutoApplyPause({ initialPaused }: { initialPaused: boolean }) {
         ) : (
           <>
             <p className="mt-1 text-sm text-muted">
-              {new Date(lastRun.at).toLocaleString('ru-RU', {
-                day: '2-digit',
-                month: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
+              {formatShortDateTime(lastRun.at)} · общий итог сервиса, не только ваш
             </p>
             <ul className="mt-3 space-y-2">
               {lastRun.reasons.map((r) => (

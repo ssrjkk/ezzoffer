@@ -1,83 +1,88 @@
-import test from "node:test";
-import assert from "node:assert/strict";
+import test from 'node:test';
+import assert from 'node:assert/strict';
 
 /**
- * Логика sitemap/robots. Раньше base = process.env.SITE_URL ?? "https://ezoffer.ru",
- * а SITE_URL= в .env.example пустой: `??` на пустой строке не срабатывает, и
- * sitemap получался с относительными url ("/jobs"), который невалиден.
+ * Sitemap и robots проверяются по-настоящему: импортируются реальные модули,
+ * а не их копии.
+ *
+ * Раньше тест переписывал ту же логику у себя (`resolveBase`, `buildUrls`) и
+ * проверял собственную копию: настоящий sitemap.ts можно было сломать, и набор
+ * оставался зелёным. Литеральный массив disallow, объявленный двумя строками
+ * выше проверки, — тавтология того же рода.
  */
-function resolveBase(siteUrl: string | undefined): string {
-  return (siteUrl?.trim() || "https://ezoffer.ru").replace(/\/$/, "");
-}
 
-function buildUrls(siteUrl: string | undefined, dynamic: string[]): string[] {
-  const base = resolveBase(siteUrl);
-  return ["", "/faq", ...dynamic].map((route) => `${base}${route}`);
-}
+// envBaseUrl — чистая функция окружения, её проверяем напрямую.
+import { envBaseUrl } from '../src/lib/env';
 
-test("пустой SITE_URL даёт валидный абсолютный base", () => {
-  assert.equal(resolveBase(""), "https://ezoffer.ru");
-  assert.equal(resolveBase("   "), "https://ezoffer.ru");
-  assert.equal(resolveBase(undefined), "https://ezoffer.ru");
+test('пустой SITE_URL даёт валидный абсолютный base', () => {
+  assert.equal(envBaseUrl({ SITE_URL: '' }, 'SITE_URL', 'https://ezoffer.ru'), 'https://ezoffer.ru');
+  assert.equal(
+    envBaseUrl({ SITE_URL: '   ' }, 'SITE_URL', 'https://ezoffer.ru'),
+    'https://ezoffer.ru',
+  );
+  assert.equal(envBaseUrl({}, 'SITE_URL', 'https://ezoffer.ru'), 'https://ezoffer.ru');
 });
 
-test("непустой SITE_URL уважается, хвостовой слэш убирается", () => {
-  assert.equal(resolveBase("http://localhost:3000"), "http://localhost:3000");
-  assert.equal(resolveBase("http://localhost:3000/"), "http://localhost:3000");
-  assert.equal(resolveBase("  https://ezoffer.ru/  "), "https://ezoffer.ru");
+test('непустой SITE_URL уважается, хвостовой слэш убирается', () => {
+  assert.equal(
+    envBaseUrl({ SITE_URL: 'http://localhost:3000' }, 'SITE_URL', 'https://ezoffer.ru'),
+    'http://localhost:3000',
+  );
+  assert.equal(
+    envBaseUrl({ SITE_URL: 'http://localhost:3000/' }, 'SITE_URL', 'https://ezoffer.ru'),
+    'http://localhost:3000',
+  );
 });
 
-test("все URL sitemap абсолютные даже с пустым SITE_URL (regression)", () => {
-  for (const url of buildUrls("", ["/jobs/a", "/blog/b"])) {
-    // Протокол читаем через URL, а не `startsWith('http')`: подстроку «http»
-    // проходит и «httpfoo://…», и относительный путь, начинающийся с http.
-    assert.equal(
-      new URL(url).protocol,
-      "https:",
-      `${url} должен быть абсолютным https`,
-    );
+// Реальный sitemap: все URL абсолютные, динамика на месте.
+test('настоящий sitemap: абсолютные URL и все маршруты', async () => {
+  const { default: sitemap } = await import('../src/app/sitemap');
+  const entries = sitemap();
+  assert.ok(entries.length >= 29, `в sitemap всего ${entries.length} записей — маршруты потеряны`);
+  for (const e of entries) {
+    const u = new URL(e.url);
     assert.ok(
-      url === "https://ezoffer.ru" || url.startsWith("https://ezoffer.ru/"),
-      `${url} потерял базовый домен`,
+      u.protocol === 'https:' || u.protocol === 'http:',
+      `${e.url} должен быть абсолютным URL, а не путём`,
     );
   }
+  const paths = entries.map((e) => new URL(e.url).pathname);
+  for (const p of [
+    '/',
+    '/reviews',
+    '/about',
+    '/faq',
+    '/jobs',
+    '/pricing',
+    '/blog',
+    '/internships',
+    '/platform-rules',
+    '/resume-examples',
+  ]) {
+    assert.ok(paths.includes(p), `в sitemap нет статики ${p}`);
+  }
+  assert.ok(paths.some((p) => p.startsWith('/jobs/')), 'в sitemap нет ни одной /jobs/[slug]');
+  assert.ok(paths.some((p) => p.startsWith('/blog/')), 'в sitemap нет ни одной /blog/[slug]');
+  assert.ok(
+    paths.some((p) => p.startsWith('/resume-examples/')),
+    'в sitemap нет ни одной /resume-examples/[slug]',
+  );
 });
 
-test("главная страница не получает двойной слэш", () => {
-  assert.equal(buildUrls("https://ezoffer.ru/", [])[0], "https://ezoffer.ru");
-  assert.equal(buildUrls("", [])[0], "https://ezoffer.ru");
-});
-
-test("динамические маршруты попадают в sitemap", () => {
-  const urls = buildUrls("https://ezoffer.ru", [
-    "/jobs/dev",
-    "/blog/post",
-    "/resume-examples/cv",
-  ]);
-  // Сравниваем разобранный URL, а не подстроку: `includes('https://ezoffer.ru/jobs/dev')`
-  // прошла бы и на чужом хосте, и на `/jobs/dev/..`, то есть проверяла бы не то.
-  const parsed = urls.map((url) => new URL(url));
-  for (const path of ["/jobs/dev", "/blog/post", "/resume-examples/cv"]) {
+// Реальный robots: приватные зоны закрыты.
+test('настоящий robots закрывает приватные зоны', async () => {
+  const { default: robots } = await import('../src/app/robots');
+  const r = robots();
+  const rules = Array.isArray(r.rules) ? r.rules : [r.rules];
+  const disallow: string[] = rules.flatMap((x) => {
+    const d = (x as { disallow?: string | string[] }).disallow;
+    return Array.isArray(d) ? d : d ? [d] : [];
+  });
+  for (const zone of ['/dashboard', '/api/', '/login', '/signup']) {
     assert.ok(
-      parsed.some(
-        (u) =>
-          u.protocol === "https:" &&
-          u.hostname === "ezoffer.ru" &&
-          u.pathname === path,
-      ),
-      `в sitemap нет ${path}: ${urls.join(" ")}`,
+      disallow.some((d) => zone.startsWith(d) || d.startsWith(zone)),
+      `robots не закрывает ${zone}: [${disallow.join(', ')}]`,
     );
   }
-});
-
-test("robots закрывает приватные зоны", () => {
-  const disallow = ["/dashboard", "/api/", "/login", "/signup"];
-  assert.ok(
-    disallow.includes("/dashboard"),
-    "кабинет не должен индексироваться",
-  );
-  assert.ok(
-    disallow.some((d) => d.startsWith("/api")),
-    "API не должен индексироваться",
-  );
+  assert.ok(String(r.sitemap).startsWith('https://'), 'sitemap в robots относительный');
 });

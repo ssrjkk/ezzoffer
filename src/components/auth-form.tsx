@@ -35,7 +35,11 @@ export function AuthForm({
 
   // next берётся из query-строки и уходит в редирект: при «//evil.com» или
   // «https://…» это открытая переадресация, поэтому допускаем только путь.
-  const dest = next?.startsWith('/') && !next.startsWith('//') ? next : '/dashboard';
+  // Обратный слэш тоже запрещён: `/\evil.com` нормализуется в `//evil.com`.
+  const dest =
+    next?.startsWith('/') && !next.startsWith('//') && !next.includes('\\')
+      ? next
+      : '/dashboard';
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -137,21 +141,18 @@ export function AuthForm({
           <label className="flex items-start gap-2.5 text-xs leading-relaxed text-muted">
             <input type="checkbox" required className="mt-0.5 size-4 accent-accent" />
             <span>
-              Согласен с{' '}
+              {/* Ссылка ведёт только на реально существующий текст. Отдельных
+                  «Условий сервиса» и «Политики» нет (нужен юрист, а не
+                  копирайтер) — обещать их галочкой было бы враньём, за которое
+                  уже убраны такие же ссылки из подвала. */}
+              Продолжая, вы принимаете{' '}
               <Link
                 href="/platform-rules"
                 className="text-ink underline decoration-line underline-offset-2 hover:text-accent"
               >
-                правилами платформ
-              </Link>{' '}
-              и{' '}
-              <Link
-                href="/faq"
-                className="text-ink underline decoration-line underline-offset-2 hover:text-accent"
-              >
-                условиями сервиса
+                правила платформ и условия сервиса
               </Link>
-              . Мы храним данные для авторизации — подробности в правилах платформ.
+              . Мы храним данные для авторизации — подробности там же.
             </span>
           </label>
         ) : null}
@@ -167,7 +168,7 @@ export function AuthForm({
         {mode === 'signup' && needsVerification ? (
           <div
             role="status"
-            className="rounded-xl border border-line bg-paper px-4 py-3 text-sm leading-relaxed text-ink"
+            className="rounded-sm border border-line bg-paper px-4 py-3 text-sm leading-relaxed text-ink"
           >
             <p className="font-semibold">
               Проверьте почту — мы отправили письмо на {email || 'ваш адрес'}.

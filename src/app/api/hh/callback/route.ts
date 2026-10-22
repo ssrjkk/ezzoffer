@@ -21,6 +21,9 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL('/dashboard/settings?hh=expired', request.url));
   }
   db.prepare('DELETE FROM oauth_states WHERE token = ?').run(state);
+  // Заодно выметаем протухшие чужие state: без чистки таблица растёт
+  // бесконечно — каждый заход на /api/hh/connect оставляет строку.
+  db.prepare('DELETE FROM oauth_states WHERE expires_at <= ?').run(Date.now());
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(row.user_id) as User | undefined;
   if (!user) {

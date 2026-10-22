@@ -1,5 +1,6 @@
 import { db, type User } from './db';
 import { isPlanActive, planDailyLimit } from './plans';
+import { DAY_MS, MSK_OFFSET_MS, mskDayKey, mskDayStartMs } from './moscow-day';
 
 export type Stats = {
   sent: number;
@@ -20,8 +21,8 @@ export type Stats = {
 };
 
 export function getStats(userId: number): Stats {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  const now = Date.now();
+  const todayStart = mskDayStartMs(now);
 
   const base = db
     .prepare(
@@ -32,7 +33,7 @@ export function getStats(userId: number): Stats {
         SUM(CASE WHEN response = 'interview' AND withdrawn = 0 THEN 1 ELSE 0 END) AS invited,
         SUM(CASE WHEN response = 'decline' AND withdrawn = 0 THEN 1 ELSE 0 END) AS declined,
         SUM(CASE WHEN response = 'question' AND withdrawn = 0 THEN 1 ELSE 0 END) AS questions,
-        SUM(withdrawn) AS withdrawn
+        SUM(CASE WHEN withdrawn != 0 THEN 1 ELSE 0 END) AS withdrawn
        FROM applications WHERE user_id = ?`,
     )
     .get(userId) as {
@@ -48,9 +49,9 @@ export function getStats(userId: number): Stats {
   const today = (
     db
       .prepare(
-        'SELECT COUNT(*) AS c FROM applications WHERE user_id = ? AND sent_at >= ? AND withdrawn = 0',
+        'SELECT COUNT(*) AS c FROM applications WHERE user_id = ? AND sent_at >= ?',
       )
-      .get(userId, todayStart.getTime()) as { c: number }
+      .get(userId, todayStart) as { c: number }
   ).c;
 
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as User;
@@ -87,35 +88,42 @@ export function getStats(userId: number): Stats {
     hint =
       'Отклики доходят, но приглашений мало — проверьте сопроводительное письмо и зарплатные ожидания.';
   } else if (sent >= 1) {
-    hint = 'Воронка в норме. Держите темп: чем больше откликов — тем выше шанс оффера.';
+    hint = 'Пока всё идёт как надо. Дальше — терпение и пара итераций по резюме и письмам.';
   }
+
+  // Один запрос вместо семи: группируем по московским суткам прямо в SQL.
+  // Ключ дня — число московских суток с эпохи, чтобы не возиться со строками
+  // дат и их сортировкой.
+  const weekStart = todayStart - 6 * DAY_MS;
+  const weekRows = db
+    .prepare(
+      `SELECT
+         CAST((sent_at + ${MSK_OFFSET_MS}) / ${DAY_MS} AS INTEGER) AS daykey,
+         COUNT(*) AS sent,
+         SUM(CASE WHEN viewed_at IS NOT NULL THEN 1 ELSE 0 END) AS viewed,
+         SUM(CASE WHEN response = 'interview' THEN 1 ELSE 0 END) AS invited
+       FROM applications
+       WHERE user_id = ? AND sent_at >= ? AND withdrawn = 0
+       GROUP BY daykey`,
+    )
+    .all(userId, weekStart) as { daykey: number; sent: number; viewed: number; invited: number }[];
+  const byDay = new Map(weekRows.map((r) => [r.daykey, r]));
+  const dateFmt = new Intl.DateTimeFormat('ru-RU', {
+    timeZone: 'Europe/Moscow',
+    day: '2-digit',
+    month: '2-digit',
+  });
 
   const series: Stats['series'] = [];
   for (let d = 6; d >= 0; d--) {
-    const dayStart = new Date(todayStart);
-    dayStart.setDate(dayStart.getDate() - d);
-    const next = new Date(dayStart);
-    next.setDate(next.getDate() + 1);
-    const row = db
-      .prepare(
-        `SELECT
-          COUNT(*) AS sent,
-          SUM(CASE WHEN viewed_at IS NOT NULL THEN 1 ELSE 0 END) AS viewed,
-          SUM(CASE WHEN response = 'interview' THEN 1 ELSE 0 END) AS invited
-         FROM applications
-         WHERE user_id = ? AND sent_at >= ? AND sent_at < ? AND withdrawn = 0`,
-      )
-      .get(userId, dayStart.getTime(), next.getTime()) as {
-      sent: number;
-      viewed: number;
-      invited: number;
-    };
-    const label = dayStart.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
+    const dayStart = todayStart - d * DAY_MS;
+    const key = mskDayKey(dayStart);
+    const row = byDay.get(key);
     series.push({
-      label,
-      sent: Number(row.sent),
-      viewed: Number(row.viewed),
-      invited: Number(row.invited),
+      label: dateFmt.format(new Date(dayStart)),
+      sent: Number(row?.sent ?? 0),
+      viewed: Number(row?.viewed ?? 0),
+      invited: Number(row?.invited ?? 0),
     });
   }
 

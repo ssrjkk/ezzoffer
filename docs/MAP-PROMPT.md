@@ -112,7 +112,7 @@ TELEGRAM                                                  ❗
 | I8  | У планировщика ровно один владелец                                      | ❗ только флаг в процессе        |
 | I9  | URL через `sanitizeExternalUrl`, запросы через SSRF-фильтр              | ✅                               |
 | I10 | Секреты не в логах, ответах и сообщениях бота                           | ❗ токены в БД открытым текстом  |
-| I11 | Повторный `update_id` — один эффект                                     | ❗ дедупликации нет              |
+| I11 | Повторный `update_id` — один эффект | ✅ inbox PK + воркер в тике |
 
 ---
 
@@ -179,7 +179,11 @@ CREATE TABLE outbox (id INTEGER PRIMARY KEY, chat_id INTEGER NOT NULL,
   body TEXT NOT NULL, markup TEXT,
   state TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
   next_try_at INTEGER NOT NULL, tg_message_id INTEGER);
-CREATE TABLE tg_updates (update_id INTEGER PRIMARY KEY, seen_at INTEGER NOT NULL);
+-- Входящая очередь (реализовано как tg_inbox: тело + claimed_at + done_at +
+-- attempts вместо голого tg_updates — разбор идёт в тике, а не в вебхуке).
+CREATE TABLE tg_inbox (update_id INTEGER PRIMARY KEY, body TEXT NOT NULL,
+  received_at INTEGER NOT NULL, claimed_at INTEGER, done_at INTEGER,
+  attempts INTEGER NOT NULL DEFAULT 0);
 ```
 
 - Webhook: секрет за постоянное время → запись `update_id` (конфликт = повтор) → 200 сразу → воркер.

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 import { Hero } from '@/components/home/hero';
 import { HowItWorks } from '@/components/home/how-it-works';
 import { Security } from '@/components/home/security';
@@ -16,11 +17,11 @@ import { CtaBanner } from '@/components/home/cta';
 import { JsonLd } from '@/components/json-ld';
 import { envBaseUrl } from '@/lib/env';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta('/', {
   title: 'Поиск работы без стресса и отказов',
   description:
     'Подбор вакансий по резюме, автоотклик с сопроводительным письмом и уведомления о приглашениях и отказах.',
-};
+});
 
 const siteUrl = envBaseUrl(process.env, 'SITE_URL', 'https://ezoffer.ru');
 

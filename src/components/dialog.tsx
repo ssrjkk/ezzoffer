@@ -144,7 +144,13 @@ function Overlay({
   children: ReactNode;
 }) {
   const panelRef = useDialogBehavior(open, onClose);
-  if (!open) return null;
+  /*
+   * document доступен только в браузере: обращение к document.body прямо в
+   * теле рендера роняло SSR, если диалог хоть раз оказывался открытым на
+   * сервере. Проверка через typeof — без состояния и эффектов: setState в
+   * useEffect ломал синхронные рендеры в тестах и запрещён линтером.
+   */
+  if (!open || typeof document === 'undefined') return null;
 
   return createPortal(
     <div
@@ -221,7 +227,7 @@ export function Dialog({
         <button
           type="button"
           onClick={onClose}
-          className="grid size-8 shrink-0 place-items-center rounded-lg border border-line text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-2"
+          className="grid size-8 shrink-0 place-items-center rounded-sm border border-line text-muted transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent-2"
           aria-label="Закрыть"
         >
           <svg viewBox="0 0 24 24" className="size-4" fill="none" aria-hidden>

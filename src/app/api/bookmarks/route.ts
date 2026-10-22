@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUser, unauthorized, readJson } from '@/lib/api';
 import { db } from '@/lib/db';
+import { listBookmarks } from '@/lib/bookmarks';
 import { getVacancyBySlug } from '@/lib/vacancies';
 import { NO_STORE_HEADERS } from '@/lib/http';
 
@@ -21,30 +22,7 @@ export async function GET() {
   const user = await requireUser();
   if (!user) return unauthorized();
 
-  const rows = db
-    .prepare(
-      'SELECT job_slug, created_at FROM bookmarks WHERE user_id = ? ORDER BY created_at DESC',
-    )
-    .all(user.id) as { job_slug: string; created_at: number }[];
-
-  const bookmarks = rows.map((r) => {
-    const vacancy = getVacancyBySlug(r.job_slug);
-    return {
-      slug: r.job_slug,
-      createdAt: r.created_at,
-      // Вакансия могла исчезнуть из каталога — тогда показываем это прямо,
-      // а не пустую карточку и не «откликнитесь», который никуда не ведёт.
-      available: Boolean(vacancy),
-      title: vacancy?.title ?? null,
-      company: vacancy?.company ?? null,
-      salary: vacancy?.salary ?? null,
-      city: vacancy?.city ?? null,
-      sourceUrl: vacancy?.source_url ?? null,
-      publishedAt: vacancy?.published_at ?? null,
-    };
-  });
-
-  return Response.json({ bookmarks }, { headers: NO_STORE_HEADERS });
+  return Response.json({ bookmarks: listBookmarks(user.id) }, { headers: NO_STORE_HEADERS });
 }
 
 export async function POST(request: Request) {

@@ -3,18 +3,7 @@ import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { jobs } from '@/lib/data';
 import { LevelPill } from '@/components/home/jobs-preview';
-import { JsonLd } from '@/components/json-ld';
-
-const siteUrl = process.env.SITE_URL ?? 'https://ezoffer.ru';
-
-// SSG: дата фиксируется на момент сборки — корректно для статических страниц.
-const nowIso = new Date().toISOString();
-const validIso = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-
-function salaryRange(text: string) {
-  const match = text.match(/от\s*([\d\s]+)/);
-  return match ? parseInt(match[1].replace(/\s/g, ''), 10) : null;
-}
+import { pageMeta } from '@/lib/seo';
 
 /**
  * Список требований.
@@ -60,10 +49,10 @@ export async function generateMetadata({
   const { slug } = await params;
   const job = jobs.find((j) => j.slug === slug);
   if (!job) return { title: 'Вакансия не найдена' };
-  return {
+  return pageMeta(`/jobs/${slug}`, {
     title: job.title,
     description: `${job.title} — ${job.company}, ${job.salary}, ${job.format}. Откликнемся за вас в EZOffer.`,
-  };
+  });
 }
 
 export default async function JobPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -74,36 +63,15 @@ export default async function JobPage({ params }: { params: Promise<{ slug: stri
   const related = jobs
     .filter((j) => j.category === job.category && j.slug !== job.slug)
     .slice(0, 3);
-  const minSalary = salaryRange(job.salary);
 
   return (
     <div className="container-x py-12 md:py-16">
-      <JsonLd
-        data={{
-          '@context': 'https://schema.org',
-          '@type': 'JobPosting',
-          title: job.title,
-          url: `${siteUrl}/jobs/${job.slug}`,
-          description: `${job.about}\n\n${job.responsibilities.join('\n')}`,
-          datePosted: nowIso,
-          validThrough: validIso,
-          employmentType: 'FULL_TIME',
-          hiringOrganization: { '@type': 'Organization', name: job.company },
-          jobLocation: {
-            '@type': 'Place',
-            address: { '@type': 'PostalAddress', addressLocality: job.city, addressCountry: 'RU' },
-          },
-          ...(minSalary
-            ? {
-                baseSalary: {
-                  '@type': 'MonetaryAmount',
-                  currency: 'RUB',
-                  value: { '@type': 'QuantitativeValue', minValue: minSalary, unitText: 'MONTH' },
-                },
-              }
-            : {}),
-        }}
-      />
+      {/*
+        Без JobPosting-разметки намеренно: вакансии здесь демонстрационные
+        (выдуманные компании для показа), а JobPosting говорит поисковику
+        «это настоящая вакансия». Честная пометка — бейджем ниже, видимым
+        человеку, а не только роботу.
+      */}
 
       <Link
         href="/jobs"
@@ -123,6 +91,9 @@ export default async function JobPage({ params }: { params: Promise<{ slug: stri
       <header className="mt-8 border-t-2 border-ink pt-6">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <LevelPill level={job.level} />
+          <span className="rounded-sm border border-line-strong px-2 py-0.5 font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+            Демо-вакансия
+          </span>
           <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
             {job.category}
           </span>
@@ -149,7 +120,8 @@ export default async function JobPage({ params }: { params: Promise<{ slug: stri
             <span aria-hidden>→</span>
           </Link>
           <p className="text-sm leading-relaxed text-muted">
-            Автоотклик займёт 0 секунд вашего времени
+            Компания и цифры здесь выдуманные — так выглядит карточка настоящей вакансии в
+            кабинете. Живые вакансии под ваш запрос — после регистрации.
           </p>
         </div>
       </header>
@@ -178,20 +150,21 @@ export default async function JobPage({ params }: { params: Promise<{ slug: stri
         <aside className="space-y-8">
           <div className="bg-ink px-6 py-7">
             <p className="font-mono text-[11px] uppercase tracking-[0.14em] text-paper">
-              А вы знали?
+              Как это работает
             </p>
             <h2 className="mt-3 font-serif text-xl leading-snug text-paper">
-              На эту вакансию уже откликнулись другие
+              Откликаемся в первые часы после публикации
             </h2>
             <p className="mt-3 text-sm leading-relaxed text-paper">
-              Отклики в первые часы после публикации получают в 3–5 раз больше просмотров. EZOffer
-              отправляет отклик в первые минуты появления вакансии.
+              Чем раньше отклик, тем выше шанс, что его прочитают, — поэтому автопоиск проверяет
+              свежие вакансии каждые полчаса. Никакой магии: просто не даём вашему отклику
+              затеряться в конце очереди.
             </p>
             <Link
               href="/signup"
               className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-sm bg-paper px-6 py-3 text-sm font-semibold text-ink transition-colors hover:bg-accent hover:text-white"
             >
-              Откликнуться первым
+              Найти живые вакансии
               <span aria-hidden>→</span>
             </Link>
           </div>

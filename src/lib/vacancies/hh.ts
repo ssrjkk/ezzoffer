@@ -142,7 +142,8 @@ export function classifyApplyFailure(
   status: number,
   body: string,
 ): { kind: NonNullable<VacancyApplyResult['kind']>; error: string } {
-  const text = (body ?? '').toLowerCase();
+  const raw = body ?? '';
+  const text = raw.toLowerCase().replace(/_/g, ' ');
 
   const looksClosed =
     text.includes('closed') ||
@@ -152,7 +153,51 @@ export function classifyApplyFailure(
     text.includes('недоступн') ||
     text.includes('архив') ||
     text.includes('vacancy not') ||
-    text.includes('not available');
+    text.includes('not available') ||
+    text.includes('invalid vacancy') ||
+    text.includes('vacancy not found') ||
+    text.includes('vacancy is archived');
+
+  /*
+   * Уже откликались: это не ограничение аккаунта и не повод для паузы.
+   * hh отдаёт 403 already_applied на повторный отклик той же связки
+   * resume_id+vacancy_id. Раньше любой 403 считался «аккаунт ограничен»:
+   * шестичасовая блокировка плюс остановка прогона для всех пользователей —
+   * из-за штатной ситуации «мы уже здесь были».
+   */
+  if (/already[\s_-]*applied/.test(text)) {
+    return { kind: 'closed', error: 'Отклик уже отправлен ранее — повтор не нужен' };
+  }
+
+  /*
+   * Отказ по существу, а не по аккаунту: вакансии нет, резюме не подошло,
+   * нужен тест, письмо слишком длинное, лимит откликов исчерпан. Всё это hh
+   * отдаёт через 403 с кодом в теле. Блокировать аккаунт на 6 часов за
+   * «пройдите тест» — значит наказывать человека за то, что он ничего не
+   * нарушал. Такие отказы пропускают вакансию без backoff.
+   *
+   * Список — только точные коды из документации hh. Неизвестный 403 остаётся
+   * 'auth' (осторожность в другую сторону: пропустить настоящую блокировку
+   * дешевле, чем встать всему прогону, но молчать о ней нельзя — она видна
+   * в отчёте).
+   */
+  const businessDenial =
+    text.includes('limit exceeded') ||
+    text.includes('resume not found') ||
+    text.includes('resume deleted') ||
+    text.includes('resume hidden') ||
+    text.includes('test required') ||
+    text.includes('application denied') ||
+    text.includes('too long message') ||
+    text.includes('invalid vacancy') ||
+    text.includes('vacancy archived') ||
+    text.includes('vacancy deleted');
+  if (status === 403 && businessDenial && !looksClosed) {
+    return {
+      kind: 'closed',
+      error: `hh.ru отклонил отклик: ${raw.slice(0, 180) || 'причина на стороне площадки'}`,
+    };
+  }
 
   if (status === 404 || (status === 400 && looksClosed)) {
     return { kind: 'closed', error: 'Вакансия закрыта на hh.ru' };
@@ -230,23 +275,19 @@ export const hhProvider: VacancyProvider = {
     const payload: Record<string, unknown> = { vacancy_id: vacancyId, resume_id: ctx.resumeId };
     if (ctx.message?.trim()) payload.message = ctx.message.trim().slice(0, 500);
 
-    // Один retry при сетевом сбое: hh.ru иногда отвечает 5xx под нагрузкой,
-    // и потерянный отклик из-за разового сбоя — это реально потерянная
-    // возможность. 4xx (кроме 429) повторами не лечатся.
+    // Ретрай здесь запрещён намеренно, хотя 5xx соблазняют повторить.
+    //
+    // POST /negotiations необратим: если hh создал переписку, а ответ с 5xx
+    // потерялся по дороге, повтор создаст ВТОРУЮ переписку на ту же вакансию.
+    // Дальше hh ответит 403 already_applied — и старый код считал это
+    // «аккаунт ограничен» с шестичасовой блокировкой. Один потерянный отклик
+    // дешевле одного лишнего: 5xx пишется в отчёт, вакансия попробуется
+    // следующим тиком заново.
     const res = await httpFetch('https://api.hh.ru/negotiations', {
       method: 'POST',
       timeoutMs: FETCH_TIMEOUT,
-      attempts: 2,
-      /*
-       * 429 здесь намеренно не повторяется.
-       *
-       * Клиент по умолчанию повторяет и его — для чтения каталога это удобно.
-       * Но площадка сказала «не сейчас», и повтор через паузу делает ровно то,
-       * чего она просила не делать, плюс ещё один запрос в счёт лимита. Срок из
-       * Retry-After и так доезжает до паузера, который остановит отправку
-       * целиком, а не подождёт и не повторит.
-       */
-      shouldRetry: (status) => status >= 500,
+      attempts: 1,
+      shouldRetry: () => false,
       headers: {
         Authorization: `Bearer ${token}`,
         'User-Agent': 'EZOffer/1.0',

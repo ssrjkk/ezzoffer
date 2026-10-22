@@ -1,14 +1,15 @@
 import type { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
 import { Section, Eyebrow } from '@/components/ui';
 import { Reveal } from '@/components/reveal';
 import { resumeExamples } from '@/lib/data';
 
-export const metadata: Metadata = {
-  title: 'Примеры резюме, которые проходят ATS',
+export const metadata: Metadata = pageMeta('/resume-examples', {
+  title: 'Примеры резюме: структура, навыки, цифры',
   description:
-    'Готовые примеры резюме по IT-ролям: Frontend, Backend, QA. Структура, ключевые слова и формулировки, которые нравятся рекрутерам и ATS-системам.',
-};
+    'Готовые примеры резюме по IT-ролям: Frontend, Backend, QA. Структура, ключевые слова и формулировки, которые нравятся рекрутерам и понятны автоматическим парсерам.',
+});
 
 /*
  * Индекс примеров резюме.
@@ -28,7 +29,7 @@ export default function ResumeExamplesPage() {
       <Section className="border-t-0 pt-16 md:pt-24">
         <Eyebrow>Инструменты</Eyebrow>
         <h1 className="display mt-4 max-w-4xl text-balance text-4xl md:text-6xl">
-          Резюме, которое <span className="text-accent">проходит ATS</span>
+          Резюме, которое <span className="text-accent">дочитывают</span>
         </h1>
         <p className="measure mt-6 text-base leading-relaxed text-muted md:text-lg">
           Готовые структуры резюме для популярных IT-ролей. Используйте их как образец: замените

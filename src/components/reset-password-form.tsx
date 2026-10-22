@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useState, type FormEvent } from 'react';
+import { Suspense, useEffect, useRef, useState, type FormEvent } from 'react';
 import { AuthPanel, Field, FormError, PanelLink, SubmitButton } from '@/components/auth-shell';
 import { Eyebrow } from '@/components/ui';
 
@@ -14,6 +14,14 @@ function ResetForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  // Редирект после успеха — по таймеру. Если человек ушёл со страницы раньше,
+  // таймер снимается: иначе push сработает уже не в том месте.
+  const timer = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (timer.current !== null) clearTimeout(timer.current);
+    };
+  }, []);
 
   // Токен — 64 hex-символа. Проверка на клиенте не защита (сервер проверяет
   // своё), а защита от показа формы на заведомо битой ссылке.
@@ -39,7 +47,7 @@ function ResetForm() {
         return;
       }
       setDone(true);
-      setTimeout(() => router.push('/login'), 2500);
+      timer.current = window.setTimeout(() => router.push('/login'), 2500);
     } finally {
       setBusy(false);
     }

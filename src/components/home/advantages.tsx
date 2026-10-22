@@ -120,15 +120,16 @@ export function Advantages() {
                 Делегируйте рутину и займитесь собеседованиями
               </h3>
               <p className="mt-3 max-w-prose text-sm leading-relaxed text-paper">
-                Первые приглашения приходят уже через 2–3 дня. Дальше всё зависит только от вашего
-                опыта — умения заинтересовать работодателя и вести диалог.
+                Никаких обещаний «оффер за неделю»: сколько уйдёт времени — зависит от вашего опыта
+                и рынка. Наша часть — чтобы ни одна подходящая вакансия не прошла мимо, а каждый
+                отклик ушёл вовремя и с письмом.
               </p>
             </div>
             <Link
               href="/signup"
               className="-my-1 inline-flex min-h-11 w-fit items-center gap-2 border-b border-paper py-1 text-sm font-semibold text-paper transition-colors hover:border-accent hover:text-accent"
             >
-              Получить первый оффер
+              Начать с пробного дня
               <span aria-hidden>→</span>
             </Link>
           </div>

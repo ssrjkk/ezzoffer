@@ -117,8 +117,12 @@ export function SiteHeader() {
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setOpen(false);
+            }}
             className="grid size-11 place-items-center rounded-sm border border-line-strong lg:hidden"
             aria-expanded={open}
+            aria-controls="mobile-nav"
             aria-label={open ? 'Закрыть меню' : 'Открыть меню'}
           >
             <span className="sr-only">Меню</span>
@@ -139,7 +143,7 @@ export function SiteHeader() {
 
       {open ? (
         <div className="border-t border-line bg-bg lg:hidden">
-          <nav className="container-x flex flex-col py-3" aria-label="Мобильная навигация">
+          <nav id="mobile-nav" className="container-x flex flex-col py-3" aria-label="Мобильная навигация">
             {nav.map((item) => (
               <Link
                 key={item.href}

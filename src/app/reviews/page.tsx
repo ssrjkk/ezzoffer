@@ -1,13 +1,14 @@
 import type { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
 import { Section } from '@/components/ui';
 import { HowItWorks } from '@/components/how-it-works';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta('/reviews', {
   title: 'Как это работает',
   description:
     'Пример работы EZOffer: сопроводительное письмо под конкретную вакансию и разбор резюме против требований — с теми же расчётами, что работают в сервисе.',
-};
+});
 
 /*
  * Бывшая страница отзывов.

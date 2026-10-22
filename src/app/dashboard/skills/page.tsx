@@ -4,7 +4,6 @@ import { getCurrentUser } from '@/lib/auth';
 import { computeSkillGaps } from '@/lib/skill-gaps';
 import { learningPath, skillsWithPaths } from '@/lib/learning-paths';
 import { Panel } from '@/components/dashboard/ui';
-import { Section, SectionHead } from '@/components/ui';
 
 export const metadata: Metadata = { title: 'Навыки' };
 export const dynamic = 'force-dynamic';
@@ -28,23 +27,20 @@ export default async function SkillsPage() {
   const withPaths = skillsWithPaths();
 
   return (
-    <>
-      <Section className="border-t-0 pt-16 md:pt-24">
-        <SectionHead
-          center={false}
-          eyebrow="Квалификация"
-          level="h1"
-          title={
-            <>
-              Что закрыть <span className="text-accent">в первую очередь</span>
-            </>
-          }
-          sub="Список собран по вашим откликам и по вакансиям в подборе. Не список популярного, а то, что мешает вам сейчас."
-        />
+    <div>
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-muted">Квалификация</p>
+      <h1 className="mt-2 font-serif text-2xl leading-snug text-ink">
+        Что закрыть <span className="text-accent">в первую очередь</span>
+      </h1>
+      <p className="mt-1 max-w-prose text-sm text-muted">
+        Список собран по вашим откликам и по вакансиям в подборе. Не список популярного, а то, что
+        мешает вам сейчас.
+      </p>
+      <div className="mt-6">
         <GapsBody report={report} />
-      </Section>
+      </div>
 
-      <Section className="pt-0">
+      <div className="mt-10">
         <Panel>
           <h2 className="font-serif text-lg leading-snug text-ink">Учебные планы</h2>
           <p className="mt-1 text-sm leading-relaxed text-muted">
@@ -97,8 +93,8 @@ export default async function SkillsPage() {
             </article>
           );
         })}
-      </Section>
-    </>
+      </div>
+    </div>
   );
 }
 
@@ -173,5 +169,15 @@ function GapsBody({ report }: { report: Report }) {
 }
 
 function slug(skill: string): string {
-  return `skill-${skill.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+  // Якоря для кириллицы: старый regex вырезал все не-latin символы, и русские
+  // навыки давали одинаковый id `skill-` с дефисами — коллизия якорей.
+  const latin = skill
+    .toLowerCase()
+    .replace(/[^a-z0-9а-яё]+/gi, '-')
+    .replace(/^-+|-+$/g, '');
+  if (latin.replace(/-/g, '')) return `skill-${latin}`;
+  // Совсем без букв (эмодзи, символы) — детерминированный хеш вместо дефисов.
+  let h = 0;
+  for (const ch of skill) h = (Math.imul(h, 31) + ch.codePointAt(0)!) | 0;
+  return `skill-x${(h >>> 0).toString(36)}`;
 }

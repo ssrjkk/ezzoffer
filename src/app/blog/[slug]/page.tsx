@@ -2,11 +2,13 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { articles } from '@/lib/data';
+import { pageMeta } from '@/lib/seo';
 import { articleDateIso } from '@/lib/article-date';
 import { JsonLd } from '@/components/json-ld';
 import { CtaPanel } from '@/components/cta-panel';
+import { envBaseUrl } from '@/lib/env';
 
-const siteUrl = process.env.SITE_URL ?? 'https://ezoffer.ru';
+const siteUrl = envBaseUrl(process.env, 'SITE_URL', 'https://ezoffer.ru');
 
 export function generateStaticParams() {
   return articles.map((article) => ({ slug: article.slug }));
@@ -20,7 +22,7 @@ export async function generateMetadata({
   const { slug } = await params;
   const article = articles.find((a) => a.slug === slug);
   if (!article) return { title: 'Статья не найдена' };
-  return { title: article.title, description: article.excerpt };
+  return pageMeta(`/blog/${slug}`, { title: article.title, description: article.excerpt });
 }
 
 export default async function ArticlePage({ params }: { params: Promise<{ slug: string }> }) {

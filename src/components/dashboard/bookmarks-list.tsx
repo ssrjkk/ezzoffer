@@ -1,4 +1,5 @@
 import { Badge, Panel, StatusMessage, btnGhost, EmptyState } from '@/components/dashboard/ui';
+import { formatDateShort } from '@/lib/format-date';
 
 /**
  * Избранные вакансии.
@@ -20,6 +21,8 @@ type Bookmark = {
   company: string | null;
   salary: string | null;
   city: string | null;
+  /** Источник вакансии: публичная /jobs знает только демо-набор (local). */
+  source: string | null;
   sourceUrl: string | null;
   publishedAt: number | null;
 };
@@ -81,25 +84,21 @@ export function BookmarksList({ bookmarks }: { bookmarks: Bookmark[] }) {
             {b.salary ? <p className="text-lg font-semibold text-accent-2">{b.salary}</p> : null}
 
             <p className="text-xs text-muted">
-              Сохранено{' '}
-              {new Date(b.createdAt).toLocaleDateString('ru-RU', {
-                day: '2-digit',
-                month: '2-digit',
-              })}
-              {b.publishedAt
-                ? ` · опубликована ${new Date(b.publishedAt).toLocaleDateString('ru-RU', {
-                    day: '2-digit',
-                    month: '2-digit',
-                  })}`
-                : ''}
+              Сохранено {formatDateShort(b.createdAt)}
+              {b.publishedAt ? ` · опубликована ${formatDateShort(b.publishedAt)}` : ''}
             </p>
 
             <div className="mt-auto flex flex-wrap gap-2">
               {b.available ? (
                 <>
-                  <a href={`/jobs/${encodeURIComponent(b.slug)}`} className={btnGhost}>
-                    Открыть вакансию
-                  </a>
+                  {/* Внутренняя страница знает только демо-набор: живой каталог
+                      (hh-*, trudvsem-*, remoteok-*, …) открывается на сайте
+                      источника. Раньше любая живая закладка вела на 404. */}
+                  {b.source === 'local' ? (
+                    <a href={`/jobs/${encodeURIComponent(b.slug)}`} className={btnGhost}>
+                      Открыть вакансию
+                    </a>
+                  ) : null}
                   {b.sourceUrl ? (
                     <a
                       href={b.sourceUrl}
@@ -107,7 +106,7 @@ export function BookmarksList({ bookmarks }: { bookmarks: Bookmark[] }) {
                       rel="noopener noreferrer"
                       className={btnGhost}
                     >
-                      На сайте
+                      {b.source === 'local' ? 'На сайте' : 'Открыть на сайте источника'}
                     </a>
                   ) : null}
                 </>

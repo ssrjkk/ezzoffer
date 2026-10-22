@@ -48,7 +48,8 @@ export function ProfileForm({
           name: draft.name,
           email: draft.email,
           password: draft.password || undefined,
-          currentPassword: draft.email !== email ? draft.currentPassword || undefined : undefined,
+          currentPassword:
+            draft.email !== email || draft.password ? draft.currentPassword || undefined : undefined,
           // Пустая строка означает «ожиданий не назвал», а не ноль: при нуле
           // любая вакансия считалась бы выше ожиданий.
           salaryExpectation: draft.salary.trim() === '' ? null : Number(draft.salary),
@@ -142,9 +143,9 @@ export function ProfileForm({
             />
           </Field>
         </div>
-        {draft.email.trim().toLowerCase() !== email ? (
+        {draft.email.trim().toLowerCase() !== email || draft.password ? (
           <div className="md:col-span-2">
-            <Field label="Текущий пароль (подтверждение смены email)">
+            <Field label="Текущий пароль (подтверждение смены email или пароля)">
               <input
                 type="password"
                 minLength={6}

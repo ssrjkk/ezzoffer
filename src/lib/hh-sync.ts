@@ -267,13 +267,14 @@ export async function syncHhStatuses(userId: number): Promise<{ updated: number;
   }
 }
 
-export async function syncAllHhUsers(): Promise<void> {
+export async function syncAllHhUsers(heartbeat?: () => boolean): Promise<void> {
   const users = db
     .prepare("SELECT id FROM users WHERE hh_token IS NOT NULL AND hh_token != ''")
     .all() as {
     id: number;
   }[];
   for (const u of users) {
+    if (heartbeat && !heartbeat()) return;
     try {
       const res = await syncHhStatuses(u.id);
       if (res.error) {

@@ -1,14 +1,15 @@
 import type { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
 import { Section, SectionHead, Eyebrow } from '@/components/ui';
 import { Reveal } from '@/components/reveal';
 import { internships } from '@/lib/data';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta('/internships', {
   title: 'Стажировки для студентов и junior',
   description:
-    'Платные стажировки по разработке, аналитике и маркетингу. Наставник, реальные задачи и путь в штат.',
-};
+    'Примеры стажировочных треков: как они устроены и что обычно входит. Подбор живых стажировок — в кабинете после регистрации.',
+});
 
 /*
  * Страница стажировок.
@@ -26,13 +27,14 @@ export default function InternshipsPage() {
   return (
     <>
       <Section className="border-t-0 pt-16 md:pt-24">
-        <Eyebrow>Инструменты</Eyebrow>
+        <Eyebrow>Инструменты · примеры треков</Eyebrow>
         <h1 className="display mt-4 max-w-4xl text-balance text-4xl md:text-6xl">
           Стажировки с <span className="text-accent">наставником</span> и задачами продукта
         </h1>
         <p className="measure mt-6 text-base leading-relaxed text-muted md:text-lg">
-          Платные стажировочные треки для студентов и junior-специалистов: реальные задачи продукта,
-          наставник и путь в штат.
+          Ниже — примеры треков, чтобы показать формат: задачи, наставник, путь в штат. Компании
+          здесь выдуманные. Живые стажировки под ваш профиль подбираются в кабинете — компании там
+          настоящие, с кнопкой отклика на их сайтах.
         </p>
       </Section>
 
@@ -84,7 +86,7 @@ export default function InternshipsPage() {
                     href="/signup"
                     className="inline-flex min-h-11 items-center gap-2 border-b border-ink py-1 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
                   >
-                    Откликнуться
+                    Найти живую стажировку
                     <span aria-hidden>→</span>
                   </Link>
                 </div>

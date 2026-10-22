@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Badge, Panel, btnPrimary, btnGhost, StatusMessage } from '@/components/dashboard/ui';
+import { formatDateTime } from '@/lib/format-date';
 
 type HhStatus = {
   configured: boolean;
@@ -144,13 +145,11 @@ export function HhConnect() {
                 <span className="font-mono text-xs">{status.resume_id ?? '—'}</span>
                 {status.refreshable && status.expires_at ? (
                   <span className="block text-xs text-warn">
-                    Сеанс истёк {new Date(status.expires_at).toLocaleString('ru-RU')} — доступ
-                    обновится автоматически при следующем отклике.
+                    Сеанс истёк {formatDateTime(status.expires_at)} — доступ обновится автоматически
+                    при следующем отклике.
                   </span>
                 ) : status.expires_at ? (
-                  <span className="block text-xs">
-                    Доступ до {new Date(status.expires_at).toLocaleString('ru-RU')}
-                  </span>
+                  <span className="block text-xs">Доступ до {formatDateTime(status.expires_at)}</span>
                 ) : null}
               </p>
               <p className="text-sm text-muted">

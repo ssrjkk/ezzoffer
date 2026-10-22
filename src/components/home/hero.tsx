@@ -47,7 +47,7 @@ function Listings() {
           href="/jobs"
           className="-my-1 inline-flex min-h-11 items-center text-xs font-semibold text-accent underline-offset-4 hover:underline"
         >
-          Весь каталог →
+          Примеры из каталога →
         </Link>
       </div>
     </div>
@@ -69,9 +69,9 @@ export function Hero() {
             </h1>
 
             <p className="measure mt-8 text-lg leading-relaxed text-muted">
-              Улучшим резюме, подберём релевантные вакансии и отправим до 100 персональных откликов
-              в день. Вам останется выбирать лучшие приглашения — а не вести переписку с сотней
-              вакансий.
+              Улучшим резюме, подберём релевантные вакансии и будем отправлять отклики каждый день —
+              от 50 до 250 в сутки по тарифу, каждый с персональным письмом. Вам останется выбирать
+              лучшие приглашения, а не вести переписку с сотней вакансий.
             </p>
 
             <div className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-4">

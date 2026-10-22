@@ -8,6 +8,8 @@ import {
   maxApplyIntervalSec,
   globalDailyCap,
   globalHourlyCap,
+  autoapplyEnabled,
+  autoapplyDryRun,
 } from '../src/lib/config';
 
 /**
@@ -107,5 +109,24 @@ test('часы работы остаются в допустимых грани�
   });
   withEnv({ AUTOAPPLY_WORK_START: '-5', AUTOAPPLY_WORK_END: '0' }, () => {
     assert.ok(workStartHour() >= 0, 'отрицательный час должен срезаться в ноль');
+  });
+});
+
+test('рубильники: по умолчанию отправка включена, холостой режим выключен', () => {
+  withEnv({ AUTOAPPLY_ENABLED: undefined, AUTOAPPLY_DRY_RUN: undefined }, () => {
+    assert.equal(autoapplyEnabled(), true, 'без флага отправка обязана работать');
+    assert.equal(autoapplyDryRun(), false, 'без флага холостого режима быть не должно');
+  });
+  withEnv({ AUTOAPPLY_ENABLED: '0' }, () => {
+    assert.equal(autoapplyEnabled(), false);
+  });
+  withEnv({ AUTOAPPLY_ENABLED: '' }, () => {
+    assert.equal(autoapplyEnabled(), true, 'пустая строка — не согласие на остановку');
+  });
+  withEnv({ AUTOAPPLY_DRY_RUN: '1' }, () => {
+    assert.equal(autoapplyDryRun(), true);
+  });
+  withEnv({ AUTOAPPLY_DRY_RUN: 'yes' }, () => {
+    assert.equal(autoapplyDryRun(), false, 'только строгое 1 включает dry-run');
   });
 });

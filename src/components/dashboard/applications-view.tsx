@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Badge, EmptyState, StatusMessage, btnDanger, btnGhost } from '@/components/dashboard/ui';
+import { formatShortDateTime } from '@/lib/format-date';
 import { InterviewPrepPanel } from './interview-prep';
 import type { InterviewPrep } from '@/lib/interview';
 
@@ -90,12 +91,7 @@ const filters: { id: Filter; label: string }[] = [
 ];
 
 function fmt(ts: number) {
-  return new Date(ts).toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatShortDateTime(ts);
 }
 
 function toneFor(app: ApplicationItem) {

@@ -22,17 +22,32 @@ export function PricingSection({ compact = false }: { compact?: boolean }) {
   const [notice, setNotice] = useState<string | null>(null);
   const router = useRouter();
 
+  // null = ещё не знаем: ни редиректа, ни кнопки. Сетевая ошибка не делает
+  // залогиненного гостем: иначе клик по тарифу уводил бы на /signup, а тот —
+  // обратно в кабинет. Замкнутый круг без единого слова об ошибке.
   useEffect(() => {
+    let alive = true;
     fetch('/api/auth/me')
       .then((r) => r.json())
-      .then((d) => setHasAccount(Boolean(d?.user)))
-      .catch(() => setHasAccount(false));
+      .then((d) => {
+        if (alive) setHasAccount(Boolean(d?.user));
+      })
+      .catch(() => {
+        if (alive) setHasAccount(null);
+      });
+    return () => {
+      alive = false;
+    };
   }, []);
 
   const choose = async (planId: string) => {
     setNotice(null);
-    if (!hasAccount) {
+    if (hasAccount === false) {
       router.push('/signup');
+      return;
+    }
+    if (hasAccount === null) {
+      setNotice('Не удалось проверить вход — обновите страницу и попробуйте ещё раз');
       return;
     }
     setBusy(planId);
@@ -71,11 +86,13 @@ export function PricingSection({ compact = false }: { compact?: boolean }) {
       />
 
       <div className="mb-10 flex justify-center">
-        <div className=" inline-flex rounded-sm p-1">
+        <div className="inline-flex rounded-sm p-1" role="radiogroup" aria-label="Период тарифа">
           {periods.map((p) => (
             <button
               key={p.days}
               type="button"
+              role="radio"
+              aria-checked={period === p.days}
               onClick={() => setPeriod(p.days)}
               className={`rounded-sm px-5 py-2 text-sm font-medium transition-all ${
                 period === p.days ? 'bg-accent text-white' : 'text-muted hover:text-ink'

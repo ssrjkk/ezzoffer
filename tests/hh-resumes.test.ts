@@ -183,3 +183,49 @@ test('ошибка чтения не превращается в пустое р
   const content = await fetchHhResumeContent('t', '123');
   assert.equal(content, null, 'при ошибке вернулось пустое резюме вместо null');
 });
+
+test('клонирование идёт POST на source_resume_id с токеном пользователя', async () => {
+  const { cloneHhResume } = await import('../src/lib/hh-resumes');
+  const seen: string[] = [];
+  const saved = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
+    const u = String(url);
+    seen.push(`${init?.method ?? 'GET'} ${u}`);
+    return {
+      ok: true,
+      status: 201,
+      headers: { get: (n: string) => (n.toLowerCase() === 'location' ? '/resumes/abc123' : null) },
+      text: async () => '',
+    } as unknown as Response;
+  }) as typeof globalThis.fetch;
+  try {
+    const out = await cloneHhResume('user-token', 'orig-1');
+    assert.deepEqual(out, { id: 'abc123' });
+    assert.ok(
+      seen.some((s) => s.startsWith('POST ') && s.includes('/resumes?source_resume_id=orig-1')),
+      `не тот запрос: ${seen.join('; ')}`,
+    );
+  } finally {
+    globalThis.fetch = saved;
+  }
+});
+
+test('клонирование чужого или битого резюме честно отказывает', async () => {
+  const { cloneHhResume } = await import('../src/lib/hh-resumes');
+  const saved = globalThis.fetch;
+  globalThis.fetch = (async () => ({ ok: false, status: 404, text: async () => '' })) as unknown as typeof globalThis.fetch;
+  try {
+    const out = await cloneHhResume('user-token', ' чужой ');
+    assert.ok('error' in out, '404 превратился в успех');
+  } finally {
+    globalThis.fetch = saved;
+  }
+});
+
+test('лимит площадки проверяется до попытки копирования', async () => {
+  const { canCreateHhResume } = await import('../src/lib/hh-resumes');
+  mock(() => respond({ is_creation_available: false, remaining: 0, max: 20, created: 20 }));
+  assert.equal(await canCreateHhResume('t'), false, 'при исчерпанном лимите разрешено');
+  mock(() => respond({ is_creation_available: true, remaining: 3, max: 20, created: 17 }));
+  assert.equal(await canCreateHhResume('t'), true, 'при свободном лимите запрещено');
+});

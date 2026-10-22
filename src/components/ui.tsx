@@ -64,13 +64,28 @@ export function StatusMessage({
   );
 }
 
-/** Прописная метка-«рубрика». Единственный красный элемент в разделе. */
-export function Eyebrow({ children, className = '' }: { children: ReactNode; className?: string }) {
+/**
+ * Прописная метка-«рубрика». Единственный красный элемент в разделе.
+ *
+ * Тон задаётся пропом, а не переопределением text-* через className: два
+ * конкурирующих text-цвета в одном className решаются алфавитным порядком
+ * утилит Tailwind, а не порядком классов — переименование токена молча
+ * ломало бы контраст на тёмной подложке.
+ */
+export function Eyebrow({
+  children,
+  className = '',
+  tone = 'accent',
+}: {
+  children: ReactNode;
+  className?: string;
+  tone?: 'accent' | 'paper';
+}) {
+  const color = tone === 'paper' ? 'text-paper' : 'text-accent';
+  const rule = tone === 'paper' ? 'bg-paper' : 'bg-accent';
   return (
-    <p
-      className={`flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.16em] text-accent ${className}`}
-    >
-      <span aria-hidden className="block h-px w-7 bg-accent" />
+    <p className={`flex items-center gap-2.5 font-mono text-[11px] uppercase tracking-[0.16em] ${color} ${className}`}>
+      <span aria-hidden className={`block h-px w-7 ${rule}`} />
       {children}
     </p>
   );

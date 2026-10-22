@@ -26,16 +26,16 @@ export function JobsPreview() {
     <Section>
       <div className="mb-10 flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
         <div className="max-w-2xl">
-          <Eyebrow>Вакансии со всего рынка</Eyebrow>
+          <Eyebrow>Каталог вакансий</Eyebrow>
           <h2 className="display mt-4 text-3xl text-balance md:text-5xl">
-            Тысячи вакансий — <span className="text-accent">в одном месте</span>
+            Живой каталог — <span className="text-accent">в одном месте</span>
           </h2>
         </div>
         <Link
           href="/jobs"
-          className="inline-flex w-fit items-center gap-2 -my-1 inline-flex min-h-11 items-center border-b border-ink py-1 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
+          className="inline-flex w-fit min-h-11 items-center gap-2 border-b border-ink py-1 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
         >
-          Смотреть все вакансии
+          Смотреть примеры вакансий
           <span aria-hidden>→</span>
         </Link>
       </div>

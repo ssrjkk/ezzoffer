@@ -1,4 +1,5 @@
 import { db } from './db';
+import { isUniqueViolation } from './http';
 
 /**
  * A/B-варианты одного резюме.
@@ -70,24 +71,52 @@ export function createVariant(userId: number, resumeId: number): VariantRow | nu
 
   const now = Date.now();
   const title = `${source.title} — вариант ${next}`.slice(0, 100);
-  const result = db
-    .prepare(
-      `INSERT INTO resumes (user_id, title, content, years_label, ai_improved, hh_id, variant_group, variant_label, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
-    )
-    .run(
-      userId,
-      title,
-      source.content,
-      (source as { years_label?: string }).years_label ?? '',
-      0,
-      group,
-      next,
-      now,
-      now,
-    );
+  try {
+    const result = db
+      .prepare(
+        `INSERT INTO resumes (user_id, title, content, years_label, ai_improved, hh_id, variant_group, variant_label, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
+      )
+      .run(
+        userId,
+        title,
+        source.content,
+        (source as { years_label?: string }).years_label ?? '',
+        0,
+        group,
+        next,
+        now,
+        now,
+      );
 
-  return db.prepare('SELECT * FROM resumes WHERE id = ?').get(result.lastInsertRowid) as VariantRow;
+    return db.prepare('SELECT * FROM resumes WHERE id = ?').get(result.lastInsertRowid) as VariantRow;
+  } catch (err) {
+    // Параллельное создание выдало ту же метку: индекс ux_resumes_variant
+    // отклонил дубль. Пересчитываем свободную метку и пробуем ещё раз —
+    // второй заход видит уже занятую и берёт следующую.
+    if (!isUniqueViolation(err)) throw err;
+    const siblings = listVariants(userId, group);
+    const used = new Set(siblings.map((v) => v.variant_label));
+    const retry = LABELS.split('').find((l) => !used.has(l)) ?? null;
+    if (!retry || retry === next) return null;
+    const result = db
+      .prepare(
+        `INSERT INTO resumes (user_id, title, content, years_label, ai_improved, hh_id, variant_group, variant_label, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
+      )
+      .run(
+        userId,
+        `${source.title} — вариант ${retry}`.slice(0, 100),
+        source.content,
+        (source as { years_label?: string }).years_label ?? '',
+        0,
+        group,
+        retry,
+        now,
+        now,
+      );
+    return db.prepare('SELECT * FROM resumes WHERE id = ?').get(result.lastInsertRowid) as VariantRow;
+  }
 }
 
 export type VariantStat = {

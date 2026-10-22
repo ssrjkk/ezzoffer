@@ -281,7 +281,7 @@ export function rankVacanciesForResume(
 export function rankLettersForVacancy(
   letters: { id: number; content: string }[],
   vacancy: Vacancy,
-): { id: number; content: string; score: number }[] {
+): { id: number; content: string; score: number; overlap: number }[] {
   const vacancySkills = new Set(vacancySkillsOf(vacancy));
   return letters
     .map((letter) => {
@@ -289,7 +289,7 @@ export function rankLettersForVacancy(
       const overlap = letterSkills.filter((s) => vacancySkills.has(s)).length;
       // Небольшой бонус за длину: развёрнутое письмо обычно лучше, но не важнее совпадения навыков.
       const score = overlap * 10 + Math.min(5, Math.floor(letter.content.length / 400));
-      return { ...letter, score };
+      return { ...letter, score, overlap };
     })
     .sort((a, b) => b.score - a.score);
 }

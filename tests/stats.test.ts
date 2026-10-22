@@ -46,7 +46,11 @@ test('getStats считает реальные отклики из БД (без 
   assert.equal(s.declined, 1);
   assert.equal(s.questions, 0);
   assert.equal(s.withdrawn, 1);
-  assert.equal(s.today, 4);
+  // Отозванный считается в today: внешняя отправка состоялась и слот дневного
+  // лимита она съела. Иначе «отправить → отозвать → отправить» давал бы
+  // бесконечные отклики мимо лимита (и мимо счётчика в /api/applications).
+  // Воронка (sent/viewed/…) отозванные по-прежнему исключает.
+  assert.equal(s.today, 5);
   assert.equal(s.todayLimit, 100);
   assert.equal(s.series.length, 7);
   assert.equal(s.series[6].sent, 4);

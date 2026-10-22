@@ -167,16 +167,29 @@ test('в исходниках нет выдуманных отзывов', async
    * было преувеличением, которое FAQ уже не поддерживает.
    */
   const promises = [
-    'В 4 раза больше',
-    'Экономия до 27',
-    'Оффер за 3',
-    'AI-агент',
-    'оффер через 2 недели',
+    'в 4 раза больше',
+    'экономия до 27',
+    'до 27 часов',
+    'оффер за 3',
+    'оффер через 2',
+    'ai-агент',
+    'откликнется агент',
+    'в 3–5 раз больше просмотров',
+    'в 3-5 раз больше просмотров',
+    'первые приглашения приходят уже через',
+    'результат за 3–4 недели',
+    'результат за 3-4 недели',
+    'безлимит откликов',
+    'безлимит',
+    'тысячи вакансий',
+    'проходят ats',
+    'проходит ats',
   ];
   const promiseOffenders: string[] = [];
   for (const [i, text] of stripped.entries()) {
+    const lower = text.toLowerCase();
     for (const claim of promises) {
-      if (text.includes(claim)) promiseOffenders.push(`файл #${i}: ${claim}`);
+      if (lower.includes(claim)) promiseOffenders.push(`файл #${i}: ${claim}`);
     }
   }
   assert.deepEqual(

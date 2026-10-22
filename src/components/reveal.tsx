@@ -57,6 +57,19 @@ export function Reveal({
     const el = ref.current;
     // Нет IntersectionObserver — анимировать нечем, но и прятать незачем.
     if (!el || typeof IntersectionObserver === 'undefined') return;
+    /*
+     * Элемент уже во вьюпорте — показываем сразу, без кадра «исчез-проявился».
+     *
+     * Раньше setCanHide(true) шёл безусловно: React сначала перерисовывал блок
+     * в opacity-0, и только следующим кадром IntersectionObserver выставлял
+     * shown. Контент, уже находящийся на экране, мигал при каждой загрузке.
+     * Проверка геометрии до скрытия убирает мигание: видимое остаётся видимым.
+     */
+    const rect = el.getBoundingClientRect();
+    if (rect.top < window.innerHeight && rect.bottom > 0) {
+      setShown(true);
+      return;
+    }
     setCanHide(true);
     const io = new IntersectionObserver(
       (entries) => {

@@ -1,14 +1,15 @@
 import type { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
 import { articles } from '@/lib/data';
 import { articleDateIso } from '@/lib/article-date';
 import { Eyebrow } from '@/components/ui';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta('/blog', {
   title: 'Блог',
   description:
     'Статьи и советы о поиске работы: автоотклики, резюме, ATS, сопроводительные письма и карьерные стратегии.',
-};
+});
 
 export default function BlogPage() {
   return (

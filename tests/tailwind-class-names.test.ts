@@ -96,7 +96,7 @@ test('альфа-скобочная запись не поехала', () => {
  * подложку. Если её нет — белый текст на светлом фоне.
  */
 test('белый текст только на тёмной подложке', () => {
-  const DARK_BG = /bg-ink|bg-black|bg-accent\b|bg-violet|bg-danger\b|bg-paper|#229ED9|#2AABEE/;
+  const DARK_BG = /bg-ink|bg-black|bg-accent\b|bg-violet|bg-danger\b|bg-paper|bg-telegram|#229ED9|#2AABEE/;
   const offenders: string[] = [];
 
   for (const file of sourceFiles()) {

@@ -1,14 +1,15 @@
 import type { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
 import { Section, SectionHead, Eyebrow } from '@/components/ui';
 import { Reveal } from '@/components/reveal';
 import { team, stats } from '@/lib/data';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta('/about', {
   title: 'О нас',
   description:
     'О EZOffer: как устроен сервис автоматических откликов, какие у него ограничения и кто его делает.',
-};
+});
 
 const values = [
   {
@@ -38,21 +39,21 @@ export default function AboutPage() {
       <Section className="pb-8 pt-14 md:pt-20">
         <div className="grid gap-10 lg:grid-cols-12">
           <div className="lg:col-span-7">
-            <Eyebrow>Команда и миссия</Eyebrow>
+            <Eyebrow>Один человек, а не отдел</Eyebrow>
             <h1 className="display mt-6 text-4xl text-balance md:text-6xl">
-              Мы вернули себе <span className="text-accent">часы жизни</span>
+              Сделано тем же, кто <span className="text-accent">искал работу</span>
             </h1>
           </div>
           <div className="flex items-end lg:col-span-5">
             {/*
-              Лид вынесен в правую колонку и набран крупнее, чем раньше.
-              На «о нас» главное — почему мы, а не чем занимаемся; раньше
-              текст шёл узкой колонкой под центрированным заголовком.
+              Было «Каждый из нас проходил» — множественное число при команде
+              из одного человека. Теперь единственное, и это не поза, а факт:
+              инструмент собран из собственной боли, а не из исследования рынка.
             */}
             <p className="text-lg leading-relaxed text-ink">
-              Каждый из нас проходил через десятки ручных откликов, автоотказы и бесконечное
-              ожидание. И решил построить инструмент, который делает поиск работы управляемым
-              процессом, а не лотереей.
+              Я откликался вручную на десятки вакансий и получал тишину в ответ. Потом написал
+              скрипт, который делал это за меня, — и скрипт вырос в этот сервис. Здесь нет
+              «команды экспертов»: есть я, код и пользователи, которые говорят, что чинить.
             </p>
           </div>
         </div>
@@ -102,13 +103,13 @@ export default function AboutPage() {
 
       <Section className="border-t border-line bg-surface-2">
         <SectionHead
-          eyebrow="Команда"
+          eyebrow="Кто делает"
           title={
             <>
-              Кто делает <span className="text-accent">EZOffer</span>
+              Один человек <span className="text-accent">и вы</span>
             </>
           }
-          sub="Небольшая команда с фокусом на результат — как вы на поиске работы"
+          sub="Без выдуманных сооснователей: автор пишет код и отвечает на письма, пользователи говорят, что чинить"
         />
         <div className="grid gap-x-8 gap-y-10 border-t border-line pt-8 sm:grid-cols-2 lg:grid-cols-4">
           {team.map((member, idx) => (

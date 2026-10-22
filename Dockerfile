@@ -17,6 +17,10 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
+# Часовой пояс бизнеса — Москва (границы суток, лимиты, рабочие часы).
+# tzdata нужен явно: в slim-образе его нет, и без него TZ молча игнорируется.
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata && rm -rf /var/lib/apt/lists/*
+ENV TZ=Europe/Moscow
 
 RUN useradd -m -r appuser
 

@@ -33,7 +33,7 @@ import { Badge } from '@/components/dashboard/ui';
  * выше большого пальца.
  *
  * Здесь оно сворачивается в одну строку с названием текущего раздела.
- * Развернуть — нажатие; закрыть происходит само при переходе.
+ * Развернуть — нажатие; закрывается само (обработчик ниже снимает open) при переходе.
  *
  * ## Почему `<details>`, а не кнопка с состоянием
  *
@@ -41,8 +41,7 @@ import { Badge } from '@/components/dashboard/ui';
  * список всё равно доступен, просто сразу раскрытый. Это тот же довод, по
  * которому здесь не `<summary>` на `useState` — самый частый способ
  * «сэкономить» разметку, который оставляет страницу нефункциональной без JS.
- * Закрыть его программно нельзя, поэтому переход по ссылке закрывает меню
- * через перезагрузку маршрута — так оно и работает.
+ * Закрывать его не нужно: меню закрывает обработчик onClick на ссылке.
  */
 
 const items = [
@@ -120,7 +119,10 @@ export function MobileNav({
                 <Link
                   href={item.href}
                   aria-current={isActive ? 'page' : undefined}
-                  className={`flex min-h-11 items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
+                  // Закрываем меню при переходе: в App Router перезагрузки нет,
+                  // и открытый <details> переехал бы на новую страницу.
+                  onClick={(e) => e.currentTarget.closest('details')?.removeAttribute('open')}
+                  className={`relative flex min-h-11 items-center gap-3 px-4 py-2.5 text-sm transition-colors ${
                     isActive ? 'bg-surface-2 font-semibold text-ink' : 'text-muted hover:text-ink'
                   }`}
                 >

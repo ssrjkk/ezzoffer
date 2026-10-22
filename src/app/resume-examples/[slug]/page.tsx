@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
 import { resumeExamples } from '@/lib/data';
+import { pageMeta } from '@/lib/seo';
 
 export function generateStaticParams() {
   return resumeExamples.map((ex) => ({ slug: ex.slug }));
@@ -15,7 +16,10 @@ export async function generateMetadata({
   const { slug } = await params;
   const ex = resumeExamples.find((e) => e.slug === slug);
   if (!ex) return { title: 'Пример не найден' };
-  return { title: ex.title, description: ex.preview };
+  return pageMeta(`/resume-examples/${slug}`, {
+    title: ex.title,
+    description: ex.preview,
+  });
 }
 
 export default async function ResumeExamplePage({ params }: { params: Promise<{ slug: string }> }) {

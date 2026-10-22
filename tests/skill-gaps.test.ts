@@ -33,7 +33,7 @@ before(async () => {
 
 beforeEach(() => {
   db.exec(
-    'DELETE FROM bookmarks; DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies;',
+    'DELETE FROM apply_events; DELETE FROM auth_attempts; DELETE FROM bookmarks; DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies;',
   );
   resetCatalogCache();
 });

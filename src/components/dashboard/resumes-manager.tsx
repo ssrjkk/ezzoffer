@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { formatDateShort } from '@/lib/format-date';
 import { ScoreBadge } from './score-badge';
 import {
   Badge,
@@ -45,6 +46,9 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
   const [openMatch, setOpenMatch] = useState<number | null>(null);
   /** id резюме, удаление которого сейчас подтверждается; null — окно закрыто. */
   const [confirmId, setConfirmId] = useState<number | null>(null);
+  /** Результат клонирования на hh: id резюме → ссылка на копию. */
+  const [cloneLinks, setCloneLinks] = useState<Record<number, string>>({});
+  const [cloningId, setCloningId] = useState<number | null>(null);
   const [improveResult, setImproveResult] = useState<{
     resume: Resume;
     notes: string[];
@@ -81,8 +85,27 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
     }
   };
 
-  const remove = async (id: number) => {
-    // Без этой защиты двойной клик отправлял второй DELETE уже удалённой
+  const cloneOnHh = async (id: number) => {
+    // Двойной клик — двойная копия на hh: вторая заявка отклоняется, пока идёт первая.
+    if (cloningId !== null) return;
+    setCloningId(id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/resumes/${id}/clone`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data.error ?? 'Не удалось создать копию на hh.ru');
+        return;
+      }
+      if (typeof data.hhUrl === 'string') setCloneLinks((prev) => ({ ...prev, [id]: data.hhUrl }));
+    } catch {
+      setError('Сеть недоступна — копия не создана');
+    } finally {
+      setCloningId(null);
+    }
+  };
+
+  const remove = async (id: number) => {    // Без этой защиты двойной клик отправлял второй DELETE уже удалённой
     // записи, и пользователь ловил ложную ошибку.
     if (removingId !== null) return;
     setRemovingId(id);
@@ -306,6 +329,29 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
                   ) : (
                     <Badge tone="warn">Только для подбора</Badge>
                   )}
+                    {/* Копия на hh одной кнопкой. */}
+                    {r.hh_id ? (
+                      cloneLinks[r.id] ? (
+                        <a
+                          href={cloneLinks[r.id]}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-mono text-[11px] uppercase tracking-[0.14em] text-accent underline-offset-2 hover:underline"
+                        >
+                          Открыть копию на hh
+                        </a>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={cloningId === r.id}
+                          onClick={() => void cloneOnHh(r.id)}
+                          className="-my-1 inline-flex min-h-11 items-center font-mono text-[11px] uppercase tracking-[0.14em] text-muted underline-offset-2 hover:text-accent disabled:opacity-60"
+                          title="Создать копию этого резюме на hh.ru — правится там, обратно забирается импортом"
+                        >
+                          {cloningId === r.id ? 'Копируем…' : 'Копия на hh'}
+                        </button>
+                      )
+                    ) : null}
                   <ScoreBadge content={r.content} />
                 </div>
                 <p className="mt-1 line-clamp-2 text-sm text-muted">
@@ -313,7 +359,7 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
                 </p>
                 <p className="mt-2 text-xs text-muted">
                   {r.years_label ? `${r.years_label} · ` : ''}
-                  Обновлено {new Date(r.updated_at).toLocaleDateString('ru-RU')}
+                  Обновлено {formatDateShort(r.updated_at)}
                 </p>
                 {openMatch === r.id ? (
                   <div className="mt-3">

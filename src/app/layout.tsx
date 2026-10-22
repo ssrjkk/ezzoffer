@@ -73,11 +73,10 @@ export const metadata: Metadata = {
       'Подберём вакансии, улучшим резюме с AI и отправим отклики за вас. Пробный период 24 часа без карты.',
     locale: 'ru_RU',
     type: 'website',
-    url: siteUrl,
     siteName: 'EZOffer',
   },
   twitter: {
-    card: 'summary',
+    card: 'summary_large_image',
     title: 'EZOffer — поиск работы без стресса и отказов',
     description: 'Подберём вакансии, улучшим резюме с AI и отправим отклики за вас.',
   },

@@ -106,6 +106,66 @@ export async function listHhResumes(token: string): Promise<HhResumeSummary[]> {
 }
 
 /**
+ * Создание копии резюме на hh (`POST /resumes?source_resume_id=`).
+ *
+ * Полноценная «загрузка варианта» (собрать hh-структуру из локального текста
+ * и залить POST /resumes) здесь намеренно нет: маппинг свободного текста в
+ * блоки опыта/навыков hh с их справочниками — отдельный проект с собственными
+ * ошибками, а ошибка здесь писала бы человеку в профиль мусор от его имени.
+ * Вместо этого — клонирование привязанного резюме одной кнопкой: человек
+ * правит копию на hh (там же валидация и подсказки), а обратно забирает её
+ * существующим импортом, который и привязывает новый hh_id.
+ */
+export async function cloneHhResume(
+  token: string,
+  hhResumeId: string,
+): Promise<{ id: string } | { error: string }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(
+      `${RESUME_URL}?source_resume_id=${encodeURIComponent(hhResumeId)}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json',
+          'User-Agent': 'EZOffer/1.0',
+        },
+        cache: 'no-store',
+        signal: controller.signal,
+      },
+    );
+    if (res.status === 201) {
+      const location = res.headers.get('location') ?? res.headers.get('Location') ?? '';
+      const id = location.split('/').filter(Boolean).pop() ?? '';
+      if (id) return { id };
+      return { error: 'hh создал копию, но не вернул её id' };
+    }
+    if (res.status === 404) {
+      return { error: 'Резюме не найдено на hh — обновите привязку импортом' };
+    }
+    return { error: `hh отклонил копирование (HTTP ${res.status})` };
+  } catch (e) {
+    logError('hh:resume-clone', e, { resumeId: hhResumeId });
+    return { error: 'Не удалось соединиться с hh.ru' };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** Можно ли вообще создавать резюме (лимит площадки). */
+export async function canCreateHhResume(token: string): Promise<boolean> {
+  const data = await fetchJson<{
+    is_creation_available?: boolean;
+    remaining?: number;
+  }>(`${RESUME_URL}/creation_availability`, token);
+  if (!data) return false;
+  if (typeof data.is_creation_available === 'boolean') return data.is_creation_available;
+  return (data.remaining ?? 0) > 0;
+}
+
+/**
  * Содержимое резюме hh в виде плоского текста.
  *
  * Текст собирается из блоков в порядке чтения. Форматирование hh (жирный,

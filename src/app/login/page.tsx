@@ -20,7 +20,11 @@ export default async function LoginPage({
   if (user) redirect('/dashboard');
 
   const { next, verified } = await searchParams;
-  const safeNext = next?.startsWith('/') && !next.startsWith('//') ? next : undefined;
+  // Открытый редирект закрыт строго: только путь внутри сайта. Обратный слэш
+  // (`/\evil.com`) браузеры нормализуют в `//evil.com` — то есть во внешний
+  // URL, поэтому запрещён явно, а не только двойной прямой слэш.
+  const safeNext =
+    next?.startsWith('/') && !next.startsWith('//') && !next.includes('\\') ? next : undefined;
 
   /*
    * Список способов считается здесь, на сервере, и попадает в HTML.
@@ -53,7 +57,7 @@ export default async function LoginPage({
       {verified === '1' ? (
         <p
           role="status"
-          className="mx-auto mb-6 max-w-md rounded-xl border border-line bg-paper px-4 py-3 text-sm text-ink"
+          className="mx-auto mb-6 max-w-md rounded-sm border border-line bg-paper px-4 py-3 text-sm text-ink"
         >
           Почта подтверждена — входите.
         </p>
@@ -61,7 +65,7 @@ export default async function LoginPage({
       {verified === '0' ? (
         <p
           role="alert"
-          className="mx-auto mb-6 max-w-md rounded-xl border border-line bg-paper px-4 py-3 text-sm text-ink"
+          className="mx-auto mb-6 max-w-md rounded-sm border border-line bg-paper px-4 py-3 text-sm text-ink"
         >
           Ссылка недействительна или истекла. Зарегистрируйтесь заново — мы вышлем новую.
         </p>

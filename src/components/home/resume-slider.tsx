@@ -7,7 +7,7 @@ function BeforeBlock() {
   return (
     <div className="rounded-sm border border-line bg-surface p-5 md:p-6">
       <p className="mb-4 inline-flex rounded-sm bg-danger/10 px-3 py-1 text-xs font-semibold text-danger ring-1 ring-danger/25">
-        До — пропускает фильтры
+        До — теряется среди таких же
       </p>
       <div className="space-y-4 text-left">
         <div className="flex items-center gap-3">
@@ -51,7 +51,7 @@ function AfterBlock() {
   return (
     <div className="rounded-sm border border-success/30 bg-surface p-5 md:p-6">
       <p className="mb-4 inline-flex rounded-sm bg-success/10 px-3 py-1 text-xs font-semibold text-success ring-1 ring-success/30">
-        После — проходит ATS-фильтры
+        После — дочитывают до конца
       </p>
       <div className="space-y-4 text-left">
         <div className="flex items-center gap-3">
@@ -88,7 +88,7 @@ function AfterBlock() {
         </div>
       </div>
       <p className="mt-5 text-center text-xs text-success">
-        Цифры, ключевые навыки · структура под ATS · в 4 раза больше приглашений
+        Цифры, ключевые навыки · структура, которую понимает и человек, и парсер
       </p>
     </div>
   );
@@ -127,10 +127,10 @@ export function ResumeSlider() {
         eyebrow="Умное исправление резюме"
         title={
           <>
-            Резюме, которое <span className="text-accent">читают и пропускают</span> фильтры
+            Резюме, которое <span className="text-accent">дочитывают,</span> а не пролистывают
           </>
         }
-        sub="AI выделит вас среди кандидатов: структура, ключевые навыки и цифры под требования ATS и конкретных вакансий"
+        sub="AI усилит структуру, добавит ключевые навыки и цифры под требования вакансий — то, на что смотрят и рекрутер, и автоматический парсер"
       />
 
       <div
@@ -143,8 +143,9 @@ export function ResumeSlider() {
         role="slider"
         aria-label="Сравнение резюме до и после"
         aria-valuenow={Math.round(pos)}
-        aria-valuemin={0}
-        aria-valuemax={100}
+        aria-valuemin={4}
+        aria-valuemax={96}
+        aria-valuetext={`Показано «после» на ${Math.round(pos)} процентов`}
       >
         <div className="p-4 md:p-6">
           <AfterBlock />

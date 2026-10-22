@@ -1,26 +1,27 @@
 import type { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 import { Section, SectionHead, PrimaryButton } from '@/components/ui';
 import { JobsGrid } from '@/components/jobs-grid';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta('/jobs', {
   title: 'Вакансии',
   description:
-    'Тысячи вакансий со всего рынка в одном месте: разработка, дизайн, продукт, аналитика, маркетинг и стажировки.',
-};
+    'Примеры вакансий из каталога EZOffer: разработка, дизайн, продукт, аналитика, маркетинг. Живой каталог — в кабинете после регистрации.',
+});
 
 export default function JobsPage() {
   return (
     <>
       <Section className="pb-8 pt-16 md:pt-24">
         <SectionHead
-          eyebrow="Вакансии"
+          eyebrow="Вакансии · демо-подборка"
           level="h1"
           title={
             <>
-              Тысячи вакансий — <span className="text-accent">в одном месте</span>
+              Как выглядят вакансии <span className="text-accent">в каталоге</span>
             </>
           }
-          sub="Откликаемся на них за вас автоматически: персональное письмо, релевантные фильтры и скорость первым среди соискателей"
+          sub="Ниже — примеры для показа. Живой каталог (hh.ru, Работа России, Работа.ру и ещё десять источников) собирается под ваш запрос в кабинете — после регистрации."
         />
       </Section>
 

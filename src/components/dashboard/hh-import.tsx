@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { btnGhost } from '@/components/dashboard/ui';
+import { formatDate } from '@/lib/format-date';
 import { StatusMessage } from '@/components/ui';
 import { Download } from 'lucide-react';
 
@@ -156,7 +157,7 @@ export function HhImportButton({
                     <span className="block">{busyId === r.id ? 'Импортируем…' : r.title}</span>
                     {r.updatedAt ? (
                       <span className="mt-0.5 block font-mono text-[11px] text-muted">
-                        обновлено {new Date(r.updatedAt).toLocaleDateString('ru-RU')}
+                        обновлено {formatDate(r.updatedAt)}
                       </span>
                     ) : null}
                   </button>

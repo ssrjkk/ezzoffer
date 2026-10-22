@@ -61,6 +61,13 @@
   /* Наведение на кнопке удаления: белый на danger даёт 6.54:1, на этом — 8.87:1. */
   --color-danger-hover: #8f1e18;
   /*
+   * Фирменный синий Telegram — только для кнопки «войти через Telegram».
+   * Токен, а не литерал bg-[#229ED9]: произвольные hex в классах не видит ни
+   * один контрастный тест, а белый текст на этом синем — 3.02:1 (впритык даже
+   * для иконок по WCAG 1.4.11). Токен делает цвет видимым для проверок.
+   */
+  --color-telegram: #229ed9;
+  /*
    * Шрифты. Inter стоял на всём сайте и сам был причиной ощущения
    * шаблонности: это шрифт по умолчанию. Заголовки — Playfair Display
    * (журнальная антиква), текст — IBM Plex Sans, цифры и метки — IBM Plex
@@ -71,41 +78,7 @@
   --font-sans: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, 'SF Mono', monospace;
 
-  --animate-marquee: marquee 42s linear infinite;
-  --animate-marquee-slow: marquee 70s linear infinite;
-  --animate-marquee-reverse: marquee-reverse 55s linear infinite;
-  --animate-float: float 7s ease-in-out infinite;
-  --animate-float-delayed: float 7s ease-in-out 2.2s infinite;
   --animate-pulse-dot: pulse-dot 2s ease-in-out infinite;
-  --animate-wiggle: wiggle 3s ease-in-out infinite;
-}
-
-@keyframes marquee {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-@keyframes marquee-reverse {
-  from {
-    transform: translateX(-50%);
-  }
-  to {
-    transform: translateX(0);
-  }
-}
-
-@keyframes float {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-14px);
-  }
 }
 
 @keyframes pulse-dot {
@@ -117,16 +90,6 @@
   50% {
     opacity: 0.45;
     transform: scale(0.8);
-  }
-}
-
-@keyframes wiggle {
-  0%,
-  100% {
-    transform: rotate(-2deg);
-  }
-  50% {
-    transform: rotate(2deg);
   }
 }
 
@@ -209,6 +172,10 @@
 
 html {
   scroll-behavior: smooth;
+  /* Тема одна — «бумага». Без этого UA-элементы (option в select, автозаполнение,
+     нативные date-picker) рисуются в схеме ОС: на тёмной ОС открытие select
+     в кабинете давало вспышку тёмного списка поверх светлой страницы. */
+  color-scheme: light;
 }
 
 body {

@@ -110,7 +110,7 @@ function TelegramFrame() {
       */}
       <div className="overflow-hidden rounded-sm border border-line bg-surface">
         <div className="flex items-center gap-3 border-b border-line px-5 py-3">
-          <span className="grid size-8 place-items-center rounded-sm bg-[#229ED9] text-white">
+          <span className="grid size-8 place-items-center rounded-sm bg-telegram text-white">
             <TelegramGlyph className="size-4" />
           </span>
           <div className="min-w-0">
@@ -170,7 +170,7 @@ function TelegramGlyph({ className = 'size-4' }: { className?: string }) {
 
 function Avatar() {
   return (
-    <span className="grid size-7 shrink-0 place-items-center rounded-sm bg-[#229ED9] text-white">
+    <span className="grid size-7 shrink-0 place-items-center rounded-sm bg-telegram text-white">
       <TelegramGlyph />
     </span>
   );
@@ -323,6 +323,10 @@ export function TelegramBot() {
 
         <div className="order-first lg:order-last">
           <TelegramFrame />
+          <p className="mt-3 text-xs text-muted">
+            Пример диалога: вакансии и цифры выдуманы, чтобы показать формат. Ваш бот будет
+            говорить про ваши поиски и ваши отклики.
+          </p>
         </div>
       </div>
     </Section>

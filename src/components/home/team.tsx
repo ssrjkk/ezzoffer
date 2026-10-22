@@ -9,18 +9,13 @@ export function Team() {
         eyebrow="О нас"
         title={
           <>
-            Маленькая команда, <span className="text-accent">большой результат</span>
+            Проект одного человека, <span className="text-accent">а не «команда экспертов»</span>
           </>
         }
-        sub="Мы сами прошли через десятки ручных откликов — и собрали инструмент, который вернул нам часы жизни"
+        sub="Никаких выдуманных сооснователей с фото из стоков. Есть автор, который сам искал работу, сам пишет код и сам отвечает, когда что-то ломается."
       />
 
-      {/*
-        Круглые аватары из градиентов с подъёмом при наведении ничего не
-        сообщали о людях. Теперь это список: инициалы моноширинным, имя
-        антиквой, должность акцентом.
-      */}
-      <div className="grid gap-x-8 gap-y-10 border-t border-line pt-8 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-x-8 gap-y-10 border-t border-line pt-8 sm:grid-cols-2">
         {team.map((member, idx) => (
           <Reveal key={member.name} delay={idx * 70}>
             <article className="h-full">
@@ -33,13 +28,23 @@ export function Team() {
             </article>
           </Reveal>
         ))}
+        <Reveal delay={70}>
+          <article className="flex h-full flex-col justify-between border-l-2 border-line pl-8">
+            <div>
+              <p className="font-mono text-xs tracking-[0.14em] text-muted">ВЫ</p>
+              <h3 className="mt-3 font-serif text-xl leading-snug">Второй человек в команде</h3>
+              <p className="mt-4 max-w-prose text-sm leading-relaxed text-muted">
+                Каждый баг-репорт и каждая жалоба «тут неудобно» попадают в работу напрямую, без
+                отдела поддержки посередине. Если пользуетесь — рассказывайте, что бесит: это и
+                есть роадмап.
+              </p>
+            </div>
+            <div className="mt-6">
+              <PrimaryButton href="/signup">Попробовать и рассказать</PrimaryButton>
+            </div>
+          </article>
+        </Reveal>
       </div>
-
-      <Reveal delay={100}>
-        <div className="mt-12">
-          <PrimaryButton href="/about">Узнать больше о нас</PrimaryButton>
-        </div>
-      </Reveal>
     </Section>
   );
 }

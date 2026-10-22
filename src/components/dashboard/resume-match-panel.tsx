@@ -67,7 +67,7 @@ export function ResumeMatchPanel({ resumeId }: { resumeId: number }) {
         onChange={(e) => setVacancy(e.target.value)}
         rows={5}
         placeholder="Требуется React-разработчик. Обязанности: разработка на TypeScript, сборка через Docker…"
-        className="mt-3 w-full rounded-sm border border-line bg-surface-2 p-3 text-sm text-ink"
+        className="mt-3 w-full rounded-sm border border-line-strong bg-surface-2 p-3 text-sm text-ink outline-none transition placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/25"
       />
 
       <div className="mt-3 flex flex-wrap items-center gap-3">

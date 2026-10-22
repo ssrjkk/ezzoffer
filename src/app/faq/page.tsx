@@ -1,13 +1,14 @@
 import type { Metadata } from 'next';
+import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
 import { Section, SectionHead } from '@/components/ui';
 import { FaqAccordion } from '@/components/home/faq';
 
-export const metadata: Metadata = {
+export const metadata: Metadata = pageMeta('/faq', {
   title: 'Вопросы и ответы',
   description:
     'FAQ EZOffer: безопасность, автоотклики, резюме, сопроводительные письма, тарифы и пробный период.',
-};
+});
 
 export default function FaqPage() {
   return (

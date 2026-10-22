@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { NextAction } from '@/lib/pipeline';
 
 /**
@@ -66,14 +66,24 @@ export function NextActionsPanel({ actions }: { actions: NextAction[] }) {
 /** Текст напоминания с копированием в буфер. */
 function DraftBlock({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => {
+    const stash = timers.current;
+    return () => {
+      stash.forEach(clearTimeout);
+      stash.length = 0;
+    };
+  }, []);
 
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
       // Возврат в исходное состояние: иначе надпись «скопировано» остаётся
-      // навсегда и перестаёт что-либо значить.
-      setTimeout(() => setCopied(false), 2500);
+      // навсегда и перестаёт что-либо значить. Таймер чистится при уходе
+      // со страницы: setState после размонтирования — молчаливая утечка.
+      const id = setTimeout(() => setCopied(false), 2500);
+      timers.current.push(id);
     } catch {
       setCopied(false);
     }

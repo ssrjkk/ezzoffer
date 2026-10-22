@@ -3,13 +3,14 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { plans } from '@/lib/data';
+import { formatDate } from '@/lib/format-date';
 import { Badge, Panel, btnPrimary, btnGhost, StatusMessage } from '@/components/dashboard/ui';
 
 const PLAN_IDS: Record<string, string> = { Старт: 'start', Про: 'pro', Эксперт: 'expert' };
 const PERIODS = [7, 14, 30] as const;
 
 function fmtDate(ts: number | null | undefined) {
-  return ts ? new Date(ts).toLocaleDateString('ru-RU') : '—';
+  return ts ? formatDate(ts) : '—';
 }
 
 export function PlanSettings({
@@ -143,12 +144,14 @@ export function PlanSettings({
         «14 дней», «30 дней») — это 367 px при боксе панели 244 px на 360px.
         Ряд не переносился и уводил всю страницу вбок.
       */}
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Срок тарифа">
         <span className="text-xs font-semibold uppercase tracking-wider text-muted">Срок:</span>
         {PERIODS.map((p) => (
           <button
             key={p}
             type="button"
+            role="radio"
+            aria-checked={period === p}
             onClick={() => setPeriod(p)}
             className={`rounded-sm border px-3.5 py-1.5 text-sm font-medium transition-colors ${
               period === p
