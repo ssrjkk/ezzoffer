@@ -226,7 +226,12 @@ export async function sendTelegramMessage(
     logInfo('telegram', 'сообщение отправлено', { chatId });
     return true;
   }
-  if (first.status === 400 && opts.html) {
+  /*
+   * Повтор простым текстом — только если ругнулась именно разметка
+   * («can't parse entities» и подобные). Иначе («chat not found»,
+   * «bot blocked») повтор бессмысленен: тот же 400, только дважды в логе.
+   */
+  if (first.status === 400 && opts.html && /parse|entit/i.test(first.error)) {
     const second = await send(true);
     logInfo(
       'telegram',

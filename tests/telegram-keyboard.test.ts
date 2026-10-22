@@ -438,6 +438,32 @@ test('битый HTML отправляется простым текстом, а
   }
 });
 
+test('не-разметочный 400 не повторяется впустую', async () => {
+  /*
+   * Фолбэк «отправь простым текстом» имеет смысл только когда ругнулась
+   * разметка. «Chat not found» от повтора не исчезнет — второй запрос лишь
+   * удваивает нагрузку и мусор в логе.
+   */
+  const { sendTelegramMessage } = await import('../src/lib/telegram');
+  let calls = 0;
+  const saved = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    calls++;
+    return {
+      ok: false,
+      status: 400,
+      text: async () => '{"ok":false,"description":"Bad Request: chat not found"}',
+    } as unknown as Response;
+  }) as typeof globalThis.fetch;
+  try {
+    const ok = await sendTelegramMessage('000', 'текст', { html: true });
+    assert.equal(ok, false);
+    assert.equal(calls, 1, `запросов ушло ${calls} вместо 1`);
+  } finally {
+    globalThis.fetch = saved;
+  }
+});
+
 test('кнопка кабинета не тащит локальный URL в Telegram', async () => {
   /*
    * Третья причина молчавшего бота: кнопка «Открыть кабинет» несла

@@ -153,8 +153,16 @@ export function TelegramConnect() {
                 <span className="mr-2 inline-grid size-5 place-items-center rounded-sm bg-accent/15 text-xs font-semibold text-accent-2">
                   1
                 </span>
-                Откройте бота <span className="font-mono text-xs text-ink">@ezzoffer_bot</span> в
-                Telegram
+                Откройте бота{' '}
+                <a
+                  href="https://t.me/ezzoffer_bot"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-xs text-accent underline-offset-2 hover:underline"
+                >
+                  @ezzoffer_bot
+                </a>{' '}
+                в Telegram
               </li>
               <li>
                 <span className="mr-2 inline-grid size-5 place-items-center rounded-sm bg-accent/15 text-xs font-semibold text-accent-2">
