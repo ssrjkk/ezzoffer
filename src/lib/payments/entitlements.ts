@@ -29,8 +29,13 @@ export type Entitlement = {
  * Выдать права по подтверждённому событию.
  *
  * Возвращает false, если платёж уже записан или записать нельзя. Никогда не
- * бросает: повторная доставка — норма, а исключение из grant превращалось в
- * 500 на вебхуке, и провайдер слал poison-сообщение вечно.
+ * бросает детерминированные ошибки (гонка двух доставок, нет пользователя):
+ * повторная доставка — норма, а исключение из grant превращалось в 500 на
+ * вебхуке, и провайдер слал poison-сообщение вечно.
+ *
+ * Временные ошибки БД (SQLITE_BUSY, диск) — исключение: они пробрасываются,
+ * вебхук отвечает 5xx, и провайдер повторяет доставку. Глотать их в false
+ * означало бы «оплата потеряна навсегда» с кодом 200.
  */
 export function grant(event: VerifiedEvent): boolean {
   const item = catalogItem(event.planId);
@@ -61,7 +66,22 @@ export function grant(event: VerifiedEvent): boolean {
   const now = Date.now();
   const paidAt =
     Number.isFinite(event.paidAt) && event.paidAt > 0 ? Math.min(event.paidAt, now) : now;
-  const expiresAt = item.permanent ? null : paidAt + item.days * 86_400_000;
+  /*
+   * Продление — от текущего срока, а не перезапись.
+   *
+   * Раньше expiresAt всегда считался от paidAt: раннее продление того же
+   * тарифа сжигало остаток («было 20 дней, купил ещё 30 — стало 30 вместо
+   * 50»), а оплата другого тарифа поверх активного молча роняла оплаченные
+   * дни. Теперь живой остаток того же плана сохраняется.
+   */
+  const current = db
+    .prepare('SELECT plan, plan_expires_at FROM users WHERE id = ?')
+    .get(event.userId) as { plan: string; plan_expires_at: number | null } | undefined;
+  const liveRemainder =
+    current && current.plan === event.planId && (current.plan_expires_at ?? 0) > paidAt
+      ? current.plan_expires_at as number
+      : paidAt;
+  const expiresAt = item.permanent ? null : liveRemainder + item.days * 86_400_000;
 
   let applied = false;
   try {
@@ -77,16 +97,36 @@ export function grant(event: VerifiedEvent): boolean {
       ).run(event.userId, event.planId, event.method, event.externalId, expiresAt, paidAt);
 
       /*
-       * users.plan обновляется здесь же, потому что весь продукт читает именно
-       * его. Постоянный тариф ставит plan_expires_at в NULL — «вечно» не может
-       * значить «через год».
+       * Ранний возврат ждал эту оплату: гасим выданные права сразу.
+       *
+       * Без этого refund-before-paid терялся, а paid выдавал действующий тариф
+       * за возвращённые деньги. Права закрываются той же меткой времени, что и
+       * оплата — в истории видно и то, и другое.
        */
-      db.prepare(
-        'UPDATE users SET plan = ?, plan_period = ?, plan_expires_at = ? WHERE id = ?',
-      ).run(event.planId, item.permanent ? 0 : item.days, expiresAt, event.userId);
+      const pending = db
+        .prepare('DELETE FROM pending_refunds WHERE provider = ? AND external_id = ? RETURNING user_id, plan_id')
+        .get(event.method, event.externalId) as
+        { user_id: number; plan_id: string } | undefined;
+      if (pending && pending.user_id === event.userId && pending.plan_id === event.planId) {
+        db.prepare(
+          `UPDATE entitlements SET expires_at = ?
+           WHERE source_payment_id = (SELECT id FROM payments WHERE provider = ? AND external_id = ?)`,
+        ).run(paidAt, event.method, event.externalId);
+      }
+
+      /*
+       * Витрина users.plan — по лучшему остатку, а не по последнему платежу.
+       *
+       * Оплата другого тарифа поверх активного раньше молча роняла оплаченные
+       * дни (активный Expert + оплата Start = витрина Start). Теперь побеждает
+       * вечный тариф, иначе самый дальний срок: человек пользуется лучшим из
+       * того, за что заплатил.
+       */
+      syncUserPlan(event.userId);
     })();
     applied = true;
   } catch (err) {
+    rethrowTransient(err);
     /*
      * Сюда попадают детерминированные ошибки: нет такого пользователя (FK),
      * гонка двух доставок (UNIQUE). Бросать их наружу — значит отвечать 500 и
@@ -100,6 +140,65 @@ export function grant(event: VerifiedEvent): boolean {
   }
 
   return applied;
+}
+
+/**
+ * Витрина users.plan — по лучшему действующему праву.
+ *
+ * Постоянный тариф важнее любого срочного (срок у него NULL — «вечно» не
+ * может значить «через год»), из срочных побеждает самый дальний. Используют
+ * и grant, и revoke: выдача и возврат — две стороны одного пересчёта, и второй
+ * путь с собственной формулой уже ошибался (MAX игнорировал NULL).
+ */
+export function syncUserPlan(userId: number): void {
+  const now = Date.now();
+  const best = db
+    .prepare(
+      `SELECT plan_id, expires_at FROM entitlements
+       WHERE user_id = ? AND (expires_at IS NULL OR expires_at > ?)
+       ORDER BY expires_at IS NULL DESC, expires_at DESC LIMIT 1`,
+    )
+    .get(userId, now) as { plan_id: string; expires_at: number | null } | undefined;
+  if (best) {
+    const item = catalogItem(best.plan_id);
+    db.prepare('UPDATE users SET plan = ?, plan_period = ?, plan_expires_at = ? WHERE id = ?').run(
+      best.plan_id,
+      item?.permanent ? 0 : (item?.days ?? 0),
+      best.expires_at,
+      userId,
+    );
+    return;
+  }
+  /*
+   * Платных прав не осталось — но мог остаться живой пробник. Триал не
+   * является entitlement (выдаёт его /api/trial, а не вебхук), поэтому
+   * наивный сброс в 'none' убивал его: человек на пробнике покупал Pro,
+   * возвращал Pro — и оставался вообще без тарифа, хотя сутки пробника
+   * ещё не вышли. Возвращаем trial, если его срок жив.
+   */
+  const trial = db.prepare('SELECT trial_started_at FROM users WHERE id = ?').get(userId) as {
+    trial_started_at: number | null;
+  } | undefined;
+  if (trial?.trial_started_at && trial.trial_started_at + 86_400_000 > now) {
+    db.prepare(
+      "UPDATE users SET plan = 'trial', plan_period = 1, plan_expires_at = ? WHERE id = ?",
+    ).run(trial.trial_started_at + 86_400_000, userId);
+    return;
+  }
+  db.prepare("UPDATE users SET plan = 'none', plan_expires_at = NULL WHERE id = ?").run(userId);
+}
+
+/** Временные ошибки БД нельзя глотать: провайдер должен повторить доставку. */
+export function rethrowTransient(err: unknown): void {
+  const code = (err as { code?: string } | null)?.code ?? '';
+  if (
+    code === 'SQLITE_BUSY' ||
+    code === 'SQLITE_LOCKED' ||
+    code === 'SQLITE_IOERR' ||
+    code === 'SQLITE_FULL'
+  ) {
+    throw err;
+  }
 }
 
 /**
@@ -118,52 +217,50 @@ export function grant(event: VerifiedEvent): boolean {
  */
 export function revoke(event: VerifiedEvent): boolean {
   try {
-    const payment = db
-      .prepare('SELECT id, user_id, plan_id FROM payments WHERE provider = ? AND external_id = ?')
-      .get(event.method, event.externalId) as
-      { id: number; user_id: number; plan_id: string } | undefined;
-    // Платёж чужой или его не было: отзывать нечего. Молча false, а не ошибка —
-    // порядок доставок «refund раньше paid» возможен при ретраях.
-    if (!payment || payment.user_id !== event.userId || payment.plan_id !== event.planId) {
-      return false;
-    }
+    return db.transaction(() => {
+      const payment = db
+        .prepare('SELECT id, user_id, plan_id FROM payments WHERE provider = ? AND external_id = ?')
+        .get(event.method, event.externalId) as
+        { id: number; user_id: number; plan_id: string } | undefined;
+      if (!payment) {
+        /*
+         * Платежа ещё нет — возможно, это возврат раньше оплаты (порядок
+         * доставок при ретраях). Не отбрасываем молча: кладём в
+         * pending_refunds, и grant погасит права сразу при выдаче. Чистим
+         * протухшие (старше 30 дней): оплата, не пришедшая за месяц, уже не
+         * придёт, а таблица не должна расти монотонно.
+         *
+         * Чужой платёж (есть, но не наш) сюда не попадает: ниже — молча false
+         * без записи, иначе чужим external_id можно было бы гасить чужие права.
+         */
+        db.prepare(
+          `INSERT OR IGNORE INTO pending_refunds (provider, external_id, user_id, plan_id, created_at)
+           VALUES (?, ?, ?, ?, ?)`,
+        ).run(event.method, event.externalId, event.userId, event.planId, Date.now());
+        db.prepare('DELETE FROM pending_refunds WHERE created_at <= ?').run(
+          Date.now() - 30 * 86_400_000,
+        );
+        return false;
+      }
+      if (payment.user_id !== event.userId || payment.plan_id !== event.planId) {
+        return false;
+      }
 
-    const now = Date.now();
-    const closed = db
-      .prepare(
-        `UPDATE entitlements SET expires_at = ?
-         WHERE source_payment_id = ? AND (expires_at IS NULL OR expires_at > ?)`,
-      )
-      .run(now, payment.id, now);
-    if (closed.changes === 0) return false;
+      const now = Date.now();
+      const closed = db
+        .prepare(
+          `UPDATE entitlements SET expires_at = ?
+           WHERE source_payment_id = ? AND (expires_at IS NULL OR expires_at > ?)`,
+        )
+        .run(now, payment.id, now);
+      if (closed.changes === 0) return false;
 
-    /*
-     * Витрина users.plan приводится к остатку прав.
-     *
-     * Остались действующие права (второй платёж) — срок витрины ставится по
-     * самому дальнему из них, а не остаётся от отозванного. Не осталось
-     * вовсе — план сбрасывается в none: у вечного тарифа isPlanActive срок
-     * не смотрит, и гасить сроком его было бы нельзя — возврат оставлял бы
-     * подписку.
-     */
-    const rest = db
-      .prepare(
-        `SELECT COUNT(*) AS c, MAX(expires_at) AS farthest FROM entitlements
-         WHERE user_id = ? AND (expires_at IS NULL OR expires_at > ?)`,
-      )
-      .get(event.userId, now) as { c: number; farthest: number | null };
-    if (rest.c > 0) {
-      db.prepare('UPDATE users SET plan_expires_at = ? WHERE id = ?').run(
-        rest.farthest,
-        event.userId,
-      );
-    } else {
-      db.prepare("UPDATE users SET plan = 'none', plan_expires_at = NULL WHERE id = ?").run(
-        event.userId,
-      );
-    }
-    return true;
+      // Витрина — по лучшему остатку (общий пересчёт с grant, см. syncUserPlan).
+      syncUserPlan(event.userId);
+      return true;
+    })();
   } catch (err) {
+    rethrowTransient(err);
     logError('payments:revoke', err instanceof Error ? err : new Error(String(err)), {
       externalId: event.externalId,
       userId: event.userId,

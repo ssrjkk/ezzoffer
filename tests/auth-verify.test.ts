@@ -78,12 +78,14 @@ test('регистрация создаёт неподтверждённый а�
   assert.match(row.email_verification_token ?? '', /^[0-9a-f]{64}$/, 'токен обязан быть');
 });
 
-test('вход до подтверждения закрыт', async () => {
+test('вход до подтверждения неотличим от неверного пароля', async () => {
   const { post } = await import('./helpers/route-session');
   const { POST } = await import('../src/app/api/auth/login/route');
 
   const res = await POST(post({ email: 'fresh@example.test', password: 'secret-1' }));
-  assert.equal(res.status, 403, 'неподтверждённый вход — 403, а не 401');
+  assert.equal(res.status, 401, 'неподтверждённый вход обязан отвечать как неверный пароль');
+  const body = (await res.json()) as { error: string };
+  assert.equal(body.error, 'Неверный email или пароль', 'текст тоже не должен различать случаи');
 });
 
 test('ссылка из письма подтверждает и пускает', async () => {
@@ -123,7 +125,7 @@ test('повторная регистрация неподтверждённог
   assert.equal(body.needsVerification, true, 'ответ как на новую регистрацию — адрес не раскрыт');
 });
 
-test('повторная регистрация подтверждённого адреса — 409', async () => {
+test('повторная регистрация подтверждённого адреса неотличима от новой', async () => {
   const { post } = await import('./helpers/route-session');
   const { POST } = await import('../src/app/api/auth/register/route');
 
@@ -135,7 +137,12 @@ test('повторная регистрация подтверждённого �
   const taken = await POST(
     post({ name: 'Третий', email: 'retry@example.test', password: 'secret-4' }),
   );
-  assert.equal(taken.status, 409);
+  // 201, а не 409: по ответу нельзя вычислить, что адрес занят. Побочных
+  // эффектов нет — ни сессии, ни письма.
+  assert.equal(taken.status, 201);
+  const body = (await taken.json()) as { user: null; needsVerification: boolean };
+  assert.equal(body.user, null, 'сессия на чужой адрес не выдаётся');
+  assert.equal(body.needsVerification, true);
 });
 
 test('успешный вход обнуляет счётчик попыток (regression)', async () => {

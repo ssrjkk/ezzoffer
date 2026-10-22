@@ -119,6 +119,10 @@ function parseStored(
     // заставили бы процесс выделить гигабайты памяти на каждой проверке.
     if (N > 1_048_576 || r > 32 || p > 16) return null;
     if (N < 2 || r < 1 || p < 1) return null;
+    // Диапазона выше мало: scrypt требует ~128*N*r*p байт, и при N=65536,r=32
+    // нужно 256 МБ при maxmem 128 МБ — Node бросает исключение вместо false.
+    // Параметры, не влезающие в maxmem, отбрасываем здесь же.
+    if (128 * N * r * p > MAX_MEM) return null;
     const salt = Buffer.from(parts[4]!, 'hex');
     if (salt.length !== SALT_LENGTH) return null;
     return { params: { N, r, p }, salt, hash: Buffer.from(parts[5]!, 'hex') };
@@ -147,8 +151,15 @@ export async function verifyPassword(password: string, stored: string): Promise<
     await derive(password, Buffer.alloc(SALT_LENGTH), CURRENT_PARAMS);
     return false;
   }
-  const candidate = await derive(password, parsed.salt, parsed.params);
-  return timingSafeEqual(candidate, parsed.hash);
+  try {
+    const candidate = await derive(password, parsed.salt, parsed.params);
+    if (candidate.length !== parsed.hash.length) return false;
+    return timingSafeEqual(candidate, parsed.hash);
+  } catch {
+    // scrypt может бросить на граничных параметрах (память, платформа):
+    // проверка пароля обязана вернуть false, а не 500.
+    return false;
+  }
 }
 
 /**

@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { requireUser, unauthorized, readJson } from '@/lib/api';
 import { db, getUserByEmail } from '@/lib/db';
-import { hashPassword, verifyPassword, SESSION_COOKIE } from '@/lib/auth';
+import { hashPassword, verifyPassword, SESSION_COOKIE, hashSessionToken } from '@/lib/auth';
 import { isUniqueViolation } from '@/lib/http';
+import { mailConfigured } from '@/lib/mail';
+import { issueVerificationToken, sendVerificationMail } from '@/lib/auth/verify';
 
 export async function PUT(request: Request) {
   const user = await requireUser();
@@ -85,7 +87,17 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Этот email уже занят' }, { status: 409 });
     }
     try {
-      db.prepare('UPDATE users SET email = ? WHERE id = ?').run(email, user.id);
+      // Новый адрес — неподтверждённый: флаг email_verified сбрасывается, иначе
+      // «подтверждён» переносился бы на ящик, владения которым не доказано.
+      // Письмо со ссылкой уходит сразу, иначе сброшенный флаг закрыл бы вход.
+      // Без SMTP подтвердить нечем — оставляем флаг, как при регистрации.
+      if (mailConfigured()) {
+        db.prepare('UPDATE users SET email = ?, email_verified = 0 WHERE id = ?').run(email, user.id);
+        const token = issueVerificationToken(user.id);
+        await sendVerificationMail(email, user.name, token);
+      } else {
+        db.prepare('UPDATE users SET email = ? WHERE id = ?').run(email, user.id);
+      }
     } catch (err) {
       if (isUniqueViolation(err)) {
         return NextResponse.json({ error: 'Этот email уже занят' }, { status: 409 });
@@ -102,6 +114,16 @@ export async function PUT(request: Request) {
         { status: 400 },
       );
     }
+    // Смена пароля — чувствительная операция не меньше смены email: требуем
+    // текущий пароль. Иначе угон одной сессии превращался в постоянный захват
+    // аккаунта (злоумышленник ставил свой пароль и гасил остальные сессии).
+    const currentPassword = data?.currentPassword ?? '';
+    if (!currentPassword || !(await verifyPassword(currentPassword, user.password_hash))) {
+      return NextResponse.json(
+        { error: 'Для смены пароля укажите текущий пароль' },
+        { status: 403 },
+      );
+    }
     db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(
       await hashPassword(password),
       user.id,
@@ -111,7 +133,7 @@ export async function PUT(request: Request) {
     const currentToken = store.get(SESSION_COOKIE)?.value;
     db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(
       user.id,
-      currentToken ?? '',
+      currentToken ? hashSessionToken(currentToken) : '',
     );
   }
 

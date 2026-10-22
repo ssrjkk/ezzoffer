@@ -8,6 +8,10 @@ import type { CatalogItem } from './types';
  * Если бы сумма приходила из тела вебхука и оттуда же бралась «цена»,
  * подделанный платёж в 1 рубль выдавал бы Expert.
  *
+ * Числа — те же, что на витрине (data.ts, цены за 30 дней): два источника
+ * цен уже расходились (каталог говорил 990/2490/4990, витрина — 1990/2990/
+ * 5990), и человек платил бы не ту сумму, что видел. Источник правды один.
+ *
  * `beta_life` — подписка без срока на время беты. Срок не хранится вовсе
  * (permanent), потому что любое значение в plan_expires_at для него — ошибка:
  * «истечёт через год» здесь означало бы, что вечность кончилась.
@@ -30,7 +34,7 @@ export const CATALOG: CatalogItem[] = [
   {
     id: 'start',
     title: 'Старт',
-    priceRub: 990,
+    priceRub: 1990,
     days: 30,
     lifetime: false,
     permanent: false,
@@ -40,7 +44,7 @@ export const CATALOG: CatalogItem[] = [
   {
     id: 'pro',
     title: 'Про',
-    priceRub: 2490,
+    priceRub: 2990,
     days: 30,
     lifetime: false,
     permanent: false,
@@ -50,7 +54,7 @@ export const CATALOG: CatalogItem[] = [
   {
     id: 'expert',
     title: 'Эксперт',
-    priceRub: 4990,
+    priceRub: 5990,
     days: 30,
     lifetime: false,
     permanent: false,
@@ -59,7 +63,7 @@ export const CATALOG: CatalogItem[] = [
       '250 откликов в день',
       'Резюме без ограничения',
       'Telegram-бот',
-      'Приоритетная поддержка',
+      'Разбор отказов и конверсии',
     ],
   },
 ];

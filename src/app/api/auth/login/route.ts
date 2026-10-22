@@ -10,10 +10,15 @@ import {
 import { hashPassword, needsRehash } from '@/lib/password';
 import { readJson } from '@/lib/api';
 import { rateLimit, resetRateLimit, clientIp } from '@/lib/rate-limit';
+import { recordAuthFailure, clearAuthFailures } from '@/lib/auth-attempts';
 
 // Защита от перебора: лимит привязан к аккаунту (работает и без TRUST_PROXY),
 // а не к глобальному "local"-ключу, который заблокировал бы всех пользователей.
 const ACCOUNT_LIMIT = { windowMs: 15 * 60 * 1000, max: 10 };
+
+// Защита от перебора: лимит привязан к аккаунту (работает и без TRUST_PROXY),
+// а не к глобальному "local"-ключу, который заблокировал бы всех пользователей.
+// Проверяется только на неуспехе — верный пароль проходит всегда (см. ниже).
 
 /**
  * Фиктивный хеш для выравнивания времени проверки несуществующего аккаунта:
@@ -63,22 +68,37 @@ export async function POST(request: Request) {
   // чтобы время ответа не зависело от существования email.
   const valid = await verifyPassword(password, user?.password_hash ?? DUMMY_STORED);
   if (!user || !valid) {
+    /*
+     * Лимит — только на неуспехе и в БД, а не в памяти процесса.
+     *
+     * Старый порядок («сначала бакет, потом пароль») давал account-lockout
+     * DoS, а in-memory бакет сбрасывался рестартом. Теперь верный пароль
+     * проходит всегда, а подбор упирается в 10/15 минут на любом инстансе
+     * и после любого рестарта.
+     */
+    const accountLimiter = recordAuthFailure(`login-account:${email}`, ACCOUNT_LIMIT);
+    if (!accountLimiter.allowed) {
+      return NextResponse.json(
+        { error: 'Слишком много попыток входа для этого аккаунта. Попробуйте позже.' },
+        { status: 429, headers: { 'Retry-After': String(accountLimiter.retryAfterSeconds) } },
+      );
+    }
     return NextResponse.json({ error: 'Неверный email или пароль' }, { status: 401 });
   }
 
-  /*
-   * Успешный вход обнуляет счётчик попыток по аккаунту.
-   *
-   * Раньше бакет `login-account:${email}` только рос: верный пароль его не
-   * сбрасывал. Владелец с нескольких устройств (или просто с перевходами)
-   * набирал 10 входов за 15 минут и получал 429 на собственном аккаунте —
-   * лимит, задуманный против подбора, бил по живому человеку. Сброс безопасен:
-   * чтобы сбросить чужой бакет, нужен верный пароль, а с ним подбирать нечего.
-   */
+  clearAuthFailures(`login-account:${email}`);
   resetRateLimit(`login-account:${email}`);
 
+  /*
+   * Неподтверждённый email — тот же 401, что и неверный пароль.
+   *
+   * Раньше здесь был 403 «Подтвердите email», и по коду ответа вычислялись
+   * существующие неподтверждённые адреса. Теперь оракула нет: оба случая
+   * неразличимы. Подсказка «проверьте почту» уже показана на экране
+   * регистрации, а письмо со ссылкой у человека на руках.
+   */
   if (!user.email_verified) {
-    return NextResponse.json({ error: 'Подтвердите email по ссылке из письма' }, { status: 403 });
+    return NextResponse.json({ error: 'Неверный email или пароль' }, { status: 401 });
   }
 
   // Прозрачное обновление: пароль, сохранённый с прежними (дешёвыми) параметрами

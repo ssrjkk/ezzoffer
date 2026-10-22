@@ -29,8 +29,14 @@ export async function POST(request: Request, ctx: { params: Promise<{ provider: 
   }
 
   // Секрет настроен на сервере? Иначе проверять нечем и принимать нельзя.
-  if (!impl.ready() && !impl.reason?.()) {
-    return NextResponse.json({ error: 'Способ оплаты не настроен' }, { status: 503 });
+  // 503, а не 401: подпись не «не сошлась», её нечем проверять. Старое условие
+  // `!ready() && !reason()` не выполнялось никогда — reason() возвращает строку
+  // ровно тогда, когда ready() false.
+  if (!impl.ready()) {
+    return NextResponse.json(
+      { error: impl.reason?.() ?? 'Способ оплаты не настроен' },
+      { status: 503 },
+    );
   }
 
   const body = await request.text();
@@ -47,6 +53,11 @@ export async function POST(request: Request, ctx: { params: Promise<{ provider: 
    * сам verify (там принимался только "paid"): деньги возвращались, а тариф
    * оставался — подписка за чужой счёт.
    */
-  const applied = event.kind === 'refunded' ? revoke(event) : grant(event);
-  return NextResponse.json({ ok: true, applied, externalId: event.externalId });
+  try {
+    const applied = event.kind === 'refunded' ? revoke(event) : grant(event);
+    return NextResponse.json({ ok: true, applied, externalId: event.externalId });
+  } catch {
+    // Временная ошибка БД (занята, диск): провайдер должен повторить доставку.
+    return NextResponse.json({ error: 'Временная ошибка, повторите позже' }, { status: 500 });
+  }
 }

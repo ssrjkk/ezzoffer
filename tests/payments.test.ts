@@ -182,7 +182,7 @@ test('сумма берётся из каталога, а не из тела в�
   const row = db.prepare("SELECT amount_rub FROM payments WHERE external_id = 'amt-1'").get() as {
     amount_rub: number;
   };
-  assert.equal(row.amount_rub, 4990, `в запись попала сумма из тела вебхука: ${row.amount_rub}`);
+  assert.equal(row.amount_rub, 5990, `в запись попала сумма из тела вебхука: ${row.amount_rub}`);
 });
 
 test('крипта-способ включён и берёт адрес кошелька из окружения', async () => {
@@ -320,17 +320,73 @@ test('возврат отзывает права и гасит план (regress
   assert.equal(user.plan, 'none', 'после возврата план обязан гаснуть, а не висеть');
 });
 
-test('возврат без платежа ничего не отзывает', async () => {
+test('возврат без платежа ждёт оплату, а не теряется (regression)', async () => {
+  /*
+   * Раньше refund-before-paid отбрасывался молча, а пришедший позже paid
+   * выдавал действующий тариф за возвращённые деньги. Теперь ранний возврат
+   * ждёт в pending_refunds, и grant гасит права сразу.
+   */
   const { POST } = await webhook();
-  const body = JSON.stringify({
+  const { hasActiveEntitlement } = await entitlements();
+  db.prepare(
+    `INSERT INTO users (id, email, password_hash, plan, plan_expires_at, created_at, email_verified)
+     VALUES (25, 'earlyrefund@test', 'h', 'none', NULL, ?, 1)`,
+  ).run(Date.now());
+
+  const refunded = JSON.stringify({
     event: 'refunded',
     planId: 'pro',
-    paymentId: 'never-paid-1',
-    userId: 1,
+    paymentId: 'early-1',
+    userId: 25,
   });
-  const res = await POST(hook(body, sign(body)), params('card'));
-  assert.equal(res.status, 200);
-  assert.equal(((await res.json()) as { applied: boolean }).applied, false);
+  const r1 = await POST(hook(refunded, sign(refunded)), params('card'));
+  assert.equal(r1.status, 200);
+  assert.equal(((await r1.json()) as { applied: boolean }).applied, false);
+
+  const paid = JSON.stringify({
+    event: 'paid',
+    planId: 'pro',
+    paymentId: 'early-1',
+    userId: 25,
+  });
+  const r2 = await POST(hook(paid, sign(paid)), params('card'));
+  assert.equal(r2.status, 200);
+  assert.equal(hasActiveEntitlement(25), false, 'оплата после возврата выдала живые права');
+  const user = db.prepare('SELECT plan FROM users WHERE id = 25').get() as { plan: string };
+  assert.equal(user.plan, 'none', 'витрина показывает оплаченный тариф после возврата');
+});
+
+test('возврат не убивает живой пробник (regression)', async () => {
+  /*
+   * Триал — не entitlement (его выдаёт /api/trial), поэтому наивный сброс
+   * витрины в 'none' при возврате убивал и его: человек на пробнике покупал
+   * Pro, возвращал Pro — и оставался без тарифа, хотя сутки пробника не вышли.
+   */
+  const { grant } = await entitlements();
+  db.prepare(
+    `INSERT INTO users (id, email, password_hash, plan, plan_expires_at, trial_started_at, created_at, email_verified)
+     VALUES (26, 'trialkeep@test', 'h', 'trial', ?, ?, ?, 1)`,
+  ).run(Date.now() + 20 * 3600_000, Date.now() - 4 * 3600_000, Date.now());
+  const now = Date.now();
+  assert.equal(
+    grant({
+      externalId: 'tk-pro',
+      userId: 26,
+      planId: 'pro',
+      amountRub: 2990,
+      method: 'card',
+      paidAt: now,
+      kind: 'paid',
+    }),
+    true,
+  );
+  const { revoke } = await entitlements();
+  assert.equal(
+    revoke({ externalId: 'tk-pro', userId: 26, planId: 'pro', amountRub: 2990, method: 'card', paidAt: now, kind: 'refunded' }),
+    true,
+  );
+  const user = db.prepare('SELECT plan FROM users WHERE id = 26').get() as { plan: string };
+  assert.equal(user.plan, 'trial', 'возврат снёс живой пробник вместе с оплаченным тарифом');
 });
 
 test('возврат одного из двух платежей не убивает второй', async () => {
@@ -367,7 +423,7 @@ test('grant не бросает на несуществующем пользов
       externalId: 'ghost-1',
       userId: 999_999,
       planId: 'pro',
-      amountRub: 2490,
+      amountRub: 2990,
       method: 'card',
       paidAt: Date.now(),
       kind: 'paid',
@@ -381,4 +437,76 @@ test('grant не бросает на несуществующем пользов
     'grant обязан возвращать false, а не бросать (иначе 500 и вечные ретраи)',
   );
   assert.equal(applied, false);
+});
+
+test('оплата младшего тарифа не сносит действующий старший (regression)', async () => {
+  /*
+   * Активный Expert + оплата Start раньше давали витрину Start: остаток
+   * Expert сгорал, хотя деньги за него уплачены. Витрина ставится по лучшему
+   * остатку, а не по последнему платежу.
+   */
+  const { grant } = await entitlements();
+  db.prepare(
+    `INSERT INTO users (id, email, password_hash, plan, plan_expires_at, created_at, email_verified)
+     VALUES (23, 'downgrade@test', 'h', 'none', NULL, ?, 1)`,
+  ).run(Date.now());
+
+  const now = Date.now();
+  assert.equal(
+    grant({
+      externalId: 'dg-expert',
+      userId: 23,
+      planId: 'expert',
+      amountRub: 5990,
+      method: 'card',
+      paidAt: now,
+      kind: 'paid',
+    }),
+    true,
+  );
+  assert.equal(
+    grant({
+      externalId: 'dg-start',
+      userId: 23,
+      planId: 'start',
+      amountRub: 1990,
+      method: 'card',
+      paidAt: now,
+      kind: 'paid',
+    }),
+    true,
+  );
+
+  const user = db.prepare('SELECT plan FROM users WHERE id = 23').get() as { plan: string };
+  assert.equal(user.plan, 'expert', 'оплата Start не должна гасить активный Expert');
+});
+
+test('раннее продление того же тарифа складывается, а не перезаписывается (regression)', async () => {
+  const { grant } = await entitlements();
+  db.prepare(
+    `INSERT INTO users (id, email, password_hash, plan, plan_expires_at, created_at, email_verified)
+     VALUES (24, 'extend@test', 'h', 'none', NULL, ?, 1)`,
+  ).run(Date.now());
+
+  const now = Date.now();
+  const first: Parameters<typeof grant>[0] = {
+    externalId: 'ex-1',
+    userId: 24,
+    planId: 'start',
+    amountRub: 1990,
+    method: 'card',
+    paidAt: now,
+    kind: 'paid',
+  };
+  assert.equal(grant(first), true);
+  assert.equal(grant({ ...first, externalId: 'ex-2' }), true);
+
+  const user = db.prepare('SELECT plan_expires_at FROM users WHERE id = 24').get() as {
+    plan_expires_at: number;
+  };
+  const thirtyDays = 30 * 86_400_000;
+  assert.ok(
+    user.plan_expires_at >= now + 2 * thirtyDays - 60_000,
+    `остаток сгорел: срок ${new Date(user.plan_expires_at).toISOString()}, ждали ~60 дней`,
+  );
 });

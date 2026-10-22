@@ -67,17 +67,16 @@ function fromAddress(): string {
 export async function sendMail(message: MailMessage): Promise<boolean> {
   const mailer = getTransporter();
   if (!mailer) {
-    logInfo('mail', 'SMTP не настроен, письмо не отправлено', { to: message.to });
+    // Адресат в лог не пишем: email — персональные данные.
+    logInfo('mail', 'SMTP не настроен, письмо не отправлено');
     return false;
   }
   try {
     await mailer.sendMail({ from: fromAddress(), ...message });
-    logInfo('mail', 'письмо отправлено', { to: message.to, subject: message.subject });
+    logInfo('mail', 'письмо отправлено');
     return true;
   } catch (err) {
-    logInfo('mail', `ошибка отправки: ${err instanceof Error ? err.message : 'unknown'}`, {
-      to: message.to,
-    });
+    logInfo('mail', `ошибка отправки: ${err instanceof Error ? err.message : 'unknown'}`);
     return false;
   }
 }

@@ -60,12 +60,17 @@ test('модульный дефолт держит состояние между
 });
 
 /**
- * Регрессия: proxy.ts использовал `clientIp(request) ?? "unknown"`, а clientIp()
- * возвращает null, если TRUST_PROXY не выставлен (дефолт в .env.example).
- * Все пользователи делили один бакет `api:unknown` с потолком 60 запросов в
- * минуту — на живом трафике сайт отдавал 429 всем подряд.
+ * Регрессия (исправлена иначе): proxy.ts использовал `clientIp(request) ??
+ * "unknown"`, а clientIp() возвращает null без TRUST_PROXY. Все пользователи
+ * делили один бакет с потолком 60/мин — сайт отдавал 429 всем подряд.
+ *
+ * Промежуточное «лечение» (ключ из хеша cookie) оказалось хуже болезни:
+ * значение cookie приходит от клиента, и подмена давала новый бакет на каждый
+ * запрос — лимит обходился полностью. Поэтому без доверенного IP все делят
+ * общий бакет anon с высоким потолком. Разные сессии БЕЗ прокси один бакет
+ * делят — это осознанно, а не баг.
  */
-test('без TRUST_PROXY разные сессии получают разные ключи (regression)', () => {
+test('без TRUST_PROXY все запросы делят общий бакет anon (cookie не доверяем)', () => {
   delete process.env.TRUST_PROXY;
 
   const a = rateLimitKey(
@@ -76,26 +81,17 @@ test('без TRUST_PROXY разные сессии получают разные
     new Request('https://d.ru/api/x', { headers: { cookie: 'ez_session=bbb' } }),
     'api',
   );
-  assert.notEqual(a, b, 'разные сессии не должны делить бакет');
-  assert.ok(a.startsWith('api:sess:'));
+  assert.equal(a, 'api:anon');
+  assert.equal(b, 'api:anon', 'подмена cookie не должна давать новый бакет');
 });
 
-test('одинаковая сессия даёт стабильный ключ между запросами', () => {
+test('подмена cookie не обходит лимит: бакет общий', () => {
   delete process.env.TRUST_PROXY;
   const r1 = new Request('https://d.ru/api/x', { headers: { cookie: 'ez_session=token123' } });
   const r2 = new Request('https://d.ru/api/y', {
     headers: { cookie: 'other=1; ez_session=token123' },
   });
   assert.equal(rateLimitKey(r1, 'api'), rateLimitKey(r2, 'api'));
-});
-
-test('ключ не содержит сам токен сессии', () => {
-  delete process.env.TRUST_PROXY;
-  const key = rateLimitKey(
-    new Request('https://d.ru/api/x', { headers: { cookie: 'ez_session=supersecrettoken' } }),
-    'api',
-  );
-  assert.ok(!key.includes('supersecret'), `токен утёк в ключ: ${key}`);
 });
 
 test('аноним без IP и сессии попадает в отдельный бакет anon', () => {

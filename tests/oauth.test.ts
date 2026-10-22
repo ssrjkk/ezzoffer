@@ -143,15 +143,12 @@ test('вход на существующий аккаунт не создаёт 
  * для всего, кроме telegram, — и человек получал 401 после успешной
  * авторизации ТАМ. Кнопка обещала вход, которого нет.
  *
- * Теперь ссылка строится только для завершаемых способов (telegram).
- * Проверяется telegram: тот же контракт «разрешённый хост, client_id, state,
- * redirect_uri из SITE_URL», что раньше проверялся на github.
+ * Telegram шёл следующим: ссылка строилась, но завершить вход он не может —
+ * виджет не отдаёт email, а без почты аккаунт не заводится. Теперь ссылку не
+ * строит никто: authorizeUrl возвращает null для всех незавершаемых способов,
+ * включая telegram.
  */
 test('ссылка на авторизацию указывает на разрешённого провайдера', () => {
-  const url = oauth.authorizeUrl('telegram', 'state-123') ?? '';
-  assert.ok(url.startsWith('https://oauth.telegram.org/auth'), `не тот хост: ${url}`);
-  assert.match(url, /state=state-123/, 'нет state');
-
   // Произвольный провайдер не должен уводить человека на чужой сайт.
   assert.equal(oauth.authorizeUrl('квас', 's'), null);
   assert.equal(oauth.authorizeUrl('', 's'), null);
@@ -160,7 +157,7 @@ test('ссылка на авторизацию указывает на разр�
 test('незавершаемые способы ссылку не строят (regression)', () => {
   // Ключи заданы (см. before), но входа эти способы завершить не могут —
   // вести туда человека значит подарить ему 401 на возврате.
-  for (const p of ['github', 'google', 'yandex']) {
+  for (const p of ['github', 'google', 'yandex', 'telegram']) {
     assert.equal(oauth.authorizeUrl(p, 'state-123'), null, `${p} обещал бы вход, которого нет`);
   }
 });
@@ -181,12 +178,14 @@ test('незавершаемые способы не считаются гото
   }
 });
 
-test('redirect_uri собирается из SITE_URL и не берётся из запроса', () => {
-  const url = oauth.authorizeUrl('telegram', 'state-123') ?? '';
-  assert.match(
-    url,
-    /redirect_uri=https%3A%2F%2Fezoffer\.example%2Fapi%2Fauth%2Foauth%2Ftelegram%2Fcallback/,
-  );
+test('redirect_uri ниоткуда не берётся, пока нет завершаемых способов', () => {
+  // Ни один способ не завершается (telegram — тоже: виджет не отдаёт email),
+  // поэтому authorizeUrl возвращает null везде. Тест фиксирует это явно,
+  // чтобы возврат кнопки «Войти через …» заметили сразу: она снова начнёт
+  // врать тем, кто её видит.
+  for (const p of ['github', 'google', 'yandex', 'telegram']) {
+    assert.equal(oauth.authorizeUrl(p, 'state-123'), null);
+  }
 });
 
 test('неизвестный провайдер в коллбэке отвергается до похода в сеть', () => {

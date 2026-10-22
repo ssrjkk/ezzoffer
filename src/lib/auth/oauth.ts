@@ -55,7 +55,33 @@ function stateSecret(): string | null {
 /** Живущие state, срок жизни короткий: код отправлен, на возврат есть минуты. */
 const STATE_TTL_MS = 10 * 60 * 1000;
 
-const states = new Map<string, { userId: number; at: number }>();
+type StateStore = {
+  prepare: (sql: string) => {
+    get: (...args: unknown[]) => unknown;
+    run: (...args: unknown[]) => { changes: number };
+    all: (...args: unknown[]) => unknown[];
+  };
+};
+
+let storeModule: { db: StateStore } | null = null;
+/*
+ * Состояние — в БД, а не в памяти процесса.
+ *
+ * Раньше коды жили в Map: возврат коллбэка на другой инстанс (или рестарт)
+ * давал 401 на валидном входе — человек уходил к провайдеру и возвращался
+ * ни с чем. Таблица oauth_states уже была (ею пользуется hh-flow), и теперь
+ * ею же пользуется внешний вход: один паттерн на оба потока.
+ *
+ * Ленивый доступ — чтобы не тянуть открытие БД на импорт: db.ts при импорте
+ * открывает файл, и eager-импорт здесь замыкал бы цикл через auth-methods.
+ */
+function stateStore(): StateStore {
+  if (!storeModule) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    storeModule = require('../db') as { db: StateStore };
+  }
+  return storeModule.db;
+}
 
 function publicBase(): string {
   return (process.env.SITE_URL ?? 'http://localhost:3000').replace(/\/+$/, '');
@@ -67,24 +93,20 @@ export function createState(userId: number): string {
   const at = Date.now();
   /*
    * Подпись кода при возврате не проверяется — consumeState смотрит только в
-   * серверную карту. Поэтому секрета здесь не требуется: код живёт лишь в
-   * памяти процесса, и угадать 128 бит nonce снаружи нельзя. Секрет нужен для
+   * серверную таблицу. Поэтому секрета здесь не требуется: код живёт лишь в
+   * БД, и угадать 128 бит nonce снаружи нельзя. Секрет нужен для
    * ответов Telegram (parseProviderResponse ниже): они приходят снаружи, и
    * подпись — единственное, что их защищает.
    */
   const secret = stateSecret() ?? 'state-only';
   const mac = createHmac('sha256', secret).update(`${nonce}:${userId}:${at}`).digest('hex');
   const token = `${nonce}.${at}.${mac}`;
-  states.set(token, { userId, at });
-  purgeStates();
+  const store = stateStore();
+  store.prepare('DELETE FROM oauth_states WHERE expires_at <= ?').run(at);
+  store
+    .prepare('INSERT INTO oauth_states (token, user_id, expires_at) VALUES (?, ?, ?)')
+    .run(token, userId, at + STATE_TTL_MS);
   return token;
-}
-
-function purgeStates(): void {
-  const now = Date.now();
-  for (const [token, data] of states) {
-    if (now - data.at > STATE_TTL_MS) states.delete(token);
-  }
 }
 
 /**
@@ -95,25 +117,34 @@ function purgeStates(): void {
  * другого» до момента, когда код уже сгорел.
  */
 export function peekStateUserId(token: string): number | null {
-  const data = states.get(token);
-  if (!data) return null;
-  if (Date.now() - data.at > STATE_TTL_MS) {
-    states.delete(token);
+  if (!token) return null;
+  const row = stateStore()
+    .prepare('SELECT user_id, expires_at FROM oauth_states WHERE token = ?')
+    .get(token) as { user_id: number; expires_at: number } | undefined;
+  if (!row) return null;
+  if (row.expires_at <= Date.now()) {
+    stateStore().prepare('DELETE FROM oauth_states WHERE token = ?').run(token);
     return null;
   }
-  return data.userId;
+  return row.user_id;
 }
 
-/** Забрать код и уничтожить его. Второй раз вернёт null. */
+/**
+ * Забрать код и уничтожить его. Второй раз вернёт null.
+ *
+ * Арбитр одноразовости — DELETE, а не SELECT: два одновременных возврата
+ * увидят строку оба, но удалит её только один, второму достанется changes=0.
+ */
 export function consumeState(token: string): number | null {
   const userId = peekStateUserId(token);
-  if (userId !== null) states.delete(token);
-  return userId;
+  if (userId === null) return null;
+  const res = stateStore().prepare('DELETE FROM oauth_states WHERE token = ?').run(token);
+  return res.changes > 0 ? userId : null;
 }
 
 /** Только для тестов: сброс живых кодов между кейсами. */
 export function resetStates(): void {
-  states.clear();
+  stateStore().prepare('DELETE FROM oauth_states').run();
 }
 
 /**

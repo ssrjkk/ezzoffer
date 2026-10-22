@@ -1,11 +1,26 @@
 import { cookies } from 'next/headers';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { db, getUserById, type User } from './db';
 
 export { hashPassword, verifyPassword, needsRehash } from './password';
 
 export const SESSION_COOKIE = 'ez_session';
 const SESSION_DAYS = 30;
+/*
+ * Абсолютный потолок жизни цепочки сессий: 90 дней с создания.
+ *
+ * expires_at продлевается ротацией на каждом запросе, и без потолка активный
+ * пользователь жил бы на одной цепочке вечно — украденный полгода назад токен
+ * оставался бы живым, пока жертва заходит в кабинет. Потолок гасит цепочку:
+ * дальше — новый вход с паролем.
+ */
+const SESSION_ABSOLUTE_DAYS = 90;
+const SESSION_ABSOLUTE_MS = SESSION_ABSOLUTE_DAYS * 24 * 60 * 60 * 1000;
+
+/** В БД лежит хеш, а не сам токен: копия файла не даёт готовых сессий. */
+export function hashSessionToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
 
 /**
  * Глобальная уборка просроченных записей.
@@ -25,6 +40,9 @@ export function purgeExpiredAuthRows(now = Date.now()): void {
   if (now - lastPurgeAt < PURGE_INTERVAL_MS) return;
   lastPurgeAt = now;
   db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now);
+  db.prepare(
+    'DELETE FROM sessions WHERE created_at IS NOT NULL AND created_at <= ?',
+  ).run(now - SESSION_ABSOLUTE_MS);
   db.prepare('DELETE FROM oauth_states WHERE expires_at <= ?').run(now);
 }
 
@@ -36,18 +54,20 @@ export function resetAuthPurge(): void {
 export function createSession(userId: number): { token: string; expiresAt: number } {
   purgeExpiredAuthRows();
   const token = randomBytes(32).toString('hex');
-  const expiresAt = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000;
-  db.prepare('DELETE FROM sessions WHERE user_id = ? AND expires_at <= ?').run(userId, Date.now());
-  db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(
-    token,
+  const now = Date.now();
+  const expiresAt = now + SESSION_DAYS * 24 * 60 * 60 * 1000;
+  db.prepare('DELETE FROM sessions WHERE user_id = ? AND expires_at <= ?').run(userId, now);
+  db.prepare('INSERT INTO sessions (token, user_id, expires_at, created_at) VALUES (?, ?, ?, ?)').run(
+    hashSessionToken(token),
     userId,
     expiresAt,
+    now,
   );
   return { token, expiresAt };
 }
 
 export function destroySession(token: string): void {
-  db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+  db.prepare('DELETE FROM sessions WHERE token = ?').run(hashSessionToken(token));
 }
 
 /*
@@ -73,26 +93,36 @@ export function isHttpsRequest(request: Request): boolean {
 
 export function getSessionUser(token?: string): User | undefined {
   if (!token) return undefined;
-  const session = db.prepare('SELECT * FROM sessions WHERE token = ?').get(token) as
-    { user_id: number; expires_at: number } | undefined;
+  const key = hashSessionToken(token);
+  const session = db.prepare('SELECT * FROM sessions WHERE token = ?').get(key) as
+    { user_id: number; expires_at: number; created_at: number | null } | undefined;
   if (!session) return undefined;
-  if (session.expires_at <= Date.now()) {
-    db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
+  const now = Date.now();
+  if (
+    session.expires_at <= now ||
+    (session.created_at != null && session.created_at + SESSION_ABSOLUTE_MS <= now)
+  ) {
+    db.prepare('DELETE FROM sessions WHERE token = ?').run(key);
     return undefined;
   }
   return getUserById(session.user_id);
 }
 
 export function rotateSession(token: string): { token: string; expiresAt: number } | null {
-  const session = db.prepare('SELECT * FROM sessions WHERE token = ?').get(token) as
-    { user_id: number; expires_at: number } | undefined;
+  const key = hashSessionToken(token);
+  const session = db.prepare('SELECT * FROM sessions WHERE token = ?').get(key) as
+    { user_id: number; expires_at: number; created_at: number | null } | undefined;
   if (!session || session.expires_at <= Date.now()) return null;
+  if (session.created_at != null && session.created_at + SESSION_ABSOLUTE_MS <= Date.now()) {
+    // Абсолютный потолок: цепочку не продлеваем, пусть человек войдёт заново.
+    return null;
+  }
   const newToken = randomBytes(32).toString('hex');
   const expiresAt = Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000;
   db.prepare('UPDATE sessions SET token = ?, expires_at = ? WHERE token = ?').run(
-    newToken,
+    hashSessionToken(newToken),
     expiresAt,
-    token,
+    key,
   );
   return { token: newToken, expiresAt };
 }

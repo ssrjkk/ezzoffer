@@ -44,13 +44,15 @@ test('внутренние способы готовы без ключей, вн
   }
 });
 
-test('внешний способ готов, когда оба ключа на месте', () => {
+test('внешний способ готов, когда оба ключа на месте и вход завершается', () => {
   const saved = process.env.TELEGRAM_BOT_TOKEN;
   try {
-    // Проверяем на завершаемом способе: github/google/yandex ключами не
-    // включаются — они не умеют завершать вход (см. completes).
+    // Проверяем на завершаемом способе: github/google/yandex/telegram ключами
+    // не включаются — они не умеют завершать вход (см. completes). Telegram
+    // отдельно: виджет не отдаёт email, без которого аккаунт не завести.
     process.env.TELEGRAM_BOT_TOKEN = 'tok';
-    assert.equal(authMethodReady('telegram'), true);
+    assert.equal(authMethodReady('telegram'), false, 'Telegram не завершает вход — кнопка врала бы');
+    assert.equal(authMethodReady('github'), false);
   } finally {
     if (saved === undefined) delete process.env.TELEGRAM_BOT_TOKEN;
     else process.env.TELEGRAM_BOT_TOKEN = saved;

@@ -26,8 +26,8 @@ export async function POST(request: Request) {
   if (!/^[0-9a-f]{64}$/.test(token)) {
     return badRequest('Некорректная ссылка восстановления');
   }
-  if (password.length < 8 || password.length > 100) {
-    return badRequest('Пароль должен быть от 8 до 100 символов');
+  if (password.length < 6 || password.length > 100) {
+    return badRequest('Пароль должен быть от 6 до 100 символов');
   }
 
   const limiter = rateLimit(`reset-apply:${token.slice(0, 16)}`, MAX_ATTEMPTS);

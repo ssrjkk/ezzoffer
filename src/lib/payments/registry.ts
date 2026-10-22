@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { MethodId, PaymentProvider, PaymentIntent, VerifiedEvent } from './types';
 import { catalogItem } from './catalog';
+import { logInfo } from '../logger';
 
 /**
  * Реестр способов оплаты.
@@ -59,9 +60,20 @@ function parseEvent(body: string, method: MethodId): VerifiedEvent | null {
   /*
    * Сумма берётся из каталога, а не из тела вебхука. Иначе провайдер (или
    * подделка) прислал бы planId: "expert" с amount: 1, и проверка прошла бы.
+   * Заявленная сумма при этом не выбрасывается молча: расхождение с каталогом
+   * пишется в лог — это либо ошибка в клее интеграции, либо чужой счёт.
    */
   const item = catalogItem(planId);
   if (!item) return null;
+  const declared = Number(data.amountRub ?? data.amount);
+  if (Number.isFinite(declared) && declared !== item.priceRub) {
+    logInfo('payments:verify', 'сумма в вебхуке не совпала с каталогом, взят каталог', {
+      planId,
+      declared,
+      catalog: item.priceRub,
+      externalId,
+    });
+  }
 
   return {
     externalId,
