@@ -126,9 +126,16 @@ export async function processInbox(limit = 20): Promise<{ processed: number; fai
     try {
       const res = await handleUpdate(update);
       if (res === false) {
-        // Команда выполнена, а ответ не ушёл (сбой сети к Telegram):
-        // заявку отпускаем для повтора следующим тиком.
-        db.prepare('UPDATE tg_inbox SET claimed_at = NULL WHERE update_id = ?').run(row.update_id);
+        // Команда выполнена, а ответ не ушёл (сбой сети к Telegram).
+        // Раньше заявку отпускали без счёта — и вечный 400 («chat not found»,
+        // заблокировавший бота) крутил отправку каждый тик бесконечно.
+        // Теперь попытка считается: после INBOX_MAX_ATTEMPTS строка закрывается.
+        db.prepare(
+          'UPDATE tg_inbox SET attempts = attempts + 1, claimed_at = NULL WHERE update_id = ?',
+        ).run(row.update_id);
+        if (row.attempts + 1 >= INBOX_MAX_ATTEMPTS) {
+          finishInboxRow(row.update_id);
+        }
         failed++;
         continue;
       }

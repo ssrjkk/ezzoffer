@@ -2,10 +2,28 @@ import { NextResponse } from 'next/server';
 import { timingSafeEqual } from 'node:crypto';
 import { db } from '@/lib/db';
 import { telegramConfigured, telegramWebhookSecret, purgeExpiredCodes } from '@/lib/telegram';
-import type { TelegramUpdate } from '@/lib/telegram-bot';
-import { logInfo } from '@/lib/logger';
+import { processInbox, type TelegramUpdate } from '@/lib/telegram-bot';
+import { logError, logInfo } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Разбудить разбор очереди вне тика.
+ *
+ * По умолчанию включён (`TELEGRAM_FAST_PATH`, отключается значением '0'):
+ * после ответа 200 очередь разбирается сразу, и бот отвечает за секунды, а не
+ * к следующему тику (минуты). Безопасность та же, что у тика: заявки
+ * разбираются через claim, двойной обработки нет, а тик остаётся страховкой
+ * (если процесс умрёт между ответом и разбором). Ошибка здесь не роняет
+ * ничего: ответ уже ушёл, тик подберёт заявку позже.
+ *
+ * На бессерверном хостинге (ответ = смерть процесса) выключайте в '0' —
+ * там работает только тик.
+ */
+function wakeInbox(): void {
+  if (process.env.TELEGRAM_FAST_PATH === '0') return;
+  void processInbox().catch((err) => logError('telegram:wake', err));
+}
 
 /**
  * Webhook Telegram.
@@ -47,9 +65,10 @@ export async function POST(request: Request) {
   // Раньше handleUpdate выполнялся прямо здесь: ответ зависел от сетевых
   // вызовов (ответ пользователю, hh-запросы из /отклик), и долгий ответ
   // приводил к ретраям Telegram, а ретраи — к риску отключения вебхука.
-  // Теперь разбор идёт в тике планировщика (processInbox), а маршрут
-  // отвечает 200 сразу после записи. Повторный update_id отклоняется
-  // первичным ключом — это и есть дедупликация, единой точкой.
+  // Теперь маршрут отвечает 200 сразу после записи, а разбор идёт следом
+  // в фоне (wakeInbox) и в тике планировщика (processInbox). Повторный
+  // update_id отклоняется первичным ключом — это и есть дедупликация,
+  // единой точкой.
   if (typeof update.update_id !== 'number') {
     return Response.json({ ok: true });
   }
@@ -72,7 +91,11 @@ export async function POST(request: Request) {
   });
   purgeExpiredCodes();
 
-  return Response.json({ ok: true });
+  // Ответ уходит раньше разбора: Telegram видит быстрый 200 и не ретраит,
+  // а wakeInbox разбирает очередь следом в фоне того же процесса.
+  const res = Response.json({ ok: true });
+  wakeInbox();
+  return res;
 }
 
 /** Статус настройки: удобно для дашборда и healthcheck. */
