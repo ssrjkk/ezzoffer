@@ -543,7 +543,7 @@ function setPaused(user: User, paused: boolean): boolean {
   return result.changes > 0;
 }
 
-const HELP = [
+const HELP_HEAD = [
   'Привет! Я бот EZOffer — управляю откликами из Telegram.',
   '',
   'Команды:',
@@ -558,8 +558,10 @@ const HELP = [
   '/выйти — отвязать этот чат',
   '/помощь — эта справка',
   '',
-  'Сначала привяжите аккаунт: «Настройки → Telegram-бот» в кабинете (/dashboard/settings).',
-].join('\n');
+];
+const HELP_LINK_FOOTER =
+  'Сначала привяжите аккаунт: «Настройки → Telegram-бот» в кабинете (/dashboard/settings).';
+const HELP = [...HELP_HEAD, HELP_LINK_FOOTER].join('\n');
 
 const NOT_LINKED = [
   'Аккаунт не привязан.',
@@ -720,12 +722,45 @@ function applyReply(user: User, args: string): Reply {
   };
 }
 
+/**
+ * Латиница → кириллица для команд.
+ *
+ * Кнопка меню Telegram обязана быть латиницей (Bot API не принимает кириллицу
+ * в `command`), а говорит бот по-русски. Без алиасов нажатие пункта меню слало
+ * бы «Не знаю команду» — то есть меню, поставленное для удобства, ломало бы
+ * каждую команду. Нормализация здесь, а не в replyFor: туда тесты ходят
+ * напрямую с кириллицей, и дублировать там всю карту — значит держать две
+ * правды об одном.
+ */
+const COMMAND_ALIASES: Record<string, string> = {
+  podbor: 'подбор',
+  poisk: 'подбор',
+  otklik: 'отклик',
+  statistika: 'статистика',
+  sobesedovanie: 'собеседование',
+  sobesa: 'собеса',
+  izbrannoe: 'избранное',
+  sovety: 'советы',
+  navyki: 'навыки',
+  podrabotka: 'подработка',
+  frilans: 'фриланс',
+  zakazy: 'заказы',
+  pauza: 'пауза',
+  svyazat: 'связать',
+  vyiti: 'выйти',
+  pomoshch: 'помощь',
+};
+
 /** Разбирает команду и аргументы: "/поиск React удалённо" -> ["поиск", "React удалённо"]. */
 export function parseCommand(text: string): { command: string; args: string } | null {
   const raw = text.trim();
   if (!raw.startsWith('/')) return null;
   const [head, ...rest] = raw.split(/\s+/);
-  const command = head.slice(1).split('@')[0].toLowerCase();
+  const rawCommand = head.slice(1).split('@')[0].toLowerCase();
+  // 'start' не алиасится намеренно: у него свой ответ (статус), а у 'старт' —
+  // действие (снять паузу). Смешать их — значит показывать статус вместо
+  // возобновления или наоборот.
+  const command = COMMAND_ALIASES[rawCommand] ?? rawCommand;
   return { command, args: rest.join(' ') };
 }
 
@@ -758,6 +793,22 @@ export function withModeNotice(text: string, mode: 'demo' | 'live' | undefined):
 export function replyFor(command: string, args: string, user: User | null): Reply {
   switch (command) {
     case 'start':
+      /*
+       * Привязанному человеку справка «как привязаться» не нужна — ему нужен
+       * статус: тариф, счётчик дня, пауза. Иначе /start после /связать
+       * выглядит как «бот меня не узнал», и человек начинает сначала.
+       */
+      if (user) {
+        const stats = getStats(user.id);
+        const head = [
+          `Тариф: ${planLabel(user)} · сегодня ${fmt(stats.today)}/${fmt(stats.todayLimit)}`,
+          user.autoapply_paused
+            ? 'Автоотклики на паузе ⏸ — верните кнопкой «Продолжить»'
+            : 'Автоотклики идут по расписанию',
+        ].join('\n');
+        return { text: `${head}\n\n${HELP_HEAD.join('\n')}`, keyboard: mainKeyboard() };
+      }
+      return { text: HELP, keyboard: commandKeyboard() };
     case 'help':
     case 'помощь':
       return { text: HELP, keyboard: commandKeyboard() };
@@ -1079,6 +1130,9 @@ export async function handleUpdate(update: TelegramUpdate): Promise<boolean | nu
         '',
         `Отклики отправляются по тарифу «${planLabel(linked)}» с человеческими паузами.`,
       ].join('\n'),
+      // Дальше человек управляет кнопками, а не вспоминает команды: без
+      // клавиатуры приветствие после привязки обрывалось на тексте.
+      { keyboard: mainKeyboard() },
     );
   }
 

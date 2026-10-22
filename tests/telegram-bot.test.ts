@@ -55,6 +55,21 @@ test('parseCommand приводит регистр к нижнему', () => {
   assert.equal(parseCommand('/СТАТИСТИКА')?.command, 'статистика');
 });
 
+test('пункты меню-латиницы раскрываются в русские команды', () => {
+  /*
+   * Кнопка меню обязана быть латиницей, а бот говорит по-русски. Без алиасов
+   * нажатие пункта меню отвечало бы «Не знаю команду».
+   * 'start' среди алиасов нет намеренно: у него свой ответ-статус.
+   */
+  assert.equal(parseCommand('/podbor')?.command, 'подбор');
+  assert.equal(parseCommand('/otklik 2')?.command, 'отклик');
+  assert.equal(parseCommand('/otklik 2')?.args, '2');
+  assert.equal(parseCommand('/statistika')?.command, 'статистика');
+  assert.equal(parseCommand('/svyazat 123456')?.command, 'связать');
+  assert.equal(parseCommand('/pauza')?.command, 'пауза');
+  assert.equal(parseCommand('/start')?.command, 'start');
+});
+
 test('parseCommand возвращает null для обычного текста', () => {
   assert.equal(parseCommand('привет'), null);
   assert.equal(parseCommand(''), null);
@@ -67,6 +82,19 @@ test('/start и /помощь работают без привязки', () => {
 
   const help = replyFor('помощь', '', null);
   assert.match(help.text, /команды/i);
+});
+
+test('/start у привязанного показывает статус, а не инструкцию по привязке', () => {
+  /*
+   * Иначе /start после /связать выглядит как «бот меня не узнал»:
+   * человек видит «Сначала привяжите аккаунт», хотя только что привязал.
+   */
+  const reply = replyFor('start', '', user());
+  assert.match(reply.text, /Тариф: Про/);
+  assert.match(reply.text, /сегодня/);
+  assert.ok(!reply.text.includes('Сначала привяжите аккаунт'), 'привязанному шлют инструкцию по привязке');
+  const kb = reply.keyboard as { inline_keyboard: { text: string }[][] } | undefined;
+  assert.ok(kb, 'у статусного /start нет кнопок');
 });
 
 test('команды без привязки объясняют, как привязаться', () => {

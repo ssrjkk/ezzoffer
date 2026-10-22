@@ -11,6 +11,8 @@
     "test": "node --experimental-test-module-mocks --import tsx --test \"tests/*.test.ts\" \"tests/*.test.tsx\"",
     "seed": "node scripts/seed.js",
     "bot:poll": "node scripts/bot-poll.mjs",
+    "bot:menu": "node scripts/set-bot-menu.mjs",
+    "check:links": "node scripts/check-links.mjs",
     "package:deploy": "node scripts/package-deploy.mjs",
     "export:pages": "node scripts/export-pages.mjs",
     "catalog:snapshot": "node --import tsx scripts/snapshot-fixtures.mts"

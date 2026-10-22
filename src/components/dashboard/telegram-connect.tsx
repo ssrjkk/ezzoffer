@@ -153,7 +153,7 @@ export function TelegramConnect() {
                 <span className="mr-2 inline-grid size-5 place-items-center rounded-sm bg-accent/15 text-xs font-semibold text-accent-2">
                   1
                 </span>
-                Откройте бота <span className="font-mono text-xs text-ink">@EZOfferBot</span> в
+                Откройте бота <span className="font-mono text-xs text-ink">@ezzoffer_bot</span> в
                 Telegram
               </li>
               <li>

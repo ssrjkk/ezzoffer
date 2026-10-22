@@ -196,7 +196,7 @@ let appDb: ReturnType<typeof import('../src/lib/db').createDatabase>;
 before(async () => {
   process.env.EZOFFER_DB_PATH = ':memory:';
   process.env.EZOFFER_SILENT = '1';
-  process.env.AUTOAPPLY_WORK_START = '1';
+  process.env.AUTOAPPLY_WORK_START = '0';
   process.env.AUTOAPPLY_WORK_END = '24';
   delete process.env.AI_API_KEY;
   const { loginAs, useInMemoryDb } = await import('./helpers/route-session');

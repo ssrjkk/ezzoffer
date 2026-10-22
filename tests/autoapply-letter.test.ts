@@ -76,7 +76,9 @@ before(async () => {
   // пояса раннера (09:00–20:00). Ночной прогон в другом поясе обнулял
   // applied — suite падал от расписания, а не от кода. Окно раздвигаем
   // здесь: само расписание отдельно и явно проверяет anti-ban.test.ts.
-  process.env.AUTOAPPLY_WORK_START = '1';
+  // Начало — 0, а не 1: иначе прогон в 00:00–00:59 MSK снова ночь
+  // (проверено вживую: pausedFor=night при часе 0).
+  process.env.AUTOAPPLY_WORK_START = '0';
   process.env.AUTOAPPLY_WORK_END = '24';
   const dbMod = await import('../src/lib/db');
   db = dbMod.db;
