@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUser, unauthorized, readJson } from '@/lib/api';
 import { db, type User } from '@/lib/db';
+import { mskDayStartMs } from '@/lib/moscow-day';
 import { isPlanActive, planDailyLimit } from '@/lib/plans';
 import { listApplications, serializeApplication, type ApplicationRow } from '@/lib/applications';
 import { getVacancyBySlug } from '@/lib/vacancies';
@@ -9,7 +10,10 @@ import { hhProvider } from '@/lib/vacancies/hh';
 import { getValidHhToken } from '@/lib/hh-oauth';
 import { personalizeLetter } from '@/lib/cover-letter';
 import { DEMO_MODE_MESSAGE, isLiveMode } from '@/lib/user-mode';
-import { NO_STORE_HEADERS } from '@/lib/http';
+import { autoapplyDryRun } from '@/lib/config';
+import { logApplyEvent } from '@/lib/apply-events';
+import { NO_STORE_HEADERS, isUniqueViolation } from '@/lib/http';
+import { claimSend, completeSend } from '@/lib/apply-outbox';
 import { rateLimit } from '@/lib/rate-limit';
 import { rankLettersForVacancy } from '@/lib/ai-matching';
 
@@ -88,14 +92,10 @@ export async function POST(request: Request) {
   }
 
   const limit = planDailyLimit(user.plan);
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
   const todayCount = (
     db
-      .prepare(
-        'SELECT COUNT(*) AS c FROM applications WHERE user_id = ? AND sent_at >= ? AND withdrawn = 0',
-      )
-      .get(user.id, todayStart.getTime()) as { c: number }
+      .prepare('SELECT COUNT(*) AS c FROM applications WHERE user_id = ? AND sent_at >= ?')
+      .get(user.id, mskDayStartMs()) as { c: number }
   ).c;
   if (limit > 0 && todayCount >= limit) {
     return NextResponse.json(
@@ -163,7 +163,10 @@ export async function POST(request: Request) {
     selectedLetterId = null;
   }
   if (selectedLetterId == null && letters.length > 0) {
-    selectedLetterId = rankLettersForVacancy(letters, vacancy)[0].id;
+    // Автовыбор — только при совпадении по навыкам: письмо без единого
+    // совпадения хуже отсутствия письма (см. buildLetter в autoapply.ts).
+    const best = rankLettersForVacancy(letters, vacancy)[0];
+    if (best && best.overlap > 0) selectedLetterId = best.id;
   }
 
   let message = '';
@@ -179,6 +182,10 @@ export async function POST(request: Request) {
   // origin различает их: 'real' — площадка приняла отклик, 'user' — человек
   // зафиксировал отклик, сделанный на сайте источника вручную.
   const origin = vacancy.source === 'hh' ? 'real' : 'user';
+  // Заявка outbox живёт только внутри hh-ветки (там внешний эффект).
+  // Объявлена здесь, чтобы блок записи ниже мог её закрыть и для user-путей
+  // ничего не трогать: у ручной фиксации внешнего эффекта нет.
+  let claim: { id: number } | { duplicate: true } | null = null;
   /*
    * Идентификатор резюме на hh для этого отклика.
    *
@@ -249,12 +256,50 @@ export async function POST(request: Request) {
     if (!hhProvider.apply) {
       return NextResponse.json({ error: 'Отклики на hh.ru недоступны' }, { status: 502 });
     }
-    const sent = await hhProvider.apply(vacancy, {
+    // Холостой режим: ручная фиксация (origin='user') пишется как обычно —
+    // внешнего эффекта у неё нет, а реальный POST в hh запрещён.
+    if (autoapplyDryRun()) {
+      return NextResponse.json(
+        { error: 'Холостой режим (AUTOAPPLY_DRY_RUN=1): отправка в hh.ru отключена' },
+        { status: 503 },
+      );
+    }
+    // Claim в outbox до сети — как в плановом прогоне. Дубликат означает, что
+    // параллельный прогон уже ведёт эту вакансию: сверяемся с историей —
+    // есть строка, значит «уже откликались», нет строки — «подождите минуту».
+    claim = claimSend({
+      userId: user.id,
+      jobSlug: vacancy.slug,
       resumeId: hhResumeId,
-      message: message || undefined,
-      accessToken: valid.token,
+      letterId: selectedLetterId,
+      message,
     });
+    if ('duplicate' in claim) {
+      const done = db
+        .prepare('SELECT id FROM applications WHERE user_id = ? AND job_slug = ? AND withdrawn = 0')
+        .get(user.id, vacancy.slug);
+      if (done) {
+        return NextResponse.json({ error: 'Вы уже откликались на эту вакансию' }, { status: 409 });
+      }
+      return NextResponse.json(
+        { error: 'Отправка уже выполняется — проверьте отклики через минуту' },
+        { status: 429 },
+      );
+    }
+    let sent: Awaited<ReturnType<NonNullable<typeof hhProvider.apply>>>;
+    try {
+      sent = await hhProvider.apply(vacancy, {
+        resumeId: hhResumeId,
+        message: message || undefined,
+        accessToken: valid.token,
+      });
+    } catch (err) {
+      completeSend(claim.id);
+      throw err;
+    }
     if (!sent.ok) {
+      completeSend(claim.id);
+      logApplyEvent(user.id, vacancy.slug, 'failed', sent.error ?? 'hh отклонил (кабинет)');
       return NextResponse.json(
         { error: `hh.ru отклонил отклик: ${sent.error ?? 'неизвестная ошибка'}` },
         { status: 502 },
@@ -262,34 +307,60 @@ export async function POST(request: Request) {
     }
   }
 
-  const result = db
-    .prepare(
-      `INSERT INTO applications (user_id, job_slug, search_id, resume_id, letter_id, status, origin, message, external_url, sent_at)
-       VALUES (?, ?, ?, ?, ?, 'sent', ?, ?, ?, ?)`,
-    )
-    // Пишется именно selectedLetterId, а не переданный data.letterId.
-    // Раньше туда уходил letterId из запроса, который для автоподбора всегда
-    // null: в кабинете отклик показывался без письма, хотя в hh.ru уходило
-    // персонализированное, и статистика «каким письмом откликнулись» была
-    // бессмысленной.
-    //
-    // resume_id — ТОТ ЖЕ идентификатор, что ушёл в hh (hhResumeId), а не
-    // локальный resumes.id. Раньше сюда писалось локальное число, тогда как
-    // автоотклик писал hh-id, и колонка держала два разных вида значений.
-    .run(
-      user.id,
-      vacancy.slug,
-      data?.searchId ?? null,
-      hhResumeId ?? null,
-      selectedLetterId,
-      origin,
-      message,
-      externalUrl,
-      now,
-    );
+  /*
+   * Запись после внешней отправки — с защитой от гонки.
+   *
+   * Два параллельных запроса (кнопка + планировщик, двойной клик) оба проходят
+   * проверку выше и оба отправляют: уникального индекса тогда не было, и в
+   * историю падало два отклика. Теперь ux_applications_once не даёт вставить
+   * дубль, а перехват UNIQUE превращает гонку в честный 409 «уже откликались»,
+   * а не в 500. Внешняя отправка при этом уже случилась (поэтому INSERT идёт
+   * после сети) — повторный разбор покажет already_applied и пропустит.
+   */
+  let result: { lastInsertRowid: number | bigint };
+  try {
+    result = db
+      .prepare(
+        `INSERT INTO applications (user_id, job_slug, search_id, resume_id, letter_id, status, origin, message, external_url, sent_at)
+         VALUES (?, ?, ?, ?, ?, 'sent', ?, ?, ?, ?)`,
+      )
+      // Пишется именно selectedLetterId, а не переданный data.letterId.
+      // Раньше туда уходил letterId из запроса, который для автоподбора всегда
+      // null: в кабинете отклик показывался без письма, хотя в hh.ru уходило
+      // персонализированное, и статистика «каким письмом откликнулись» была
+      // бессмысленной.
+      //
+      // resume_id — ТОТ ЖЕ идентификатор, что ушёл в hh (hhResumeId), а не
+      // локальный resumes.id. Раньше сюда писалось локальное число, тогда как
+      // автоотклик писал hh-id, и колонка держала два разных вида значений.
+      .run(
+        user.id,
+        vacancy.slug,
+        data?.searchId ?? null,
+        hhResumeId ?? null,
+        selectedLetterId,
+        origin,
+        message,
+        externalUrl,
+        now,
+      );
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      if (claim && !('duplicate' in claim)) completeSend(claim.id);
+      return NextResponse.json({ error: 'Вы уже откликались на эту вакансию' }, { status: 409 });
+    }
+    throw err;
+  }
+  if (claim && !('duplicate' in claim)) completeSend(claim.id);
   const row = db
     .prepare('SELECT * FROM applications WHERE id = ?')
     .get(result.lastInsertRowid) as ApplicationRow;
+  logApplyEvent(
+    user.id,
+    vacancy.slug,
+    'sent',
+    origin === 'real' ? 'вручную через кабинет (hh)' : `вручную (${origin})`,
+  );
   return Response.json(
     { application: serializeApplication(row) },
     { status: 201, headers: NO_STORE_HEADERS },

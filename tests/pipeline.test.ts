@@ -86,7 +86,9 @@ test('без откликов единственное действие — на
 
   assert.equal(actions.length, 1);
   assert.equal(actions[0]!.kind, 'start');
-  assert.equal(actions[0]!.href, '/dashboard/searches');
+  // Поиски живут в /dashboard/jobs: отдельной страницы searches нет, и ссылка
+  // вела на 404. Тест фиксирует существующий маршрут.
+  assert.equal(actions[0]!.href, '/dashboard/jobs');
 });
 
 test('просмотренный без ответа отклик даёт напоминание написать', () => {

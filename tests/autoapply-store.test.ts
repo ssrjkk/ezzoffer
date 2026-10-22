@@ -39,6 +39,8 @@ function run(over: Partial<AutoApplyRun> = {}): AutoApplyRun {
     withoutLetter: 0,
     demoUsers: 0,
     erroredUsers: 0,
+    dryRuns: 0,
+    lockLost: false,
     ...over,
   };
 }

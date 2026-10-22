@@ -11,6 +11,9 @@ import {
   migratePayments,
   migrateOauthAccounts,
   migrateSecretColumns,
+  migrateTelegramInbox,
+  migrateSessionsSecurity,
+  dedupeApplications,
 } from './db-migrations';
 import { envStr } from './env';
 
@@ -72,7 +75,14 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS sessions (
   token TEXT PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id),
-  expires_at INTEGER NOT NULL
+  expires_at INTEGER NOT NULL,
+  /*
+   * Начало жизни сессии для абсолютного потолка (90 дней): ротация продлевает
+   * expires_at бесконечно, и без created_at активный пользователь жил бы на
+   * одной цепочке сессий вечно. NULL — строка, созданная до миграции или
+   * напрямую тестом: к ней применяется только скользящий срок.
+   */
+  created_at INTEGER
 );
 
 -- Уборка просроченных сессий идёт по expires_at, а поиск активной сессии — по
@@ -86,6 +96,19 @@ CREATE TABLE IF NOT EXISTS oauth_states (
   expires_at INTEGER NOT NULL
 );
 
+-- Очередь входящих апдейтов Telegram: вебхук только складывает тело,
+-- разбор идёт в тике планировщика (processInbox), а не в HTTP-запросе.
+-- attempts — защита от вечного круга на битом сообщении.
+CREATE TABLE IF NOT EXISTS tg_inbox (
+  update_id INTEGER PRIMARY KEY,
+  body TEXT NOT NULL,
+  received_at INTEGER NOT NULL,
+  claimed_at INTEGER,
+  done_at INTEGER,
+  attempts INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_tg_inbox_pending ON tg_inbox(done_at, claimed_at);
+
 CREATE INDEX IF NOT EXISTS idx_oauth_states_user ON oauth_states(user_id);
 
 CREATE TABLE IF NOT EXISTS meta (
@@ -98,6 +121,39 @@ CREATE TABLE IF NOT EXISTS telegram_codes (
   user_id INTEGER NOT NULL REFERENCES users(id),
   expires_at INTEGER NOT NULL
 );
+
+-- Счётчики неудачных попыток входа/регистрации (персистентные).
+CREATE TABLE IF NOT EXISTS auth_attempts (
+  key TEXT PRIMARY KEY,
+  count INTEGER NOT NULL,
+  window_start INTEGER NOT NULL
+);
+
+-- Журнал внешних эффектов автоотклика (только добавление).
+CREATE TABLE IF NOT EXISTS apply_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  job_slug TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  detail TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_apply_events_user ON apply_events(user_id, created_at);
+
+-- Outbox намерений отправить отклик: claim до сети, удаление после записи.
+-- Отдельно от applications, чтобы ни один SELECT статистики/квот/дайджестов
+-- менять не пришлось. Незавершённые заявки чистит сборщик протухших.
+CREATE TABLE IF NOT EXISTS apply_outbox (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  job_slug TEXT NOT NULL,
+  resume_id TEXT,
+  letter_id INTEGER,
+  message TEXT NOT NULL DEFAULT '',
+  search_id INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_outbox_once ON apply_outbox(user_id, job_slug);
 
 CREATE TABLE IF NOT EXISTS resumes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -144,7 +200,7 @@ CREATE TABLE IF NOT EXISTS applications (
   user_id INTEGER NOT NULL REFERENCES users(id),
   job_slug TEXT NOT NULL,
   search_id INTEGER,
-  resume_id INTEGER,
+  resume_id TEXT,
   letter_id INTEGER,
   status TEXT NOT NULL DEFAULT 'sent',
   origin TEXT NOT NULL DEFAULT 'user' CHECK (origin IN ('real','simulated','user','ai')),
@@ -184,6 +240,8 @@ CREATE TABLE IF NOT EXISTS bookmarks (
 CREATE INDEX IF NOT EXISTS idx_applications_user ON applications(user_id);
 CREATE INDEX IF NOT EXISTS idx_applications_job ON applications(job_slug);
 CREATE INDEX IF NOT EXISTS idx_resumes_user ON resumes(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_resumes_variant
+  ON resumes(user_id, variant_group, variant_label);
 CREATE INDEX IF NOT EXISTS idx_searches_user ON searches(user_id);
 CREATE TABLE IF NOT EXISTS consultations (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -238,6 +296,17 @@ CREATE INDEX IF NOT EXISTS idx_telegram_codes_expires ON telegram_codes(expires_
 CREATE INDEX IF NOT EXISTS idx_telegram_codes_user ON telegram_codes(user_id);
 CREATE INDEX IF NOT EXISTS idx_applications_user_sent ON applications(user_id, sent_at);
 CREATE INDEX IF NOT EXISTS idx_applications_user_job ON applications(user_id, job_slug);
+/*
+ * Один отклик на вакансию (I4).
+ *
+ * Частичный уникальный индекс: withdrawn = 1 (отозванные) из-под него
+ * выведены, поэтому «отозвать и откликнуться заново» работает, а два живых
+ * отклика на одну вакансию база не примет ни при какой гонке. Проверка
+ * «SELECT → сеть → INSERT» в коде остаётся для дружелюбного 409, но решать
+ * теперь должна база, а не порядок строк кода.
+ */
+CREATE UNIQUE INDEX IF NOT EXISTS ux_applications_once
+  ON applications(user_id, job_slug) WHERE withdrawn = 0;
 CREATE INDEX IF NOT EXISTS idx_letters_user ON letters(user_id);
 `;
 
@@ -316,6 +385,13 @@ function migrate(instance: Database.Database): void {
   migratePayments(instance);
   migrateOauthAccounts(instance);
   migrateSecretColumns(instance);
+  migrateTelegramInbox(instance);
+  migrateSessionsSecurity(instance);
+  dedupeApplications(instance);
+  instance.exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS ux_applications_once ' +
+      'ON applications(user_id, job_slug) WHERE withdrawn = 0',
+  );
   const appCols = columnNames(instance, 'applications');
   const vacancyCols = columnNames(instance, 'vacancies');
   const resumeCols = columnNames(instance, 'resumes');
@@ -342,7 +418,6 @@ function migrate(instance: Database.Database): void {
   }
   if (!vacancyCols.has('published_at')) {
     instance.exec('ALTER TABLE vacancies ADD COLUMN published_at INTEGER');
-    instance.exec('ALTER TABLE vacancies ADD COLUMN employment TEXT');
   }
   /*
    * Привязка резюме к резюме на hh.
@@ -382,6 +457,14 @@ function migrate(instance: Database.Database): void {
   // списке одна вакансия появлялась бы дважды.
   instance.exec(
     'CREATE UNIQUE INDEX IF NOT EXISTS idx_bookmarks_user_job ON bookmarks(user_id, job_slug)',
+  );
+  /*
+   * Метки A/B-вариантов уникальны в группе: два параллельных создания иначе
+   * выдавали бы две метки «B». NULL в UNIQUE считается различным значением,
+   * поэтому обычные резюме без группы индекс не задевает.
+   */
+  instance.exec(
+    'CREATE UNIQUE INDEX IF NOT EXISTS ux_resumes_variant ON resumes(user_id, variant_group, variant_label)',
   );
 }
 

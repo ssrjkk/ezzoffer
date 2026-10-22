@@ -102,8 +102,23 @@ function integrations(): Check[] {
   ];
 }
 
+import { timingSafeEqual } from 'node:crypto';
+
+function verboseAllowed(request: Request): boolean {
+  // Диагностика конфигурации — это разведданные (какие секреты заданы, какие
+  // векторы пробовать). Без CRON_SECRET проверять нечем — закрыто полностью.
+  const expected = (process.env.CRON_SECRET ?? '').trim();
+  if (!expected) return false;
+  const auth = request.headers.get('authorization') ?? '';
+  const a = Buffer.from(auth);
+  const b = Buffer.from(`Bearer ${expected}`);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+
 export async function GET(request: Request) {
-  const verbose = new URL(request.url).searchParams.get('verbose') === '1';
+  const verbose =
+    new URL(request.url).searchParams.get('verbose') === '1' && verboseAllowed(request);
 
   const dbCheck = checkDatabase();
   const writeCheck = checkWritability();

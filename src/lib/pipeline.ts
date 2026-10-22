@@ -111,7 +111,9 @@ export function nextActions(userId: number, now = Date.now()): NextAction[] {
         title: 'Отправьте первый отклик',
         detail:
           'Настройте поиск — сервис сам найдёт подходящие вакансии и отправит отклики с письмом.',
-        href: '/dashboard/searches',
+        // Поиски живут в разделе вакансий: отдельной страницы /dashboard/searches
+        // нет, и ссылка вела на 404.
+        href: '/dashboard/jobs',
         urgency: 1,
         count: 1,
       },
@@ -169,7 +171,7 @@ export function nextActions(userId: number, now = Date.now()): NextAction[] {
       detail:
         `${deadSearch.count} ${plural(deadSearch.count, 'отклик', 'отклика', 'откликов')} без единого просмотра. ` +
         'Обычно это слишком узкие ключевые слова или уровень, которого на рынке нет.',
-      href: '/dashboard/searches',
+      href: '/dashboard/jobs',
       urgency: 2,
       count: deadSearch.count,
     });

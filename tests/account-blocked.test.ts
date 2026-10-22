@@ -50,7 +50,7 @@ before(async () => {
 beforeEach(() => {
   // Порядок обязателен: дети удаляются раньше родителя.
   db.exec(
-    'DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies;',
+    'DELETE FROM apply_events; DELETE FROM auth_attempts; DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies;',
   );
   /*
    * getCatalog() кэширует выборку на 30 секунд и сам сбрасывается только
@@ -60,7 +60,6 @@ beforeEach(() => {
    */
   resetCatalogCache();
   sent = [];
-  bot.resetSeenUpdates();
 });
 
 function seedUser(): void {

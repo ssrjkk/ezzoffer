@@ -219,6 +219,7 @@ function seedVacancy(slug: string, source: string): void {
 
 test('POST /api/applications по не-hh вакансии пишет origin=user', async () => {
   const { post } = await import('./helpers/route-session');
+  appDb.prepare('DELETE FROM apply_events').run();
   appDb.prepare('DELETE FROM applications').run();
   appDb.prepare('DELETE FROM users WHERE id = 1').run();
   appDb
@@ -250,6 +251,7 @@ test('applyToVacancy через hh API пишет origin=real', async () => {
       headers: { get: () => null },
     }) as unknown as Response) as typeof fetch;
   try {
+    appDb.prepare('DELETE FROM apply_events').run();
     appDb.prepare('DELETE FROM applications').run();
     appDb.prepare('DELETE FROM users WHERE id = 1').run();
     const uid = Number(

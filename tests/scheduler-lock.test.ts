@@ -120,3 +120,47 @@ test('releaseLock без метки сохраняет прежнее повед
   releaseLock(db);
   assert.equal(lockHeldAt(db), 0);
 });
+
+test('именованные блокировки независимы: занятый catalog не стопарит apply', async () => {
+  const { tryLockSession, CATALOG_LOCK_KEY, APPLY_LOCK_KEY } = await import(
+    '../src/lib/scheduler'
+  );
+  const db = createDatabase(':memory:');
+  const catalog = tryLockSession(db, CATALOG_LOCK_KEY, 1_000_000);
+  assert.ok(catalog, 'catalog-лок обязан браться');
+  // Планировщик держит каталог — отправки всё равно идут своим локом.
+  const apply = tryLockSession(db, APPLY_LOCK_KEY, 1_000_000);
+  assert.ok(apply, 'apply-лок обязан браться независимо от catalog');
+  // А повторный захват того же имени блокируется.
+  assert.equal(tryLockSession(db, APPLY_LOCK_KEY, 1_000_100), null);
+  apply!.release();
+  catalog!.release();
+});
+
+test('сессия продлевает и снимает свою метку', async () => {
+  const { tryLockSession } = await import('../src/lib/scheduler');
+  const db = createDatabase(':memory:');
+  const s = tryLockSession(db, 'test:lock', 1_000_000)!;
+  assert.ok(s.heartbeat(), 'продление своей метки обязано проходить');
+  s.release();
+  const s2 = tryLockSession(db, 'test:lock', 2_000_000);
+  assert.ok(s2, 'после release лок свободен');
+  s2!.release();
+});
+
+test('renewLock продлевает свою метку и не трогает чужую', async () => {
+  const { renewLock } = await import('../src/lib/scheduler');
+  const db = createDatabase(':memory:');
+  assert.equal(acquireLock(db, 1_000_000), true);
+  // Своя: продление проходит и двигает метку.
+  assert.equal(renewLock(db, 1_000_000, 1_000_500), true);
+  assert.equal(lockHeldAt(db), 1_000_500);
+  // Чужая метка: продление отклоняется, метка на месте.
+  assert.equal(renewLock(db, 1_000_000, 1_001_000), false);
+  assert.equal(lockHeldAt(db), 1_000_500);
+  // Снятие по новому значению работает, по старому — нет.
+  releaseLock(db, 1_000_000);
+  assert.equal(lockHeldAt(db), 1_000_500, 'снятие по старой метке не должно срабатывать');
+  releaseLock(db, 1_000_500);
+  assert.equal(lockHeldAt(db), 0);
+});

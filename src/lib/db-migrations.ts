@@ -49,12 +49,34 @@ export function migrateApplicationsOrigin(
    * Все нынешние писатели без origin — это реальный код отправки через hh
    * (симуляции в коде нет: sim.ts не существует, планировщик шлёт только
    * через hhProvider.apply). Поэтому строки по hh-вакансиям — 'real'.
-   * Условие по origin = 'user' защищает явные значения от перезаписи.
+   *
+   * Backfill — ОДИН раз, а не на каждом старте. Раньше UPDATE шёл безусловно
+   * и перезаписывал явное origin='user', которое человек выставил позже
+   * (кнопка «На сайте» по hh-вакансии): каждый рестарт молча «исправлял»
+   * осознанный выбор человека. Флаг в meta гарантирует однократность.
+   *
+   * Таблицы meta может не быть в урезанных тестовых базах — тогда работаем
+   * без флага, как раньше: тесты вызывают миграцию напрямую и проверяют сам
+   * backfill, а не его однократность.
    */
+  const hasMeta = instance
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meta'")
+    .get();
+  if (hasMeta) {
+    const done = instance
+      .prepare("SELECT value FROM meta WHERE key = 'origin_backfill_done'")
+      .get() as { value: string } | undefined;
+    if (done) return;
+  }
   instance.exec(`
     UPDATE applications SET origin = 'real'
     WHERE origin = 'user' AND job_slug IN (SELECT slug FROM vacancies WHERE source = 'hh')
   `);
+  if (hasMeta) {
+    instance.exec(
+      "INSERT OR IGNORE INTO meta (key, value) VALUES ('origin_backfill_done', '1')",
+    );
+  }
 }
 /**
  * Режим пользователя demo|live (Фаза 1: правда о происхождении).
@@ -144,13 +166,14 @@ export function migratePayments(instance: Pick<Database.Database, 'exec' | 'prep
      * Пересборка с переносом данных: id сохраняются, поэтому
      * entitlements.source_payment_id продолжает указывать куда надо.
      */
-    const idx = instance.prepare('PRAGMA index_list(payments)').all() as {
-      name: string;
-      sql: string | null;
-      unique: number;
-    }[];
-    const scoped = idx.some(
-      (i) => i.unique && i.sql && /provider/i.test(i.sql) && /external_id/i.test(i.sql),
+    const defs = instance
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'payments'")
+      .all() as { sql: string | null }[];
+    // PRAGMA index_list НЕ возвращает колонку sql (только seq/name/unique/origin/partial),
+    // поэтому старая проверка видела sql === undefined всегда и пересобирала
+    // таблицу на каждом старте. Правильный источник — sqlite_master.
+    const scoped = defs.some(
+      (d) => d.sql && /UNIQUE/i.test(d.sql) && /provider/i.test(d.sql) && /external_id/i.test(d.sql),
     );
     if (!scoped) {
       instance.exec('PRAGMA foreign_keys = OFF');
@@ -203,6 +226,25 @@ export function migratePayments(instance: Pick<Database.Database, 'exec' | 'prep
       'CREATE INDEX IF NOT EXISTS ix_entitlements_user ON entitlements(user_id, expires_at)',
     );
   }
+
+  /*
+   * Возвраты, пришедшие раньше оплаты.
+   *
+   * Провайдер вправе доставить refund до paid (ретраи, перестановка). Раньше
+   * такой возврат отбрасывался молча, а пришедший позже paid выдавал тариф —
+   * деньги возвращены, права действуют. Теперь ранний возврат ждёт свою оплату
+   * в pending_refunds, и grant гасит права сразу при выдаче.
+   */
+  instance.exec(`
+    CREATE TABLE IF NOT EXISTS pending_refunds (
+      provider TEXT NOT NULL,
+      external_id TEXT NOT NULL,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      plan_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (provider, external_id)
+    )
+  `);
 }
 
 /**
@@ -229,6 +271,124 @@ export function migrateOauthAccounts(instance: Pick<Database.Database, 'exec' | 
       email TEXT NOT NULL,
       created_at INTEGER NOT NULL,
       UNIQUE (provider, provider_id)
+    )
+  `);
+}
+
+/**
+ * Сессии: created_at и хеш токена (Фаза 1, добивка).
+ *
+ * 1. created_at — абсолютный потолок жизни (90 дней). Ротация продлевала
+ *    expires_at на каждом запросе, и цепочка сессий жила бесконечно.
+ *    Backfill: expires_at − 30 дней (столько живёт сессия).
+ *
+ * 2. Токены хранятся хешем sha256, а не открытым текстом: копия файла БД
+ *    больше не даёт готовых сессий. Миграция одноразовая (флаг в meta):
+ *    существующие значения хешируются на месте, новые пишутся хешем сразу
+ *    из createSession. Повторное хеширование хеша убило бы все сессии,
+ *    поэтому без флага — никак.
+ */
+export function migrateSessionsSecurity(
+  instance: Pick<Database.Database, 'exec' | 'prepare'>,
+): void {
+  const cols = instance.prepare('PRAGMA table_info(sessions)').all() as { name: string }[];
+  if (!cols.some((c) => c.name === 'created_at')) {
+    instance.exec('ALTER TABLE sessions ADD COLUMN created_at INTEGER');
+  }
+  instance.exec(
+    'UPDATE sessions SET created_at = expires_at - 2592000000 WHERE created_at IS NULL',
+  );
+
+  const hasMeta = instance
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meta'")
+    .get();
+  if (hasMeta) {
+    const done = instance
+      .prepare("SELECT value FROM meta WHERE key = 'sessions_hashed'")
+      .get() as { value: string } | undefined;
+    if (done) return;
+  }
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { createHash } = require('node:crypto') as typeof import('node:crypto');
+  const rows = instance.prepare('SELECT token FROM sessions').all() as { token: string }[];
+  instance.exec('BEGIN');
+  try {
+    const upd = instance.prepare('UPDATE sessions SET token = ? WHERE token = ?');
+    for (const r of rows) {
+      upd.run(createHash('sha256').update(r.token).digest('hex'), r.token);
+    }
+    instance.exec('COMMIT');
+  } catch (err) {
+    try {
+      instance.exec('ROLLBACK');
+    } catch {
+      // ignore
+    }
+    throw err;
+  }
+  if (hasMeta) {
+    instance.exec("INSERT OR IGNORE INTO meta (key, value) VALUES ('sessions_hashed', '1')");
+  }
+}
+
+/**
+ * Очередь входящих апдейтов Telegram.
+ *
+ * Заменяет сразу два механизма: таблицу tg_updates (только отметки без тел,
+ * обработка всё равно шла в запросе) и in-memory Set с копией в meta
+ * (`tg:seen-updates`). Арбитр один — первичный ключ tg_inbox.
+ */
+export function migrateTelegramInbox(
+  instance: Pick<Database.Database, 'exec' | 'prepare'>,
+): void {
+  instance.exec(`
+    CREATE TABLE IF NOT EXISTS tg_inbox (
+      update_id INTEGER PRIMARY KEY,
+      body TEXT NOT NULL,
+      received_at INTEGER NOT NULL,
+      claimed_at INTEGER,
+      done_at INTEGER,
+      attempts INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  instance.exec(
+    'CREATE INDEX IF NOT EXISTS idx_tg_inbox_pending ON tg_inbox(done_at, claimed_at)',
+  );
+  // Наследие заменённых механизмов: метки без тел и meta-список больше
+  // не читаются никем. Таблица дропается, ключ чистится.
+  const tables = instance.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as {
+    name: string;
+  }[];
+  if (tables.some((r) => r.name === 'tg_updates')) {
+    instance.exec('DROP TABLE tg_updates');
+  }
+  try {
+    instance.exec("DELETE FROM meta WHERE key = 'tg:seen-updates'");
+  } catch {
+    // Таблицы meta может не быть в урезанных тестовых БД.
+  }
+}
+
+/**
+ * Дедупликация живых откликов перед включением ux_applications_once.
+ *
+ * Старые базы могли накопить два живых отклика на одну вакансию (гонка
+ * «SELECT → сеть → INSERT» без уникального ограничения). CREATE UNIQUE INDEX
+ * на таких данных уронил бы старт приложения. Поэтому сначала поздние дубли
+ * помечаются отозванными: самая ранняя строка остаётся живой, остальные
+ * уходят из-под уникальности, но не удаляются — история не переписывается.
+ */
+export function dedupeApplications(
+  instance: Pick<Database.Database, 'exec' | 'prepare'>,
+): void {
+  instance.exec(`
+    UPDATE applications SET withdrawn = 1 WHERE id IN (
+      SELECT id FROM (
+        SELECT id, ROW_NUMBER() OVER (
+          PARTITION BY user_id, job_slug ORDER BY sent_at ASC, id ASC
+        ) AS rn
+        FROM applications WHERE withdrawn = 0
+      ) WHERE rn > 1
     )
   `);
 }
@@ -390,6 +550,22 @@ export function migrateApplicationsResumeId(
     instance.exec('DROP TABLE applications');
     instance.exec('ALTER TABLE applications_migrated RENAME TO applications');
     /*
+     * Гонка «SELECT → сеть → INSERT» без уникального ограничения могла оставить
+     * дубли живых откликов. Перед CREATE UNIQUE INDEX гасим поздние дубли —
+     * иначе создание индекса уронит старт. Самая ранняя строка остаётся живой,
+     * остальные помечаются отозванными (история не удаляется).
+     */
+    instance.exec(`
+      UPDATE applications SET withdrawn = 1 WHERE id IN (
+        SELECT id FROM (
+          SELECT id, ROW_NUMBER() OVER (
+            PARTITION BY user_id, job_slug ORDER BY sent_at ASC, id ASC
+          ) AS rn
+          FROM applications WHERE withdrawn = 0
+        ) WHERE rn > 1
+      )
+    `);
+    /*
      * AUTOINCREMENT и перенос id.
      *
      * `sqlite_sequence` при пересборке сохраняется: SQLite пересчитывает его по
@@ -408,6 +584,13 @@ export function migrateApplicationsResumeId(
     );
     instance.exec(
       'CREATE INDEX IF NOT EXISTS idx_applications_user_job ON applications(user_id, job_slug)',
+    );
+    // Частичная уникальность «один живой отклик на вакансию» тоже не переживает
+    // пересоздание таблицы — восстанавливаем вместе с остальными индексами.
+    // Дубли к этому моменту уже погашены dedupeApplications, CREATE не упадёт.
+    instance.exec(
+      'CREATE UNIQUE INDEX IF NOT EXISTS ux_applications_once ' +
+        'ON applications(user_id, job_slug) WHERE withdrawn = 0',
     );
     instance.exec('COMMIT');
   } catch (err) {

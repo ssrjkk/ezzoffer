@@ -1,17 +1,21 @@
 import { db, type User } from './db';
+import { mskDayStartMs } from './moscow-day';
 import { isPlanActive, planDailyLimit } from './plans';
 import { matchesSearch, skillsByVacancy, type SearchRow } from './matcher';
 import { getCatalog } from './vacancies';
 import { hhProvider } from './vacancies/hh';
 import { getValidHhToken } from './hh-oauth';
 import { createPacing, type FailureKind, type Pacing, type PacingConfig } from './anti-ban';
-import { effectivePacing } from './config';
+import { effectivePacing, autoapplyEnabled, autoapplyDryRun } from './config';
 import { notifyAccountBlocked } from './telegram-digest';
 import { renderLetterTemplate } from './cover-letter';
 import { rankLettersForVacancy } from './ai-matching';
 import { rankVacancies, bestResumeFor, type ResumeTarget } from './resume-targeting';
 import { DEMO_MODE_MESSAGE, isLiveMode } from './user-mode';
+import { claimSend, completeSend, sweepStaleOutbox } from './apply-outbox';
 import type { Vacancy, VacancyApplyResult } from './vacancies/types';
+import { isUniqueViolation } from './http';
+import { logApplyEvent } from './apply-events';
 import { logError, logInfo } from './logger';
 
 /**
@@ -83,7 +87,39 @@ export type AutoApplyRun = {
    * этого счётчика обе выглядят одинаково.
    */
   erroredUsers: number;
+  /**
+   * Холостых отправок в dry-run: подбор и письма посчитаны, POST не было,
+   * в историю ничего не записано. Без счётчика холостой прогон выглядел бы
+   * как «всё хорошо, ноль откликов» — то есть как поломка.
+   */
+  dryRuns: number;
+  /**
+   * Лок потерян посреди прогона. Без флага отчёт врал бы «нет активных
+   * поисков», хотя поиски были — работать дальше было нельзя, потому что
+   * это уже чужой прогон.
+   */
+  lockLost: boolean;
 };
+
+/**
+ * Предохранители длинного тика.
+ *
+ * Без них тик с большим лимитом (Эксперт, 250/день) слал бы сотни откликов
+ * подряд и морил голодом фазы, идущие следом в том же тике: обновление
+ * каталога, синхронизацию статусов, дайджесты. 15 отправок или 10 минут —
+ * дальше продолжает следующий тик (неотправленное не теряется: выборка
+ * идёт из БД, уже отправленное отсекается проверкой дубля).
+ */
+const MAX_SENDS_PER_TICK = 15;
+const TICK_SEND_BUDGET_MS = 10 * 60_000;
+
+/** Пауза между отправками внутри тика. Только для pacing-пауз, не для сети. */
+function sleepMs(ms: number): Promise<void> {
+  if (!Number.isFinite(ms) || ms <= 0) return Promise.resolve();
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 /**
  * Сколько откликов в день допустимо у одной компании.
@@ -147,14 +183,30 @@ function setBlockedUntil(userId: number, until: number, reason: string): void {
 }
 
 function todayCount(userId: number): number {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
+  // Отозванные считаются: внешняя отправка уже состоялась, и слот дневного
+  // лимита она съела. Иначе «отправить → отозвать → отправить» давал бы
+  // бесконечные отклики мимо лимита.
+  const start = mskDayStartMs();
   const row = db
-    .prepare(
-      'SELECT COUNT(*) AS c FROM applications WHERE user_id = ? AND sent_at >= ? AND withdrawn = 0',
-    )
-    .get(userId, start.getTime()) as { c: number };
+    .prepare('SELECT COUNT(*) AS c FROM applications WHERE user_id = ? AND sent_at >= ?')
+    .get(userId, start) as { c: number };
   return row.c;
+}
+
+/**
+ * Название компании — к единому виду для потолка «N откликов в день».
+ *
+ * Площадки пишут как попало: «ООО Ромашка», «Ромашка», «romashka llc». Точное
+ * сравнение строк считало это разными компаниями, и потолок не срабатывал.
+ */
+export function normalizeCompany(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/["«»„“]/g, '')
+    .replace(/\b(ооо|оао|зао|пао|ао|ип|llc|ltd|inc|gmbh|bv|sas)\b\.?/gi, '')
+    .replace(/[^a-zа-яё0-9]+/gi, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
 }
 
 function getActiveSearches(userId: number): SearchRow[] {
@@ -244,10 +296,14 @@ async function buildLetter(
   if (letters.length > 0) {
     const ranked = rankLettersForVacancy(letters, vacancy);
     const best = ranked[0];
-    // Совпадение хотя бы с одним навыком вакансии — письмо релевантно.
-    // Если ноль, лучше отправить резюме с минимальным шаблоном, чем чужое письмо.
-    if (best && best.score > 0) {
-      return { text: best.content, letterId: best.id };
+    // Письмо релевантно, только если пересекается с вакансией по навыкам.
+    // Старого условия `score > 0` было мало: бонус за длину давал 5 очков
+    // пустому письму, и на вакансию уходило чужое письмо без единого совпадения.
+    if (best && best.overlap > 0) {
+      // Плейсхолдеры рендерятся всегда — сохранённое письмо с {вакансия}
+      // иначе уходило бы на hh как есть, с фигурными скобками.
+      const text = renderLetterTemplate(best.content, vacancy).trim();
+      if (text) return { text, letterId: best.id };
     }
   }
 
@@ -322,6 +378,13 @@ export function onlyFresh(
 export async function runAutoApply(opts?: {
   pacing?: Partial<PacingConfig>;
   now?: () => number;
+  /**
+   * Продление внешней блокировки. Вызывается раз на пользователя — чаще
+   * не нужно: бюджет тика (10 минут) меньше TTL (30 минут) с запасом.
+   * Вернул false — лок потерян, останавливаемся с частичным итогом, а не
+   * продолжаем поверх чужого прогона.
+   */
+  heartbeat?: () => boolean;
 }): Promise<AutoApplyRun> {
   const nowFn = opts?.now ?? (() => Date.now());
   const users = db.prepare('SELECT * FROM users').all() as User[];
@@ -341,17 +404,58 @@ export async function runAutoApply(opts?: {
   let demoUsers = 0;
   /** Пользователи, у которых прогон упал целиком. Видно в отчёте. */
   let erroredUsers = 0;
-  /**
-   * Общий «стоп» для прогона: площадка ограничила аккаунт.
+  /** Лок потерян посреди прогона — дальше работать нельзя, итог частичный. */
+  let lockLost = false;
+  /** Холостых отправок в dry-run. В историю не пишутся — это не отклики. */
+  let dryRuns = 0;
+  const dryRun = autoapplyDryRun();
+  /** Отправок в этом тике — предохранитель от вечного тика (см. выше). */
+  let sentThisTick = 0;
+  const tickStartMs = Date.now();
+  if (!autoapplyEnabled()) {
+    return {
+      ran: false,
+      reason: 'автоотклики выключены оператором (AUTOAPPLY_ENABLED=0)',
+      searches,
+      applied,
+      failed,
+      skipped,
+      stale: staleTotal,
+      pausedFor,
+      pausedDetail,
+      pausedUsers,
+      blockedUsers,
+      withLetter,
+      withoutLetter,
+      demoUsers,
+      erroredUsers,
+      dryRuns,
+      lockLost,
+    };
+  }
+
+  /*
+   * Сборщик брошенных заявок — в начале каждого прогона.
    *
-   * Раньше здесь стоял `break` прямо в теле цикла по пользователям. Когда тело
-   * обернули в try/catch ради изоляции сбоев, `break` стал невозможен, и его
-   * пришлось заменить флагом с той же семантикой: остановить обход после
-   * текущего пользователя.
+   * Процесс мог умереть между успешным POST и записью в applications: без
+   * сборщика такая заявка висела бы в outbox вечно и блокировала бы повтор
+   * (уникальный индекс), а человек видел бы «уже отправляется» навсегда.
+   * Потерянные (без строки отклика) пишутся в журнал как expired: повторная
+   * отправка безопасна — hh ответит already_applied.
    */
-  let stopAll = false;
+  for (const lost of sweepStaleOutbox(nowFn())) {
+    if (lost.lost) {
+      logApplyEvent(lost.userId, lost.jobSlug, 'expired', 'процесс умер до записи отклика');
+    }
+  }
 
   for (const user of users) {
+    // Лок потерян посреди прогона (перехватили по TTL) — дальше работать
+    // нельзя: это уже чужой прогон. Возвращаем частичный итог.
+    if (opts?.heartbeat && !opts.heartbeat()) {
+      lockLost = true;
+      break;
+    }
     /*
      * Демо-режим — единственная причина пропустить пользователя целиком.
      *
@@ -415,8 +519,18 @@ export async function runAutoApply(opts?: {
 
       // Анти-бан: суточный лимит = остаток от тарифа (с учётом глобального
       // потолка), часовой лимит и паузы — из конфигурации.
-      const base = effectivePacing(limit);
-      const effectiveDaily = Math.min(remaining, base.dailyCap);
+      const eff = effectivePacing(limit);
+      const effectiveDaily = Math.min(remaining, eff.dailyCap);
+      // effectivePacing отдаёт hourlyCap, а PacingConfig ждёт hourlyLimit:
+      // имена разные, и прямое spread-кладение effectivePacing в configure
+      // оставляло часовой лимит дефолтным (12) при любом AUTOAPPLY_HOURLY_CAP.
+      const base = {
+        hourlyLimit: eff.hourlyCap,
+        minDelayMs: eff.minDelayMs,
+        maxDelayMs: eff.maxDelayMs,
+        workStartHour: eff.workStartHour,
+        workEndHour: eff.workEndHour,
+      };
       /*
        * Переданные извне паузы имеют приоритет над конфигурацией.
        *
@@ -434,6 +548,10 @@ export async function runAutoApply(opts?: {
       pacing.configure({ ...base, dailyLimit: effectiveDaily, ...overrides });
 
       const appliedSet = new Set<string>();
+      // Устаревшие вакансии пересекаются между поисками: без этого множества
+      // одна и та же мёртвая запись считалась бы в skipped столько раз,
+      // сколько активных поисков у человека.
+      const staleCounted = new Set<string>();
       /*
        * Резюме пользователя — все, а не одно.
        *
@@ -482,7 +600,7 @@ export async function runAutoApply(opts?: {
       const blockedUntilCol = blockedUntil(user.id);
       /** Отклики за сегодня — для потолка на компанию. Собирается один раз. */
       let slugs: { job_slug: string; company: string }[] | null = null;
-      const dayStartMs = new Date().setHours(0, 0, 0, 0);
+      const dayStartMs = mskDayStartMs();
 
       for (const search of activeSearches) {
         if (appliedSet.size >= remaining) break;
@@ -503,15 +621,18 @@ export async function runAutoApply(opts?: {
          * разница между откликами в пустоту и откликами в ответ.
          */
         const fresh = onlyFresh(candidates);
-        const stale = candidates.length - fresh.length;
-        if (stale > 0) {
+        const newlyStale = fresh.length === candidates.length
+          ? []
+          : candidates.filter((v) => !fresh.includes(v) && !staleCounted.has(v.slug));
+        for (const v of newlyStale) staleCounted.add(v.slug);
+        if (newlyStale.length > 0) {
           /*
            * Отдельно считаем пропущенные по устаревшим вакансиям: это не то же
            * самое, что «уже отправлено». Человек, у которого лимит расходуется
            * впустую на закрытые вакансии, должен видеть, сколько именно таких.
            */
-          staleTotal += stale;
-          skipped += stale;
+          staleTotal += newlyStale.length;
+          skipped += newlyStale.length;
         }
         if (fresh.length === 0) continue;
 
@@ -560,16 +681,63 @@ export async function runAutoApply(opts?: {
             break;
           }
 
-          const decision = pacing.decide();
-          if (!decision.allowed) {
-            // Любой отказ AntiBan останавливает пользователя до следующего тика.
-            // Раньше условие `reason !== "night"` пропускало ночные отказы: код
-            // выходил из цикла только если причина была не "night", поэтому ночью
-            // отказы по часовому/суточному лимиту игнорировались.
+          /*
+           * Пауза после СОБСТВЕННЫХ отправок — ждём прямо в тике и повторяем
+           * ТУ ЖЕ вакансию, а не рвём прогон.
+           *
+           * Раньше любой отказ останавливал пользователя до следующего тика:
+           * при 5-минутном тике получался максимум ~12 откликов в час, и
+           * тариф «Эксперт» (250/день) был физически недостижим — продукт
+           * продавал то, что движок не мог выдать. Теперь темп задаёт
+           * паузер (как задумано), а не расписание тиков: ждём только свою
+           * паузу (backoff без detail — это cooldown после своих же
+           * отправок). Чужая причина (detail от площадки), ночь,
+           * часовой/суточный лимиты — по-прежнему остановка тика.
+           *
+           * `continue` здесь был бы багом: он переходил бы к следующей
+           * вакансии, молча роняя текущую (ни applied, ни skipped, ни паузы
+           * в отчёте). Повтор — через внутренний цикл по той же вакансии.
+           *
+           * Предохранители от вечного тика: не больше MAX_SENDS_PER_TICK
+           * отправок и не дольше TICK_SEND_BUDGET_MS — иначе один прогон
+           * морил бы голодом обновление каталога и синхронизацию, которые
+           * идут в том же тике следом.
+           *
+           * Про delayMs из allowed-решения: ждать его ПЕРЕД отправкой здесь
+           * нельзя — recordSent ставит такой же cooldown ПОСЛЕ, и интервал
+           * между отправками удвоился бы. Пауза enforced один раз, после
+           * отправки: интервал между откликами равен выданной паузе.
+           *
+           * Важно: паузер живёт на часах nowFn, а сон — на реальных. В
+           * проде это одни и те же часы. В тестах с замороженным now
+           * cooldown не истекает никогда — таким тестам нужен реальный now.
+           */
+          let gate: { allowed: true } | { allowed: false } | null = null;
+          for (;;) {
+            const decision = pacing.decide();
+            if (decision.allowed) {
+              gate = { allowed: true };
+              break;
+            }
+            const selfCooldown =
+              decision.reason === 'backoff' && !decision.detail && !dryRun;
+            const budgetLeft = TICK_SEND_BUDGET_MS - (Date.now() - tickStartMs);
+            if (
+              selfCooldown &&
+              sentThisTick < MAX_SENDS_PER_TICK &&
+              budgetLeft > 0 &&
+              decision.retryAfterMs <= budgetLeft
+            ) {
+              await sleepMs(decision.retryAfterMs);
+              continue;
+            }
+            // Любой другой отказ останавливает пользователя до следующего тика.
             pausedFor = decision.reason;
             pausedDetail = decision.detail ?? null;
+            gate = { allowed: false };
             break;
           }
+          if (!gate.allowed) break;
 
           const already = db
             .prepare(
@@ -599,8 +767,8 @@ export async function runAutoApply(opts?: {
                 `SELECT a.job_slug AS job_slug, COALESCE(v.company, '') AS company
                  FROM applications a
                  LEFT JOIN vacancies v ON v.slug = a.job_slug
-                 WHERE a.user_id = ? AND a.sent_at >= ? AND a.withdrawn = 0
-                 ORDER BY a.sent_at DESC LIMIT 500`,
+                 WHERE a.user_id = ? AND a.sent_at >= ?
+                 ORDER BY a.sent_at DESC`,
               )
               .all(user.id, dayStartMs) as { job_slug: string; company: string }[];
           }
@@ -609,7 +777,8 @@ export async function runAutoApply(opts?: {
           // cap = 0 отключает потолок — так же, как AUTOAPPLY_DAILY_CAP в этом
           // же сервисе: ноль означает «ограничения нет», а не «не отправлять».
           if (company && cap > 0) {
-            const used = slugs.filter((r) => r.company === company).length;
+            const needle = normalizeCompany(company);
+            const used = slugs.filter((r) => normalizeCompany(r.company) === needle).length;
             if (used >= cap) continue;
           }
 
@@ -631,11 +800,68 @@ export async function runAutoApply(opts?: {
           const letter = await buildLetter(vacancy, letters, letterResumeText);
           const message = letter?.text;
 
-          const result = await hhProvider.apply(vacancy, {
+          /*
+           * Холостой прогон: подбор, ранжирование и письма идут по-настоящему,
+           * а POST в hh заменяется счётчиком. Строка в applications не пишется
+           * и счётчик applied не трогается: фиктивные записи врали бы воронке
+           * и съедали бы лимит. appliedSet пополняется, чтобы одна и та же
+           * вакансия из двух поисков не считалась дважды.
+           */
+          if (dryRun) {
+            dryRuns++;
+            if (message) withLetter++;
+            else withoutLetter++;
+            appliedSet.add(vacancy.slug);
+            logApplyEvent(user.id, vacancy.slug, 'dry', 'холостой прогон');
+            continue;
+          }
+
+          /*
+           * Outbox-claim ДО сети: если процесс умрёт между успешным POST и
+           * записью в applications, останется заявка pending, а не тишина.
+           * Сборщик протухших в начале прогона её подчистит, а повторная
+           * отправка упрётся в already_applied и закроется gracefully.
+           * Дубликат здесь — параллельный прогон/кнопка уже ведёт эту вакансию:
+           * проверяем, не успел ли он записать, и отвечаем честно.
+           */
+          const claim = claimSend({
+            userId: user.id,
+            jobSlug: vacancy.slug,
             resumeId: sendableId,
-            ...(message ? { message } : {}),
-            accessToken: token ?? undefined,
+            letterId: letter?.letterId ?? null,
+            message: message ?? '',
+            searchId: search.id,
           });
+          if ('duplicate' in claim) {
+            const done = db
+              .prepare(
+                'SELECT id FROM applications WHERE user_id = ? AND job_slug = ? AND withdrawn = 0',
+              )
+              .get(user.id, vacancy.slug);
+            if (done) {
+              skipped++;
+              logApplyEvent(user.id, vacancy.slug, 'already', 'гонка: строка уже есть');
+            } else {
+              skipped++;
+              logApplyEvent(user.id, vacancy.slug, 'already', 'параллельная отправка в работе');
+            }
+            continue;
+          }
+
+          let result: Awaited<ReturnType<NonNullable<typeof hhProvider.apply>>>;
+          try {
+            result = await hhProvider.apply(vacancy, {
+              resumeId: sendableId,
+              ...(message ? { message } : {}),
+              accessToken: token ?? undefined,
+            });
+          } catch (err) {
+            // Сеть упала исключением: заявку снимаем, ошибку — наверх, в
+            // изоляцию пользователя. Пауза здесь не ставится: неизвестно, ушёл
+            // ли отклик, а backoff по неизвестности бил бы по всем остальным.
+            completeSend(claim.id);
+            throw err;
+          }
           if (!result.ok) {
             failed++;
             /*
@@ -663,13 +889,20 @@ export async function runAutoApply(opts?: {
              * запись, попавшая в подбор, замедляла бы все последующие отклики.
              */
             const kind = result.kind ?? 'other';
+            // Заявка outbox закрывается при любом исходе, кроме успеха:
+            // висящий pending блокировал бы повторную попытку до чистки.
+            completeSend(claim.id);
             if (kind === 'closed') {
               skipped++;
+              logApplyEvent(user.id, vacancy.slug, 'skipped_closed', result.error ?? '');
               continue;
             }
             if (kind === 'auth') {
               blockedUser = true;
               blockReason = 'hh.ru ограничил доступ к аккаунту';
+              logApplyEvent(user.id, vacancy.slug, 'blocked', result.error ?? '');
+            } else {
+              logApplyEvent(user.id, vacancy.slug, 'failed', result.error ?? kind);
             }
             pacing.recordFailure(toFailureKind(kind));
             /*
@@ -696,20 +929,36 @@ export async function runAutoApply(opts?: {
              users.hh_resume_id. Иначе история откликов показывала бы чужое
              резюме, и понять, почему на вакансию фронтенда ушло «Python», было
              бы невозможно. */
-          db.prepare(
-            `INSERT INTO applications (user_id, job_slug, search_id, resume_id, letter_id, message, status, origin, sent_at)
-             VALUES (?, ?, ?, ?, ?, ?, 'sent', 'real', ?)`,
-          ).run(
-            user.id,
-            vacancy.slug,
-            search.id,
-            sendableId,
-            letter?.letterId ?? null,
-            message ?? '',
-            now,
-          );
+          try {
+            db.prepare(
+              `INSERT INTO applications (user_id, job_slug, search_id, resume_id, letter_id, message, status, origin, sent_at)
+               VALUES (?, ?, ?, ?, ?, ?, 'sent', 'real', ?)`,
+            ).run(
+              user.id,
+              vacancy.slug,
+              search.id,
+              sendableId,
+              letter?.letterId ?? null,
+              message ?? '',
+              now,
+            );
+          } catch (err) {
+            // Гонка с параллельным прогоном/кнопкой: строка уже есть (проверка
+            // выше прошла до чужого INSERT). Внешняя отправка уже случилась,
+            // поэтому это пропуск, а не ошибка: следующий тик увидит
+            // already_applied и тоже пропустит. Свою заявку гасим: чужую строку
+            // создал чужой claim, и она закроется сама.
+            if (!isUniqueViolation(err)) throw err;
+            completeSend(claim.id);
+            skipped++;
+            logApplyEvent(user.id, vacancy.slug, 'already', 'гонка вставки: строка уже есть');
+            continue;
+          }
+          completeSend(claim.id);
           appliedSet.add(vacancy.slug);
           applied++;
+          sentThisTick++;
+          logApplyEvent(user.id, vacancy.slug, 'sent', message ? 'с письмом' : 'без письма');
           /*
            * Отклик записан в счёт потолка компании сразу.
            *
@@ -758,7 +1007,9 @@ export async function runAutoApply(opts?: {
         } catch (err) {
           logError('autoapply:notify', err, { userId: user.id });
         }
-        stopAll = true;
+        // Остальные пользователи продолжают: 403 — проблема этого аккаунта,
+        // а не всего сервиса. Раньше флаг stopAll обрывал прогон для всех —
+        // один ограниченный аккаунт лишал откликов остальных до следующего тика.
       }
 
       if (appliedSet.size > 0) {
@@ -768,8 +1019,6 @@ export async function runAutoApply(opts?: {
       erroredUsers++;
       logError('autoapply:user', err, { userId: user.id });
     }
-
-    if (stopAll) break;
   }
 
   const shared = {
@@ -786,6 +1035,8 @@ export async function runAutoApply(opts?: {
     withoutLetter,
     demoUsers,
     erroredUsers,
+    dryRuns,
+    lockLost,
   };
 
   if (!ran) {
@@ -798,8 +1049,9 @@ export async function runAutoApply(opts?: {
      * потому что он был в демо-режиме. Читать это как «вам нечего откликаться
      * на» — то самое враньё, ради которого отчёт и делается.
      */
-    const reason =
-      demoUsers > 0
+    const reason = lockLost
+      ? 'прогон остановлен: блокировка перехвачена другим процессом'
+      : demoUsers > 0
         ? 'все активные аккаунты в демо-режиме: реальные отклики не отправляются'
         : 'нет активных поисков у пользователей с активным тарифом';
     return { ran: false, reason, ...shared };
@@ -823,6 +1075,7 @@ export type ApplyOutcome =
         | 'paused'
         | 'no_resume'
         | 'stale'
+        | 'dry'
         | 'demo';
       error: string;
     };
@@ -860,6 +1113,24 @@ export async function applyToVacancy(
   if (!isPlanActive(user))
     return { ok: false, kind: 'auth', error: 'Тариф истёк — автоотклики на паузе' };
   if (user.autoapply_paused) return { ok: false, kind: 'paused', error: 'Автоотклики на паузе' };
+  // Холостой режим режет все внешние эффекты, включая прямые указания:
+  // staging с живыми данными не должен отправлять ничего.
+  if (autoapplyDryRun()) {
+    return {
+      ok: false,
+      kind: 'dry',
+      error: 'Холостой режим (AUTOAPPLY_DRY_RUN=1): подбор работает, отправка отключена',
+    };
+  }
+  // Ограничение площадки действует и на ручной отклик: долбить 403-аккаунт
+  // из бота — тот же удар, что из планировщика.
+  if (blockedUntil(user.id) > 0) {
+    return {
+      ok: false,
+      kind: 'auth',
+      error: 'hh.ru временно ограничил доступ — отклики на паузе до снятия',
+    };
+  }
 
   const limit = planDailyLimit(user.plan);
   if (todayCount(user.id) >= limit) {
@@ -898,9 +1169,16 @@ export async function applyToVacancy(
 
   const base = effectivePacing(limit);
   const remaining = Math.max(0, limit - todayCount(user.id));
+  const effBase = {
+    hourlyLimit: base.hourlyCap,
+    minDelayMs: base.minDelayMs,
+    maxDelayMs: base.maxDelayMs,
+    workStartHour: base.workStartHour,
+    workEndHour: base.workEndHour,
+  };
   const pacing = pacingFor(
     user.id,
-    { ...base, dailyLimit: Math.min(remaining, base.dailyCap) },
+    { ...effBase, dailyLimit: Math.min(remaining, base.dailyCap) },
     opts.now ?? (() => Date.now()),
   );
   const decision = pacing.decide();
@@ -917,31 +1195,62 @@ export async function applyToVacancy(
 
   const letter = await buildLetter(vacancy, getLetters(user.id), picked?.content ?? '');
   const message = letter?.text;
-  const result = await hhProvider.apply(vacancy, {
+  const claim = claimSend({
+    userId: user.id,
+    jobSlug: vacancy.slug,
     resumeId: sendableId,
-    ...(message ? { message } : {}),
-    accessToken: token,
+    letterId: letter?.letterId ?? null,
+    message: message ?? '',
   });
+  if ('duplicate' in claim) {
+    return { ok: false, kind: 'already', error: 'Отправка уже идёт — проверьте отклики через минуту' };
+  }
+  let result: Awaited<ReturnType<NonNullable<typeof hhProvider.apply>>>;
+  try {
+    result = await hhProvider.apply(vacancy, {
+      resumeId: sendableId,
+      ...(message ? { message } : {}),
+      accessToken: token,
+    });
+  } catch (err) {
+    completeSend(claim.id);
+    throw err;
+  }
 
   if (!result.ok) {
     const kind = result.kind ?? 'other';
+    completeSend(claim.id);
     if (kind === 'closed') {
       // Вакансию сняли — это не отказ платформы, откат здесь только вредит.
+      logApplyEvent(user.id, vacancy.slug, 'skipped_closed', result.error ?? '');
     } else if (kind === 'auth') {
       // Отклик из чата тоже может упереться в ограничение аккаунта.
       setBlockedUntil(user.id, Date.now() + BLOCK_STOP_MS, 'hh.ru ограничил доступ к аккаунту');
       pacing.recordFailure('blocked');
+      logApplyEvent(user.id, vacancy.slug, 'blocked', result.error ?? '');
     } else {
       pacing.recordFailure(toFailureKind(kind));
+      logApplyEvent(user.id, vacancy.slug, 'failed', result.error ?? kind);
     }
     return { ok: false, kind, error: result.error ?? 'Платформа отклонила отклик' };
   }
 
   pacing.recordSent();
-  db.prepare(
-    `INSERT INTO applications (user_id, job_slug, resume_id, letter_id, message, status, origin, sent_at)
-     VALUES (?, ?, ?, ?, ?, 'sent', 'real', ?)`,
-  ).run(user.id, vacancy.slug, sendableId, letter?.letterId ?? null, message ?? '', Date.now());
+  try {
+    db.prepare(
+      `INSERT INTO applications (user_id, job_slug, resume_id, letter_id, message, status, origin, sent_at)
+       VALUES (?, ?, ?, ?, ?, 'sent', 'real', ?)`,
+    ).run(user.id, vacancy.slug, sendableId, letter?.letterId ?? null, message ?? '', Date.now());
+  } catch (err) {
+    // Гонка с плановым прогоном: строка уже есть, внешняя отправка уже
+    // случилась. Честный ответ — «уже откликались», а не 500.
+    if (!isUniqueViolation(err)) throw err;
+    completeSend(claim.id);
+    logApplyEvent(user.id, vacancy.slug, 'already', 'гонка вставки: строка уже есть');
+    return { ok: false, kind: 'already', error: 'Вы уже откликались на эту вакансию' };
+  }
+  completeSend(claim.id);
+  logApplyEvent(user.id, vacancy.slug, 'sent', message ? 'с письмом (бот/кабинет)' : 'без письма');
 
   return { ok: true, resumeId: sendableId, withLetter: Boolean(message) };
 }

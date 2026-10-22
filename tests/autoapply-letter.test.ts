@@ -21,6 +21,7 @@ type Database = ReturnType<typeof import('../src/lib/db').createDatabase>;
 let db: Database;
 let runAutoApply: (opts?: {
   pacing?: Partial<import('../src/lib/anti-ban').PacingConfig>;
+  now?: () => number;
 }) => Promise<import('../src/lib/autoapply').AutoApplyRun>;
 let resetPacing: () => void;
 let resetCatalogCache: () => void;
@@ -103,7 +104,7 @@ before(async () => {
  */
 beforeEach(() => {
   db.exec(
-    'DELETE FROM applications; DELETE FROM letters; DELETE FROM resumes; DELETE FROM searches; DELETE FROM users; DELETE FROM vacancies;',
+    'DELETE FROM apply_events; DELETE FROM auth_attempts; DELETE FROM applications; DELETE FROM letters; DELETE FROM resumes; DELETE FROM searches; DELETE FROM users; DELETE FROM vacancies;',
   );
   resetCatalogCache();
   resetPacing();
@@ -506,28 +507,19 @@ test('настоящий отказ платформы включает backoff'
 });
 
 /**
- * Внешние паузы действительно применяются.
+ * Паузы действительно выжидаются внутри тика, а не рвут прогон.
  *
- * runAutoApply принимает opts.pacing для тестов и инструментов. Раньше эти
- * значения молча не применялись: createPacing получал их, но следом
- * `pacing.configure({ ...base, ... })` делал Object.assign по значениям из
- * конфигурации и затирал их дефолтами. То есть параметр был задокументирован,
- * принимался и не делал ничего — и это обнаруживалось только тем, что тест,
- * просивший нулевую паузу, получал 45 секунд и упирался в один отклик за тик.
+ * Старое поведение: любой отказ паузы останавливал пользователя до следующего
+ * тика — при 5-минутном тике выходило максимум ~12 откликов в час, и тариф
+ * «Эксперт» (250/день) был физически недостижим. Тест ниже закреплял это как
+ * норму («длинная пауза ограничила тик»).
  *
- * Проверяется поведением, а не строчкой кода: с большой паузой прогон делает
- * один отклик, с нулевой — все подходящие.
+ * Теперь тик ждёт свою паузу (cooldown после собственных отправок) и идёт
+ * дальше: темп задаёт паузер, а не расписание. Проверяется поведением в
+ * миллисекундном масштабе: два отклика с паузой 300мс обязаны занять
+ * не меньше ~600мс реального времени — иначе пауза снова фикция.
  */
-test('переданная пауза влияет на число откликов за тик', async () => {
-  /*
-   * Один пользователь, две вакансии, один прогон.
-   *
-   * Два прогона подряд в одном тесте не годится: первый оставляет строки в
-   * applications и паузу в паузере, и второй измеряет уже другое состояние.
-   * Два пользователя тоже не годится — у каждого свой паузер, и оба успевают
-   * по одному отклику независимо от переданной паузы. Поэтому разница
-   * проверяется на одном прогоне с одной вакансией сверх.
-   */
+test('пауза выжидается внутри тика, а не обрывает его', async () => {
   const now = Date.now();
   seedUser({ letters: [], keywords: 'Erlang' });
   seedVacancy('hh-er-1', 'Erlang-разработчик', ['Erlang'], now - 3_600_000);
@@ -536,19 +528,26 @@ test('переданная пауза влияет на число отклик�
   const net = interceptApplies();
   try {
     resetPacing();
-    const slow = await runAutoApply({
-      pacing: { minDelayMs: 600_000, maxDelayMs: 600_000, jitterMinutes: 0 },
+    const started = Date.now();
+    /*
+     * Реальное время, а не замороженное TEST_NOW: паузер живёт на часах nowFn,
+     * а сон — на настоящих. С замороженными часами cooldown не истёк бы
+     * никогда, и тик висел бы до исчерпания бюджета.
+     */
+    const result = await runAutoApply({
+      pacing: { minDelayMs: 300, maxDelayMs: 300, jitterMinutes: 0 },
+      now: () => Date.now(),
     });
-    assert.equal(slow.applied, 1, `длинная пауза не ограничила тик: ${JSON.stringify(slow)}`);
-
-    // Тот же набор, но нулевая пауза: обходится ограничение тика.
-    db.prepare('DELETE FROM applications').run();
-    resetPacing();
-    const fast = await runAutoApply({ pacing: { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0 } });
-    assert.equal(
-      fast.applied,
-      2,
-      `нулевая пауза не пропустила второй отклик: ${JSON.stringify(fast)}`,
+    const elapsed = Date.now() - started;
+    assert.equal(result.applied, 2, `второй отклик не ушёл: ${JSON.stringify(result)}`);
+    /*
+     * Одна пауза между двумя отправками: интервал обязан быть не меньше
+     * выданных 300мс (с запасом на точность таймеров). Ноль означал бы, что
+     * пауза снова фикция.
+     */
+    assert.ok(
+      elapsed >= 250,
+      `пауза не выждана: два отклика за ${elapsed}мс при паузе 300мс`,
     );
   } finally {
     net.restore();

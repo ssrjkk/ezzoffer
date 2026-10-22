@@ -59,6 +59,13 @@ export async function startNodeRuntime(): Promise<void> {
       logError('scheduler:schedule', err);
     }
   };
+  /*
+   * Первый тик — сразу, а не через интервал. Иначе после каждого рестарта
+   * входящие команды бота висят без ответа до N минут: человек пишет /start,
+   * тишина — и он решает, что «бот не работает». Блокировки фаз защищают от
+   * наложения со следующим тиком.
+   */
+  void tick();
   const id = setInterval(() => {
     void tick();
   }, intervalMs);
