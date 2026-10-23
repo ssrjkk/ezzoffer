@@ -184,7 +184,11 @@ test('отклик с номером выбирает вакансию, а не 
   const rows = preview.keyboard?.inline_keyboard ?? [];
   const applyRows = rows.filter((r) => r[0]?.data?.startsWith('apply:'));
   assert.ok(applyRows.length >= 2, `кнопок отклика ${applyRows.length} вместо двух`);
-  assert.equal(applyRows[0]![0]!.data, 'apply:1');
+  assert.match(
+    applyRows[0]![0]!.data ?? '',
+    /^apply:1:[0-9a-f]{8}$/,
+    'кнопка отклика без хеша вакансии',
+  );
 
   // Первым идёт то, что подходит под резюме, а не первое попавшееся.
   const first = applyAction(replyFor('отклик', '1', u).action);

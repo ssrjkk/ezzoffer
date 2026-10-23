@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { requireUser, unauthorized, readJson } from '@/lib/api';
+import { requireUser, unauthorized, readJson, badRequest } from '@/lib/api';
 import { db, type User } from '@/lib/db';
 import { mskDayStartMs } from '@/lib/moscow-day';
 import { isPlanActive, planDailyLimit } from '@/lib/plans';
-import { listApplications, serializeApplication, type ApplicationRow } from '@/lib/applications';
+import { listApplicationsPage, serializeApplication, type ApplicationRow } from '@/lib/applications';
 import { getVacancyBySlug } from '@/lib/vacancies';
 import { sanitizeExternalUrl } from '@/lib/vacancies/util';
 import { hhProvider } from '@/lib/vacancies/hh';
@@ -23,8 +23,23 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const rawLimit = Number(searchParams.get('limit') ?? 200);
   const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(1, Math.floor(rawLimit)), 200) : 200;
+  /*
+   * Курсор keyset-пагинации `<sentAt>:<id>` — составной, потому что планировщик
+   * шлёт пачками с одинаковым sent_at, и курсор только по времени пропускал бы
+   * записи на границе. Форма строгая: молчаливый фолбэк на первую страницу
+   * прятал бы баг клиента за «всё работает». Формат — тот же, что отдаёт
+   * nextCursor, клиент его не собирает, а перекладывает как есть.
+   */
+  const rawCursor = searchParams.get('cursor');
+  let cursor: { sentAt: number; id: number } | null = null;
+  if (rawCursor !== null) {
+    const m = /^(\d+):(\d+)$/.exec(rawCursor.trim());
+    if (!m) return badRequest('Некорректный курсор');
+    cursor = { sentAt: Number(m[1]), id: Number(m[2]) };
+  }
+  const page = listApplicationsPage(user.id, limit, cursor);
   return Response.json(
-    { applications: listApplications(user.id, limit) },
+    { applications: page.items, nextCursor: page.nextCursor },
     { headers: NO_STORE_HEADERS },
   );
 }

@@ -27,6 +27,22 @@ test('isUniqueViolation опознаёт SQLITE_CONSTRAINT_UNIQUE', () => {
   assert.equal(isUniqueViolation(null), false);
 });
 
+test('isUniqueViolation принимает PRIMARY KEY, но не FOREIGN KEY', () => {
+  // Ловушка подтипов better-sqlite3: PK даёт PRIMARYKEY, а не UNIQUE.
+  // Ловля только UNIQUE пропускала коллизию кодов привязки наружу как 500.
+  assert.equal(
+    isUniqueViolation({ code: 'SQLITE_CONSTRAINT_PRIMARYKEY' }),
+    true,
+    'коллизия PRIMARY KEY не опознана',
+  );
+  assert.equal(
+    isUniqueViolation({ code: 'SQLITE_CONSTRAINT_FOREIGNKEY' }),
+    false,
+    'чужой ключ проглочен как дубликат',
+  );
+  assert.equal(isUniqueViolation({ code: 'SQLITE_CONSTRAINT_NOTNULL' }), false);
+});
+
 test('toPositiveNumber парсит числа', () => {
   assert.equal(toPositiveNumber(5), 5);
   assert.equal(toPositiveNumber('5'), 5);
@@ -35,6 +51,25 @@ test('toPositiveNumber парсит числа', () => {
   assert.equal(toPositiveNumber('abc'), null);
   assert.equal(toPositiveNumber(null), null);
   assert.equal(toPositiveNumber(undefined), null);
+});
+
+test('toPositiveNumber отклоняет нечисловые типы и не-десятичные записи', () => {
+  // Голый Number() принимал всё это: true → 1, [100] → 100, '0x64' → 100.
+  assert.equal(toPositiveNumber(true), null, 'булево принято за число');
+  assert.equal(toPositiveNumber(false), null);
+  assert.equal(toPositiveNumber([100]), null, 'массив принят за число');
+  assert.equal(toPositiveNumber({}), null);
+  assert.equal(toPositiveNumber('0x64'), null, 'hex принят за число');
+  assert.equal(toPositiveNumber('1e5'), null, 'экспонента принята за число');
+  assert.equal(toPositiveNumber('  '), null);
+  assert.equal(toPositiveNumber(NaN), null);
+  assert.equal(toPositiveNumber(Infinity), null);
+});
+
+test('toPositiveNumber принимает пробелы-разделители тысяч', () => {
+  // «150 000» — естественный ввод зарплаты; раньше Number() давал NaN и
+  // фильтр молча не применялся.
+  assert.equal(toPositiveNumber('150 000'), 150000);
 });
 
 test('validateSalaryRange проверяет диапазон', () => {

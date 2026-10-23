@@ -24,6 +24,11 @@ let sent: { chatId: string; text: string; keyboard?: unknown }[];
 
 const HOUR = 60 * 60 * 1000;
 
+/** Хеш slug для callback_data кнопок (см. slugHash в telegram-keyboard). */
+function botHash(slug: string): string {
+  return bot.slugHash(slug);
+}
+
 before(async () => {
   process.env.EZOFFER_DB_PATH = ':memory:';
   process.env.EZOFFER_SILENT = '1';
@@ -341,7 +346,7 @@ test('отклик из избранного действительно отпр
   }) as typeof globalThis.fetch;
 
   try {
-    await click('bookmarkApply:1');
+    await click(`bookmarkApply:${botHash('hh-b2')}`);
   } finally {
     globalThis.fetch = saved;
   }
@@ -354,7 +359,7 @@ test('удаление из избранного убирает вакансию
   seedVacancy('hh-b3', 'React-разработчик');
   seedBookmark('hh-b3');
 
-  await click('bookmarkRemove:hh-b3');
+  await click(`bookmarkRemove:${botHash('hh-b3')}`);
   const row = db.prepare('SELECT COUNT(*) AS c FROM bookmarks WHERE user_id = 1').get() as {
     c: number;
   };
@@ -404,8 +409,8 @@ test('избранное листается кнопкой «Ещё»', async ()
 
 test('несуществующий номер из избранного не ломает бота', async () => {
   seedUser();
-  await click('bookmarkApply:99');
-  assert.match(lastText(), /больше нет в каталоге/i);
+  await click('bookmarkApply:deadbeef');
+  assert.match(lastText(), /больше нет в избранном/i);
 });
 
 test('избранное другого человека не видно', async () => {
@@ -420,7 +425,7 @@ test('избранное другого человека не видно', async
     Date.now(),
   );
 
-  await click('bookmarkRemove:hh-b4');
+  await click(`bookmarkRemove:${botHash('hh-b4')}`);
   const row = db.prepare('SELECT COUNT(*) AS c FROM bookmarks WHERE user_id = 2').get() as {
     c: number;
   };

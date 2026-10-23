@@ -1,7 +1,8 @@
 import { randomInt } from 'node:crypto';
 
 import { db, type User } from './db';
-import { logInfo } from './logger';
+import { logError, logInfo } from './logger';
+import { isUniqueViolation } from './validate';
 
 /**
  * Telegram-бот EZOffer: привязка аккаунта и команды.
@@ -255,17 +256,38 @@ export function generateLinkCode(): string {
 /**
  * Создаёт код привязки для пользователя. Старые коды пользователя удаляются,
  * иначе в telegram_codes копились бы просроченные строки.
+ *
+ * Код — PRIMARY KEY: при коллизии с чужим действующим кодом INSERT падает
+ * UNIQUE-ошибкой. Вероятность 1/1M на выдачу, но растёт квадратично с числом
+ * одновременно действующих кодов (парадокс дней рождения: ~0.5% при сотне) —
+ * без повтора пользователь получал бы 500 вместо кода. Регенерируем до
+ * успеха, попыток с запасом: исчерпать миллион кодов за 15 минут нельзя.
  */
-export function issueLinkCode(userId: number, now = Date.now()): string {
+export function issueLinkCode(
+  userId: number,
+  now = Date.now(),
+  gen: () => string = generateLinkCode,
+): string {
   purgeExpiredCodes(now);
-  const code = generateLinkCode();
   db.prepare('DELETE FROM telegram_codes WHERE user_id = ?').run(userId);
-  db.prepare('INSERT INTO telegram_codes (code, user_id, expires_at) VALUES (?, ?, ?)').run(
-    code,
-    userId,
-    now + CODE_TTL_MS,
-  );
-  return code;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = gen();
+    try {
+      db.prepare('INSERT INTO telegram_codes (code, user_id, expires_at) VALUES (?, ?, ?)').run(
+        code,
+        userId,
+        now + CODE_TTL_MS,
+      );
+      return code;
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err;
+      // Чужой действующий код — генерируем другой.
+    }
+  }
+  // Сюда попадают, только если пять случайных кодов подряд заняты — признак
+  // исчерпания пространства (атака выдачей), а не невезения.
+  logError('telegram:code', new Error('не удалось выдать код привязки: коллизии'));
+  throw new Error('Не удалось выдать код, попробуйте позже');
 }
 
 export function purgeExpiredCodes(now = Date.now()): number {

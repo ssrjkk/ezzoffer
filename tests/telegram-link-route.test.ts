@@ -193,3 +193,46 @@ test('удачный ввод обнуляет счётчик попыток ч�
   }
   assert.ok(linkChatByCode('chat-retry', second), 'после сброса 9 опечаток снова терпимы');
 });
+
+test('коллизия кода при выдаче регенерирует, а не падает в 500', async () => {
+  /*
+   * Код — PRIMARY KEY: чужой действующий код с тем же значением ронял INSERT
+   * UNIQUE-ошибкой наружу (500 вместо кода). Вероятность 1/1M на выдачу, но
+   * растёт квадратично с числом одновременно действующих кодов.
+   */
+  const { issueLinkCode } = await import('../src/lib/telegram');
+  db.prepare(
+    'INSERT INTO users (id, email, password_hash, plan, plan_expires_at, created_at, email_verified) VALUES (?,?,?,?,?,?,1)',
+  ).run(2, 'other@example.test', 'h', 'pro', Date.now() + 86_400_000, Date.now());
+  // Чужой действующий код занимает '000001'.
+  db.prepare('INSERT INTO telegram_codes (code, user_id, expires_at) VALUES (?, ?, ?)').run(
+    '000001',
+    2,
+    Date.now() + 600_000,
+  );
+  let calls = 0;
+  const code = issueLinkCode(1, Date.now(), () => (++calls === 1 ? '000001' : '000002'));
+  assert.equal(code, '000002', 'первая коллизия обязана регенерировать код');
+  assert.equal(calls, 2);
+  const row = db.prepare('SELECT user_id FROM telegram_codes WHERE code = ?').get('000002') as {
+    user_id: number;
+  };
+  assert.equal(row.user_id, 1, 'код выдан не тому пользователю');
+});
+
+test('пять коллизий подряд — честная ошибка вместо вечного цикла', async () => {
+  const { issueLinkCode } = await import('../src/lib/telegram');
+  db.prepare(
+    'INSERT INTO users (id, email, password_hash, plan, plan_expires_at, created_at, email_verified) VALUES (?,?,?,?,?,?,1)',
+  ).run(2, 'other@example.test', 'h', 'pro', Date.now() + 86_400_000, Date.now());
+  db.prepare('INSERT INTO telegram_codes (code, user_id, expires_at) VALUES (?, ?, ?)').run(
+    '000001',
+    2,
+    Date.now() + 600_000,
+  );
+  assert.throws(
+    () => issueLinkCode(1, Date.now(), () => '000001'),
+    /Не удалось выдать код/,
+    'исчерпание попыток обязано бросать понятно, а не крутиться',
+  );
+});

@@ -214,19 +214,56 @@ test('подбор даёт кнопку на каждую вакансию', as
     .flat()
     .filter((b) => b.callback_data?.startsWith('apply:'));
   assert.ok(applyButtons.length >= 2, `кнопок отклика ${applyButtons.length} вместо 2`);
-  assert.equal(applyButtons[0]!.callback_data, 'apply:1');
+  assert.match(
+    applyButtons[0]!.callback_data ?? '',
+    /^apply:1:[0-9a-f]{8}$/,
+    `кнопка без хеша вакансии: ${applyButtons[0]!.callback_data}`,
+  );
 });
 
 test('подпись кнопки содержит номер и название', () => {
-  const kb = bot.keyboardFor([{ title: 'Senior React Developer', company: 'Авито' }]);
+  const kb = bot.keyboardFor([{ title: 'Senior React Developer', company: 'Авито', slug: 'hh-1' }]);
   const label = kb!.inline_keyboard[0]![0]!.text;
   assert.match(label, /^1\./, `в подписи нет номера: ${label}`);
   assert.ok(label.includes('Авито'), `в подписи нет компании: ${label}`);
 });
 
+test('callback_data кнопок влезает в лимит Telegram (64 байта)', () => {
+  /*
+   * Slug целиком (до 140 символов, см. company.ts) в кнопку не влезал:
+   * Telegram отклонял запрос, и сообщение с кнопками не уходило вообще.
+   * Поэтому в кнопке только индекс и 8 hex-символов хеша.
+   */
+  const kb = bot.keyboardFor([
+    { title: 'T', company: 'C', slug: `feed-0-${'x'.repeat(120)}` },
+  ]);
+  const data = kb!.inline_keyboard[0]![0]!.data ?? '';
+  assert.ok(
+    Buffer.byteLength(data, 'utf8') <= 64,
+    `callback_data ${data.length} символов — Telegram отклонит`,
+  );
+  assert.match(data, /^apply:1:[0-9a-f]{8}$/);
+});
+
+test('кнопка чужой вакансии после сдвига списка не отправляет отклик', async () => {
+  /*
+   * Каталог между показом и нажатием обновляется, номера съезжают: голый
+   * индекс указывал на N-ю вакансию текущего списка, а не показанного.
+   * Хеш сверяется, при расхождении отправки нет.
+   */
+  seedUser();
+  seedVacancy('hh-s1', 'React-разработчик');
+  const before = sent.length;
+  await click('apply:1:deadbeef');
+  const apps = db.prepare('SELECT COUNT(*) AS c FROM applications').get() as { c: number };
+  assert.equal(apps.c, 0, 'отклик ушёл не на ту вакансию');
+  const text = sent.slice(before).map((s) => s.text).join('\n');
+  assert.match(text, /обновил/i, `нет объяснения, что список съехал: ${text.slice(0, 200)}`);
+});
+
 test('длинная подпись обрезается, а не вылезает за экран', () => {
   const kb = bot.keyboardFor([
-    { title: 'Очень длинное название вакансии '.repeat(6), company: 'К' },
+    { title: 'Очень длинное название вакансии '.repeat(6), company: 'К', slug: 'hh-long' },
   ]);
   const label = kb!.inline_keyboard[0]![0]!.text;
   assert.ok(
@@ -461,6 +498,29 @@ test('не-разметочный 400 не повторяется впустую
     assert.equal(calls, 1, `запросов ушло ${calls} вместо 1`);
   } finally {
     globalThis.fetch = saved;
+  }
+});
+
+test('кнопка кабинета появляется при публичном SITE_URL', async () => {
+  /*
+   * SITE_URL читается при вызове, а не при импорте: иначе процесс, поднявший
+   * модуль до установки переменной, навсегда оставался бы без кнопки.
+   */
+  const saved = process.env.SITE_URL;
+  process.env.SITE_URL = 'https://ezoffer.example';
+  try {
+    const { commandKeyboard } = await import('../src/lib/telegram-keyboard');
+    const urls = commandKeyboard()
+      .inline_keyboard.flat()
+      .map((b) => b.url)
+      .filter(Boolean) as string[];
+    assert.ok(
+      urls.some((u) => u === 'https://ezoffer.example/dashboard'),
+      `кнопки кабинета нет при заданном SITE_URL: ${JSON.stringify(urls)}`,
+    );
+  } finally {
+    if (saved === undefined) delete process.env.SITE_URL;
+    else process.env.SITE_URL = saved;
   }
 });
 

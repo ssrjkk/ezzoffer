@@ -76,29 +76,57 @@ export function commandKeyboard(): InlineKeyboard {
   return { inline_keyboard: rows };
 }
 
-const DASHBOARD = (process.env.SITE_URL?.trim() || '').replace(/\/+$/, '');
-
 /**
  * Ссылка на кабинет. Пусто — если SITE_URL не задан или непубличный:
  * кнопку с таким URL Telegram отклонит вместе со всем сообщением.
+ *
+ * Env читается при каждом вызове, а не при импорте модуля: иначе тест или
+ * процесс, поднявший модуль до установки SITE_URL, навсегда оставался бы
+ * без кнопки кабинета (или, наоборот, с протухшим хостом).
  */
 function dashboardUrl(): string | null {
-  if (!DASHBOARD) return null;
+  const base = (process.env.SITE_URL?.trim() ?? '').replace(/\/+$/, '');
+  if (!base) return null;
   let host = '';
   try {
-    host = new URL(DASHBOARD).hostname.toLowerCase();
+    host = new URL(base).hostname.toLowerCase();
   } catch {
     return null;
   }
   if (host === 'localhost' || host === '::1' || host === '0.0.0.0' || /^127\./.test(host)) {
     return null;
   }
-  return `${DASHBOARD}/dashboard`;
+  return `${base}/dashboard`;
+}
+
+/**
+ * Короткий идентификатор вакансии для callback_data.
+ *
+ * Telegram режет callback_data на 64 байтах: slug целиком (до 140 символов,
+ * см. company.ts) в кнопку не влезает — запрос отклоняется целиком и сообщение
+ * не уходит вообще. Индекс (`apply:1`) влезает, но указывает на N-ю вакансию
+ * ТЕКУЩЕГО ранжирования: каталог между показом и нажатием успевает
+ * обновиться, номера съезжают, и отклик уходит на чужую вакансию — ровно тот
+ * промах, ради которого кнопки вообще делались вместо команд.
+ *
+ * Хеш (FNV-1a, 8 hex-символов) — компромисс: стабилен при сдвиге списка,
+ * влезает в лимит, а обработчик сверяет его с вакансией под тем же номером и
+ * при расхождении просит нажать ещё раз вместо отправки не туда. Коллизия
+ * 1/4 млрд на кнопку; при совпадении двух строк сразу — отказ, а не угадайка.
+ * Не криптография: секретности здесь нет, нужна только привязка.
+ */
+export function slugHash(slug: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < slug.length; i++) {
+    h ^= slug.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, '0');
 }
 
 /** Кнопка отклика на каждую вакансию плюс дополнительные ряды. */
 export function keyboardFor(
-  vacancies: readonly { title: string; company: string }[],
+  vacancies: readonly { title: string; company: string; slug: string }[],
   extra: InlineKeyboard['inline_keyboard'][number][] = [],
 ): InlineKeyboard | undefined {
   if (vacancies.length === 0 && extra.length === 0) return undefined;
@@ -106,7 +134,7 @@ export function keyboardFor(
     ...vacancies.map((v, i) => [
       {
         text: `${i + 1}. ${fit(`${v.title} — ${v.company}`, 32)}`,
-        data: `apply:${i + 1}`,
+        data: `apply:${i + 1}:${slugHash(v.slug)}`,
       },
     ]),
     ...extra,

@@ -541,6 +541,63 @@ test('GET /api/applications уважает limit и не отдаёт чужие
   );
 });
 
+test('GET /api/applications отдаёт курсор и ходит по страницам без дублей', async () => {
+  makeUser(1, 'me@example.test');
+  for (let i = 0; i < 5; i++) {
+    db.prepare(
+      'INSERT INTO applications (user_id, job_slug, status, sent_at) VALUES (?,?,?,?)',
+    ).run(1, `mine-${i}`, 'sent', 1_000_000 - i);
+  }
+  loginAs({ id: 1, plan: 'none', plan_expires_at: null });
+
+  const { GET } = await import('../src/app/api/applications/route');
+  const first = (await (
+    await GET(new Request('http://localhost/api/applications?limit=2'))
+  ).json()) as {
+    applications: { id: number; job_slug: string; sent_at: number }[];
+    nextCursor: { sentAt: number; id: number } | null;
+  };
+  assert.equal(first.applications.length, 2);
+  assert.ok(first.nextCursor, 'у неполной выборки обязан быть nextCursor');
+
+  const second = (await (
+    await GET(
+      new Request(
+        `http://localhost/api/applications?limit=2&cursor=${first.nextCursor!.sentAt}:${first.nextCursor!.id}`,
+      ),
+    )
+  ).json()) as {
+    applications: { id: number; job_slug: string; sent_at: number }[];
+    nextCursor: { sentAt: number; id: number } | null;
+  };
+  assert.equal(second.applications.length, 2);
+  const seen = [...first.applications, ...second.applications].map((a) => a.id);
+  assert.equal(new Set(seen).size, 4, `страницы пересеклись: ${seen.join(',')}`);
+
+  const third = (await (
+    await GET(
+      new Request(
+        `http://localhost/api/applications?limit=2&cursor=${second.nextCursor!.sentAt}:${second.nextCursor!.id}`,
+      ),
+    )
+  ).json()) as {
+    applications: { id: number }[];
+    nextCursor: unknown;
+  };
+  assert.equal(third.applications.length, 1, 'хвост выборки потерян');
+  assert.equal(third.nextCursor, null, 'у последней страницы курсора быть не должно');
+});
+
+test('GET /api/applications отклоняет кривой курсор', async () => {
+  makeUser(1, 'me@example.test');
+  loginAs({ id: 1, plan: 'none', plan_expires_at: null });
+  const { GET } = await import('../src/app/api/applications/route');
+  for (const bad of ['abc', '1:2:3', '1:', ':2', '-1:2', '1.5:2']) {
+    const res = await GET(new Request(`http://localhost/api/applications?cursor=${bad}`));
+    assert.equal(res.status, 400, `курсор ${bad} обязан отклоняться`);
+  }
+});
+
 // ------------------------------------------------------------------ plan/trial
 
 test('POST /api/plan отклоняет неизвестный тариф и период', async () => {

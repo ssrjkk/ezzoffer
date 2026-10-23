@@ -1,8 +1,8 @@
-import { mainKeyboard, commandKeyboard, keyboardFor, DYNAMIC_LABELS } from './telegram-keyboard';
+import { mainKeyboard, commandKeyboard, keyboardFor, slugHash, DYNAMIC_LABELS } from './telegram-keyboard';
 
 // Реэкспорт: клавиатуры живут в отдельном модуле, но это часть бота, и
 // потребители (тесты, превью) обращаются к telegram-bot.
-export { mainKeyboard, commandKeyboard, keyboardFor };
+export { mainKeyboard, commandKeyboard, keyboardFor, slugHash };
 
 import { db, type User } from './db';
 import { getStats } from './stats';
@@ -382,14 +382,23 @@ function interviewReply(user: User, page: number): Reply {
   };
 }
 
-/** Вакансия из избранного по порядковому номеру на текущей странице списка. */
-function resolveBookmark(userId: number, number: number): Vacancy | null {
-  if (!Number.isInteger(number) || number < 1) return null;
-  const row = db
+/**
+ * Вакансия из избранного по хешу slug, а не по порядковому номеру.
+ *
+ * Номер указывал на N-ю строку ТЕКУЩЕГО списка: удаление или добавление между
+ * показом и нажатием сдвигало строки, и отклик уходил на чужую вакансию.
+ * Хеш привязан к конкретной вакансии. Совпадений обязано быть ровно одно:
+ * ноль — вакансия убрана из избранного, несколько (коллизия хеша) — отказ
+ * вместо угадайки.
+ */
+function resolveBookmark(userId: number, hash: string): Vacancy | null {
+  if (!/^[0-9a-f]{8}$/.test(hash)) return null;
+  const rows = db
     .prepare('SELECT job_slug FROM bookmarks WHERE user_id = ? ORDER BY created_at DESC')
     .all(userId) as { job_slug: string }[];
-  const hit = row[number - 1];
-  return hit ? getVacancyBySlug(hit.job_slug) : null;
+  const hits = rows.filter((r) => slugHash(r.job_slug) === hash);
+  if (hits.length !== 1) return null;
+  return getVacancyBySlug(hits[0]!.job_slug);
 }
 
 /** Избранное: что человек отложил, чтобы вернуться. */
@@ -427,9 +436,16 @@ function bookmarksReply(user: User, page: number): Reply {
       continue;
     }
     lines.push(`${number}. ${escapeHtml(vacancy.title)} — ${escapeHtml(vacancy.company)}`);
+    /*
+     * Идентификатор — хеш slug, а не slug целиком и не номер. Slug целиком
+     * (до 140 символов) рвал лимит callback_data в 64 байта: Telegram отклонял
+     * запрос, и сообщение не уходило вообще. Номер указывал на N-ю строку
+     * текущего списка и съезжал при любом изменении избранного.
+     */
+    const tag = slugHash(row.job_slug);
     buttons.push([
-      { text: DYNAMIC_LABELS.bookmarkApply(number), data: `bookmarkApply:${number}` },
-      { text: DYNAMIC_LABELS.bookmarkRemove, data: `bookmarkRemove:${row.job_slug}` },
+      { text: DYNAMIC_LABELS.bookmarkApply(number), data: `bookmarkApply:${tag}` },
+      { text: DYNAMIC_LABELS.bookmarkRemove, data: `bookmarkRemove:${tag}` },
     ]);
   }
 
@@ -706,12 +722,32 @@ function applyReply(user: User, args: string): Reply {
    */
   const ranked = rankVacancies(matched, resumes, skills);
 
-  const index = Number(args.trim());
+  /*
+   * Выбор номера: из команды (/отклик 2) или из кнопки (apply:2:<хеш>).
+   *
+   * Хеш сверяется с вакансией под тем же номером в ТЕКУЩЕМ ранжировании:
+   * каталог между показом кнопок и нажатием успевает обновиться, номера
+   * съезжают, и голый индекс отправлял бы отклик на чужую вакансию. При
+   * расхождении отправки нет — человек нажимает ещё раз по свежему списку.
+   * Команда без хеша (набрана вручную) сверке не подлежит: там человек сам
+   * отвечает за номер, а список он только что видел.
+   */
+  const [indexRaw, indexHash] = args.trim().split(':');
+  const index = Number(indexRaw);
   if (Number.isFinite(index) && Number.isInteger(index) && index >= 1) {
     const target = ranked[index - 1]?.vacancy;
     if (!target) {
       return {
         text: `В подборе только ${ranked.length} вакансий. Нажмите «Подбор вакансий», чтобы увидеть список.`,
+        keyboard: mainKeyboard(),
+      };
+    }
+    if (indexHash && slugHash(target.slug) !== indexHash) {
+      return {
+        text: [
+          'Подбор обновился, пока вы выбирали: номера успели съехать.',
+          'Нажмите «Подбор вакансий» ещё раз и выберите заново — отклик никуда не ушёл.',
+        ].join('\n'),
         keyboard: mainKeyboard(),
       };
     }
@@ -746,7 +782,7 @@ function applyReply(user: User, args: string): Reply {
   return {
     text: lines.join('\n'),
     keyboard: keyboardFor(
-      shown.map((r) => ({ title: r.vacancy.title, company: r.vacancy.company })),
+      shown.map((r) => ({ title: r.vacancy.title, company: r.vacancy.company, slug: r.vacancy.slug })),
       [
         [
           { text: 'Статистика', data: 'menu:stats' },
@@ -969,7 +1005,10 @@ async function handleCallback(update: TelegramUpdate): Promise<boolean | null> {
     return sendTelegramMessage(chat, NOT_LINKED, { keyboard: commandKeyboard(), html: true });
   }
 
-  const [kind, value] = data.split(':');
+  // Формат кнопок: `kind:value` или `kind:value:hash` (apply и избранное
+  // несут хеш вакансии — см. slugHash: индекс без хеша указывал бы на N-ю
+  // вакансию текущего списка, а не показанного).
+  const [kind, value, tag] = data.split(':');
 
   if (kind === 'menu') {
     const command =
@@ -1056,9 +1095,18 @@ async function handleCallback(update: TelegramUpdate): Promise<boolean | null> {
 
   if (kind === 'bookmarkRemove' && value) {
     if (cb.id) await answerCallbackQuery(cb.id, { text: 'Убрано' });
-    const removed = db
-      .prepare('DELETE FROM bookmarks WHERE user_id = ? AND job_slug = ?')
-      .run(user.id, value);
+    // Удаление — по хешу, как и отклик: номер съезжает, а slug целиком
+    // не влезает в лимит callback_data. Коллизия или отсутствие — отказ.
+    const rows = db
+      .prepare('SELECT job_slug FROM bookmarks WHERE user_id = ?')
+      .all(user.id) as { job_slug: string }[];
+    const hits = rows.filter((r) => slugHash(r.job_slug) === value);
+    const removed =
+      hits.length === 1
+        ? db
+            .prepare('DELETE FROM bookmarks WHERE user_id = ? AND job_slug = ?')
+            .run(user.id, hits[0]!.job_slug)
+        : { changes: 0 };
     if (removed.changes === 0) {
       return sendTelegramMessage(chat, 'Этой вакансии уже нет в избранном.', {
         keyboard: mainKeyboard(),
@@ -1080,9 +1128,9 @@ async function handleCallback(update: TelegramUpdate): Promise<boolean | null> {
 
   if (kind === 'bookmarkApply' && value) {
     if (cb.id) await answerCallbackQuery(cb.id, { text: 'Отправляю…' });
-    const vacancy = resolveBookmark(user.id, Number(value));
+    const vacancy = resolveBookmark(user.id, value);
     if (!vacancy) {
-      const text = 'Этой вакансии больше нет в каталоге — она убрана с площадки.';
+      const text = 'Этой вакансии больше нет в избранном или список изменился — откройте «Избранное» ещё раз и выберите заново.';
       if (cb.message_id !== undefined) {
         await editTelegramMessage(chat, cb.message_id, text, {
           keyboard: mainKeyboard(),
@@ -1096,7 +1144,7 @@ async function handleCallback(update: TelegramUpdate): Promise<boolean | null> {
 
   if (kind === 'apply' && value) {
     if (cb.id) await answerCallbackQuery(cb.id, { text: 'Отправляю…' });
-    const reply = applyReply(user, value);
+    const reply = applyReply(user, tag ? `${value}:${tag}` : value);
     const action = reply.action;
     // Сужение именно по kind: после появления других объектных действий
     // проверка «typeof === object» больше ничего не отсекала.

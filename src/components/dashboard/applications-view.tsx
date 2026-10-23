@@ -105,31 +105,78 @@ function toneFor(app: ApplicationItem) {
   return 'accent' as const;
 }
 
-export function ApplicationsView({ initial }: { initial: ApplicationItem[] }) {
+export type ApplicationsCursor = { sentAt: number; id: number } | null;
+
+export function ApplicationsView({
+  initial,
+  initialCursor,
+}: {
+  initial: ApplicationItem[];
+  initialCursor: ApplicationsCursor;
+}) {
   const [apps, setApps] = useState<ApplicationItem[]>(initial);
   const [filter, setFilter] = useState<Filter>('all');
   const [busy, setBusy] = useState<number | null>(null);
   const [externalUrl, setExternalUrl] = useState<Record<number, string>>({});
   const [markingExternal, setMarkingExternal] = useState<number | null>(null);
+  const [nextCursor, setNextCursor] = useState<ApplicationsCursor>(initialCursor);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     let alive = true;
     const tick = async () => {
+      /*
+       * Обновление статусов: был опрос каждые 5 секунд всегда — 12 запросов
+       * в минуту с каждой открытой вкладки, включая фоновые, на полный список
+       * с вакансиями. Теперь 30 секунд и только видимая вкладка: статусы
+       * синхронизации всё равно обновляются тиком планировщика раз в минуту,
+       * чаще опрашивать бессмысленно.
+       *
+       * Слияние по id, а не замена: подгруженные кнопкой старые страницы
+       * иначе слетали бы при каждом тике. Порядок сохраняется: свежие —
+       * первые 200 самых новых, остаток дописывается как был.
+       */
+      if (document.hidden) return;
       try {
         const res = await fetch('/api/applications', { cache: 'no-store' });
         if (!res.ok) return;
         const data = await res.json();
-        if (alive && data.applications) setApps(data.applications);
+        if (alive && data.applications) {
+          const fresh = data.applications as ApplicationItem[];
+          const ids = new Set(fresh.map((a) => a.id));
+          setApps((prev) => [...fresh, ...prev.filter((a) => !ids.has(a.id))]);
+        }
       } catch {
         /* ignore */
       }
     };
-    const id = setInterval(tick, 5000);
+    const id = setInterval(tick, 30_000);
     return () => {
       alive = false;
       clearInterval(id);
     };
   }, []);
+
+  const loadMore = async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await fetch(
+        `/api/applications?cursor=${nextCursor.sentAt}:${nextCursor.id}`,
+        { cache: 'no-store' },
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      const items = (data.applications ?? []) as ApplicationItem[];
+      setApps((prev) => {
+        const have = new Set(prev.map((a) => a.id));
+        return [...prev, ...items.filter((a) => !have.has(a.id))];
+      });
+      setNextCursor((data.nextCursor as ApplicationsCursor | undefined) ?? null);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const withdraw = async (id: number) => {
     setBusy(id);
@@ -312,6 +359,16 @@ export function ApplicationsView({ initial }: { initial: ApplicationItem[] }) {
               ) : null}
             </div>
           ))}
+          {nextCursor ? (
+            <button
+              type="button"
+              disabled={loadingMore}
+              onClick={loadMore}
+              className={`${btnGhost} w-full disabled:opacity-60`}
+            >
+              {loadingMore ? 'Загружаем…' : 'Показать более ранние отклики'}
+            </button>
+          ) : null}
         </div>
       )}
     </div>

@@ -196,8 +196,16 @@ test('паузер помнит часовые отправки после ре�
   const ins = db.prepare(
     'INSERT INTO applications (user_id, job_slug, status, sent_at) VALUES (?, ?, ?, ?)',
   );
+  /*
+   * Привязка к началу текущего московского часа: now - i*60_000 у границы часа
+   * размазывало бы метки на два часа, и часовой счётчик недобирал бы до
+   * лимита — тест падал бы по настенным часам. 12 меток в первые секунды часа
+   * гарантированно лежат в одном часовом окне.
+   */
+  const MSK = 3 * 60 * 60 * 1000;
+  const hourStart = now - ((now + MSK) % 3_600_000);
   for (let i = 0; i < 12; i++) {
-    ins.run(uid, `hh-hyd-${i}`, 'sent', now - i * 60_000);
+    ins.run(uid, `hh-hyd-${i}`, 'sent', hourStart + i * 1000);
   }
   resetPacing();
   const pacing = pacingFor(uid, { hourlyLimit: 12, workStartHour: 0, workEndHour: 24 }, () => now);
