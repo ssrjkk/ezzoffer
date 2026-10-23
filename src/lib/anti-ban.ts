@@ -177,8 +177,20 @@ export function createPacing(
       }
 
       // Ночь: пауза до начала рабочего дня.
+      //
+      // Окно может переходить через полночь (20→2, ночная смена): тогда ночью
+      // считается промежуток между концом и началом, а не всё остальное время.
+      // Без ветки любая overnight-настройка давала ночь круглые сутки — ноль
+      // отправок без единой ошибки в логах, потому что decide честно отвечал
+      // reason: 'night'. Равные границы (9→9) читаются как круглосуточная
+      // работа, а не круглосуточная ночь: запретительная трактовка тихой
+      // misconfiguration превращала бы опечатку в остановку сервиса.
       const hour = new Date(t + MSK_OFFSET_MS).getUTCHours();
-      if (hour < cfg.workStartHour || hour >= cfg.workEndHour) {
+      const overnight = cfg.workStartHour >= cfg.workEndHour;
+      const isNight = overnight
+        ? hour < cfg.workStartHour && hour >= cfg.workEndHour
+        : hour < cfg.workStartHour || hour >= cfg.workEndHour;
+      if (isNight) {
         const start = startOfLocalHour(t, cfg.workStartHour);
         const retry = start <= t ? start + 24 * HOUR : start;
         return { allowed: false, reason: 'night', retryAfterMs: retry - t };

@@ -84,11 +84,20 @@ export type EffectivePacing = {
 export function effectivePacing(planDaily: number): EffectivePacing {
   const globalDaily = globalDailyCap();
   const dailyCap = globalDaily > 0 ? Math.min(planDaily, globalDaily) : planDaily;
+  /*
+   * Перепутанные MIN/MAX (300/60) численно схлопываются сами: base падает в
+   * [max, min] при любом порядке, поэтому поведения-бага здесь нет. Инвариант
+   * lo <= hi фиксируется явно ради читателей и будущей арифметики, которая
+   * вправе полагаться на неотрицательность (max - min): молчаливое
+   * самолечение сегодня — это ловушка для следующей правки.
+   */
+  const loSec = Math.min(minApplyIntervalSec(), maxApplyIntervalSec());
+  const hiSec = Math.max(minApplyIntervalSec(), maxApplyIntervalSec());
   return {
     dailyCap,
     hourlyCap: globalHourlyCap(),
-    minDelayMs: minApplyIntervalSec() * 1000,
-    maxDelayMs: maxApplyIntervalSec() * 1000,
+    minDelayMs: loSec * 1000,
+    maxDelayMs: hiSec * 1000,
     workStartHour: workStartHour(),
     workEndHour: workEndHour(),
   };

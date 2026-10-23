@@ -412,7 +412,21 @@ export async function runAutoApply(opts?: {
   heartbeat?: () => boolean;
 }): Promise<AutoApplyRun> {
   const nowFn = opts?.now ?? (() => Date.now());
-  const users = db.prepare('SELECT * FROM users').all() as User[];
+  /*
+   * Столбцы явно, а не SELECT *: в цикле не нужны ни хеш пароля, ни токены
+   * сброса/подтверждения почты. Раньше каждая итерация тика (раз в 60 секунд)
+   * складывала в память процесса хеши паролей и одноразовые токены всех
+   * пользователей — чувствительные данные там, где им нечего делать, плюс
+   * лишний вес выборки. Список — ровно то, что читает тело цикла, getValidHhToken
+   * и проверки тарифа/режима (см. User и использование user.* ниже).
+   */
+  const users = db
+    .prepare(
+      `SELECT id, plan, plan_expires_at, autoapply_paused, hh_token, hh_token_expires_at,
+              hh_refresh_token, hh_resume_id, telegram_chat_id, mode
+       FROM users`,
+    )
+    .all() as User[];
   let searches = 0;
   let applied = 0;
   let failed = 0;

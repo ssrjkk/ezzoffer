@@ -32,3 +32,17 @@ test('часовой лимит из env', () => {
   delete process.env.AUTOAPPLY_HOURLY_CAP;
   assert.equal(globalDailyCap(), 0);
 });
+
+test('перепутанные MIN/MAX пауз нормализуются в lo <= hi', () => {
+  process.env.AUTOAPPLY_MIN_INTERVAL_SEC = '300';
+  process.env.AUTOAPPLY_MAX_INTERVAL_SEC = '60';
+  try {
+    const p = effectivePacing(100);
+    assert.equal(p.minDelayMs, 60_000);
+    assert.equal(p.maxDelayMs, 300_000);
+    assert.ok(p.minDelayMs <= p.maxDelayMs, 'инвариант паузера нарушен');
+  } finally {
+    delete process.env.AUTOAPPLY_MIN_INTERVAL_SEC;
+    delete process.env.AUTOAPPLY_MAX_INTERVAL_SEC;
+  }
+});

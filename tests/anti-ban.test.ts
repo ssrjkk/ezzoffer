@@ -47,6 +47,40 @@ test('рабочие часы — московские, а не серверны
   assert.equal(d.reason, 'night');
 });
 
+test('ночное окно через полночь не останавливает всё (overnight 20→2)', () => {
+  /*
+   * Окно 20:00–02:00 — ночная смена. Без overnight-ветки условие
+   * hour < 20 || hour >= 2 истинно всегда: 03:00 (3<20), 21:00 (21>=2) —
+   * ночь круглые сутки, ноль отправок без единой ошибки.
+   */
+  const night = { minDelayMs: 0, maxDelayMs: 0, workStartHour: 20, workEndHour: 2 } as const;
+  // 18:00Z = 21:00 МСК — внутри окна, отправка разрешена.
+  assert.equal(
+    createPacing({ ...night }, () => Date.UTC(2026, 8, 28, 18, 0, 0)).decide().allowed,
+    true,
+    '21:00 МСК внутри окна 20–2',
+  );
+  // 22:00Z = 01:00 МСК — внутри окна, отправка разрешена.
+  assert.equal(
+    createPacing({ ...night }, () => Date.UTC(2026, 8, 28, 22, 0, 0)).decide().allowed,
+    true,
+    '01:00 МСК внутри окна 20–2',
+  );
+  // 16:00Z = 19:00 МСК — ночь, пауза ровно до 20:00 МСК (1 час).
+  const evening = createPacing({ ...night }, () => Date.UTC(2026, 8, 28, 16, 0, 0)).decide();
+  assert.equal(evening.allowed, false);
+  assert.equal(evening.reason, 'night');
+  assert.equal(evening.retryAfterMs, 3_600_000, `пауза обязана быть 1ч, а не ${evening.retryAfterMs}`);
+});
+
+test('равные границы окна — круглосуточная работа, а не ночь', () => {
+  const p = createPacing(
+    { minDelayMs: 0, maxDelayMs: 0, workStartHour: 9, workEndHour: 9 },
+    () => Date.UTC(2026, 8, 28, 0, 0, 0), // 03:00 МСК
+  );
+  assert.equal(p.decide().allowed, true, '9→9 обязано читаться как "всегда можно"');
+});
+
 test('pacing выдерживает паузу между откликами (regression)', () => {
   // Раньше decide() возвращал delayMs, но никто его не применял, и recordSent
   // не ставил cooldown — отклики уходили подряд без всякой паузы.
