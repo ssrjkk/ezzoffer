@@ -262,10 +262,35 @@ export function getUserResumes(userId: number): ResumeTarget[] {
  */
 const pacingByUser = new Map<number, Pacing>();
 
-function pacingFor(userId: number, cfg: Partial<PacingConfig>, nowFn: () => number): Pacing {
+/** Паузер пользователя (экспортируется для тестов гидратации). */
+export function pacingFor(userId: number, cfg: Partial<PacingConfig>, nowFn: () => number): Pacing {
   const existing = pacingByUser.get(userId);
   if (existing) return existing;
   const created = createPacing(cfg, nowFn);
+  /*
+   * Гидратация часового лимита после рестарта.
+   *
+   * Паузер живёт в памяти: после рестарта процесса часовые счётчики были
+   * пустыми, и пользователь сразу получал полную часовую норму поверх уже
+   * отправленного — до 12 откликов в минуту после каждого деплоя. Суточный
+   * лимит так не страдает (считается из applications по запросу), а часовой
+   * теперь поднимается оттуда же: последние 24 часа меток из applications.
+   * recordSent с явным временем не трогает cooldown (pendingDelayMs = 0),
+   * только пополняет окно — повторных пауз из прошлого не возникает.
+   * Запрос один на жизнь процесса (паузер кэшируется выше), индекс
+   * idx_applications_user_sent его покрывает.
+   */
+  try {
+    const now = nowFn();
+    const rows = db
+      .prepare('SELECT sent_at FROM applications WHERE user_id = ? AND sent_at >= ?')
+      .all(userId, now - 24 * 60 * 60 * 1000) as { sent_at: number }[];
+    for (const r of rows) {
+      if (Number.isFinite(r.sent_at)) created.recordSent(r.sent_at);
+    }
+  } catch {
+    // Гидратация — best-effort: без неё поведение как раньше (пустое окно).
+  }
   pacingByUser.set(userId, created);
   return created;
 }

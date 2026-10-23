@@ -177,3 +177,32 @@ test('skipped не превышает число найденных кандид
   db.prepare('DELETE FROM searches WHERE user_id = ?').run(uid);
   void hh;
 });
+
+test('паузер помнит часовые отправки после рестарта процесса', async () => {
+  /*
+   * Паузер жил в памяти: после рестарта часовые счётчики обнулялись, и
+   * пользователь сразу получал полную часовую норму поверх уже
+   * отправленного. Гидратация поднимает последние 24ч меток из applications.
+   */
+  const { pacingFor, resetPacing } = await import('../src/lib/autoapply');
+  const now = Date.now();
+  const uid = Number(
+    db
+      .prepare(
+        "INSERT INTO users (email, password_hash, plan, plan_expires_at, created_at, mode) VALUES (?,?,?,?,?,'live')",
+      )
+      .run('hydrate@example.com', 'h', 'pro', now + 100000, now).lastInsertRowid,
+  );
+  const ins = db.prepare(
+    'INSERT INTO applications (user_id, job_slug, status, sent_at) VALUES (?, ?, ?, ?)',
+  );
+  for (let i = 0; i < 12; i++) {
+    ins.run(uid, `hh-hyd-${i}`, 'sent', now - i * 60_000);
+  }
+  resetPacing();
+  const pacing = pacingFor(uid, { hourlyLimit: 12, workStartHour: 0, workEndHour: 24 }, () => now);
+  const d = pacing.decide(now);
+  assert.equal(d.allowed, false, 'часовые отправки из БД не учтены');
+  assert.equal(d.reason, 'hourly');
+  resetPacing();
+});

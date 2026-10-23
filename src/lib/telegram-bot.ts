@@ -79,6 +79,19 @@ export type TelegramUpdate = {
 const INBOX_MAX_ATTEMPTS = 5;
 
 /**
+ * Давность заявки, после которой она считается брошенной.
+ *
+ * kill -9 между claim и finish оставлял строки с claimed_at навсегда: выборка
+ * видела только NULL, и команда пользователя терялась молча — бот «не отвечал»
+ * безо всяких ошибок в логах. Заявки старше TTL разбираются заново, как
+ * свободные. 5 минут с запасом: разбор одного апдейта — секунды.
+ */
+const INBOX_CLAIM_TTL_MS = 5 * 60 * 1000;
+
+/** Счётчик вызовов processInbox — часть токена заявки (см. ниже). */
+let processInboxSeq = 0;
+
+/**
  * Разбор очереди входящих апдейтов Telegram.
  *
  * Вебхук только складывает тело в tg_inbox и отвечает 200: сетевая работа
@@ -93,18 +106,33 @@ const INBOX_MAX_ATTEMPTS = 5;
  * выполненной, чтобы одно битое сообщение не крутилось вечно.
  */
 export async function processInbox(limit = 20): Promise<{ processed: number; failed: number }> {
+  /*
+   * Токен заявки уникален на вызов, а не равен Date.now().
+   *
+   * Раньше заявка метилась `claimed_at = now`, и выборка шла по тому же now:
+   * два processInbox в одну миллисекунду (wakeInbox из вебхука + тик
+   * планировщика) ставили одинаковую метку, и второй SELECT забирал строки
+   * первого вместе со своими — один апдейт разбирался дважды. Для /отклик
+   * это почти безвредно (outbox отклонит дубль в 409), а для /подбор —
+   * двойное сообщение человеку. Счётчик на процесс гарантирует уникальность
+   * даже в одну мс: чужие строки второму SELECT невидимы.
+   */
   const now = Date.now();
+  const token = now * 1000 + (processInboxSeq = (processInboxSeq + 1) % 1000);
+  // Токен монотонный со временем (миллисекунды доминируют), поэтому протухший
+  // claim отсекается сравнением токенов: заявка старше TTL считается свободной.
+  const staleBefore = (now - INBOX_CLAIM_TTL_MS) * 1000;
   const size = Math.min(Math.max(1, Math.floor(limit)), 100);
   db.prepare(
     `UPDATE tg_inbox SET claimed_at = ? WHERE update_id IN (
        SELECT update_id FROM tg_inbox
-       WHERE claimed_at IS NULL AND done_at IS NULL AND attempts < ?
+       WHERE (claimed_at IS NULL OR claimed_at < ?) AND done_at IS NULL AND attempts < ?
        ORDER BY update_id LIMIT ?
      )`,
-  ).run(now, INBOX_MAX_ATTEMPTS, size);
+  ).run(token, staleBefore, INBOX_MAX_ATTEMPTS, size);
   const rows = db
     .prepare('SELECT update_id, body, attempts FROM tg_inbox WHERE claimed_at = ?')
-    .all(now) as { update_id: number; body: string; attempts: number }[];
+    .all(token) as { update_id: number; body: string; attempts: number }[];
 
   let processed = 0;
   let failed = 0;

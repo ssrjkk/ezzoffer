@@ -151,6 +151,41 @@ test('fast-path: вебхук разбирает очередь следом з�
   }
 });
 
+test('два processInbox в одну мс не разбирают строку дважды', async () => {
+  /*
+   * wakeInbox из вебхука + тик планировщика в одну миллисекунду ставили
+   * одинаковый claimed_at, и второй SELECT забирал строки первого: команда
+   * выполнялась дважды, /подбор слал дубли. Замороженные часы делают гонку
+   * детерминированной: на старом коде второй разбор забирал бы ту же строку.
+   */
+  const realNow = Date.now;
+  Date.now = () => 1_700_000_000_000;
+  try {
+    const { POST } = await import('../src/app/api/telegram/webhook/route');
+    const { processInbox } = await import('../src/lib/telegram-bot');
+    await POST(hook({ update_id: 9011, message: { chat: { id: 5 }, text: '/start' } }));
+    const [a, b] = await Promise.all([processInbox(), processInbox()]);
+    assert.equal(a.processed + b.processed, 1, `двойной разбор: ${JSON.stringify([a, b])}`);
+    assert.equal(bodies!.length, 1, `ответ отправлен дважды: ${bodies!.length}`);
+  } finally {
+    Date.now = realNow;
+  }
+});
+
+test('брошенный claim подбирается по TTL, а не висит вечно', async () => {
+  /*
+   * kill -9 между claim и finish оставлял claimed_at навсегда: выборка видела
+   * только NULL, и команда терялась молча — бот «не отвечал» без ошибок.
+   */
+  const { POST } = await import('../src/app/api/telegram/webhook/route');
+  const { processInbox } = await import('../src/lib/telegram-bot');
+  await POST(hook({ update_id: 9012, message: { chat: { id: 5 }, text: '/start' } }));
+  db.prepare('UPDATE tg_inbox SET claimed_at = ? WHERE update_id = 9012').run(1);
+  const r = await processInbox();
+  assert.equal(r.processed, 1, 'протухший claim не подобран');
+  assert.equal(bodies!.length, 1, 'ответ по подобранной заявке не отправлен');
+});
+
 test('вечный неуспех отправки закрывается после лимита попыток', async () => {
   /*
    * Раньше неудачная отправка (res === false) отпускала заявку без счёта:
