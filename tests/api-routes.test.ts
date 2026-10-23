@@ -721,6 +721,28 @@ test('POST /api/trial недоступен при активном платно�
   assert.match((await readJson(res)).error ?? '', /тариф/i);
 });
 
+test('POST /api/trial не затирает вечный тариф', async () => {
+  /*
+   * beta_life держит plan_expires_at = NULL, и условие UPDATE
+   * `plan_expires_at IS NULL` его пропускало бы: без SELECT-стража и
+   * привязки к plan пробник перезаписал бы оплаченное «навсегда».
+   * Права в entitlements при этом сохранялись бы, но витрина врала бы
+   * до следующей пересборки.
+   */
+  makeUser(1, 'me@example.test');
+  db.prepare("UPDATE users SET plan = 'beta_life', plan_expires_at = NULL WHERE id = 1").run();
+  loginAs({ plan: 'beta_life', plan_expires_at: null, trial_started_at: null });
+  const { POST } = await import('../src/app/api/trial/route');
+  const res = await POST();
+  assert.equal(res.status, 409, 'пробник поверх вечного тарифа выдан');
+  const row = db.prepare('SELECT plan, trial_started_at FROM users WHERE id = 1').get() as {
+    plan: string;
+    trial_started_at: number | null;
+  };
+  assert.equal(row.plan, 'beta_life', 'вечный тариф перезаписан пробником');
+  assert.equal(row.trial_started_at, null, 'пробник помечен как использованный');
+});
+
 /**
  * Регрессия: роут брал строку пользователя как `as User` и сразу обращался
  * к полям. Если строки нет (аккаунт удалён или БД восстановлена из бэкапа
@@ -758,6 +780,30 @@ test('POST /api/plan требует авторизации', async () => {
   assert.equal((await POST(post({ planId: 'pro', period: 14 }))).status, 401);
 });
 
+test('PUT /api/profile отклоняет нечисловые ожидания зарплаты', async () => {
+  /*
+   * Голый Number() принимал булевы значения, массивы и hex: ожидания тихонько
+   * менялись на мусор вместо отказа. Строка с пробелами тысяч — валидный ввод.
+   */
+  makeUser(1, 'me@example.test');
+  loginAs({ id: 1 });
+  const { PUT } = await import('../src/app/api/profile/route');
+  for (const bad of [true, [150000], '0x10', '1e5', 'abc', '150,000']) {
+    const res = await PUT(write('PUT', { salaryExpectation: bad }));
+    assert.equal(res.status, 400, JSON.stringify(bad) + ' принят за зарплату: ' + res.status);
+  }
+  const before = db.prepare('SELECT salary_expectation AS v FROM users WHERE id = 1').get() as {
+    v: number | null;
+  };
+  assert.equal(before.v, null, 'мусор записан в профиль');
+  const ok = await PUT(write('PUT', { salaryExpectation: '150 000' }));
+  assert.equal(ok.status, 200);
+  const after = db.prepare('SELECT salary_expectation AS v FROM users WHERE id = 1').get() as {
+    v: number | null;
+  };
+  assert.equal(after.v, 150000, 'валидные ожидания с пробелами не записаны');
+});
+
 test('PUT /api/profile требует текущий пароль для смены email', async () => {
   makeUser(1, 'me@example.test');
   const { PUT } = await import('../src/app/api/profile/route');
@@ -774,4 +820,18 @@ test('PUT /api/profile требует текущий пароль для сме�
   // С валидным паролем и свободным email — успех.
   const ok = await PUT(write('PUT', { email: 'fresh@example.test', currentPassword: 'old' }));
   assert.equal(ok.status, 200);
+});
+
+test('POST /api/searches ограничен двадцатью на пользователя', async () => {
+  makeUser(1, 'me@example.test');
+  loginAs({ id: 1 });
+  const { POST } = await import('../src/app/api/searches/route');
+  for (let i = 0; i < 20; i++) {
+    const res = await POST(post({ title: 's' + i, keywords: 'react' }));
+    assert.equal(res.status, 201, 'поиск ' + i + ' не создался: ' + res.status);
+  }
+  const over = await POST(post({ title: 'лишний', keywords: 'react' }));
+  assert.equal(over.status, 409, '21-й поиск принят без лимита');
+  const count = db.prepare('SELECT COUNT(*) AS c FROM searches WHERE user_id = 1').get() as { c: number };
+  assert.equal(count.c, 20, 'лишняя строка записана в БД');
 });

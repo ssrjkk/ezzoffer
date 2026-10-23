@@ -202,9 +202,19 @@ export function skillsByVacancy(vacancies: readonly Vacancy[]): Map<string, Set<
   return map;
 }
 
-export function matchCount(s: SearchRow): number {
-  const catalog = getCatalog();
-  const skills = skillsByVacancy(catalog);
+/**
+ * Сколько вакансий каталога подходит под поиск.
+ *
+ * Карта навыков считается один раз на весь каталог — и callers, считающие
+ * сразу много поисков (список поисков кабинета), передают её готовой:
+ * иначе извлечение навыков повторялось бы на каждый поиск (O(S×V) regex).
+ */
+export function matchCount(
+  s: SearchRow,
+  precomputed?: { catalog: readonly Vacancy[]; skills: Map<string, Set<string>> },
+): number {
+  const catalog = precomputed?.catalog ?? getCatalog();
+  const skills = precomputed?.skills ?? skillsByVacancy(catalog);
   return catalog.filter((v) => matchesSearch(v, s, skills.get(v.slug))).length;
 }
 

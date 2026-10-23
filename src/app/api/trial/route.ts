@@ -24,8 +24,12 @@ export async function POST() {
   const fresh = db
     .prepare('SELECT plan, plan_expires_at, trial_started_at FROM users WHERE id = ?')
     .get(user.id) as
-    { plan: string; plan_expires_at: number | null; trial_started_at: number | null } | undefined;
-  if (fresh && isPlanActive(fresh)) {
+    | { plan: string; plan_expires_at: number | null; trial_started_at: number | null }
+    | undefined;
+  if (!fresh) {
+    return NextResponse.json({ error: 'Требуется авторизация' }, { status: 401 });
+  }
+  if (isPlanActive(fresh)) {
     return NextResponse.json(
       { error: fresh.trial_started_at ? 'Пробный период уже был активирован' : 'У вас уже активен тариф' },
       { status: 409 },
@@ -33,12 +37,21 @@ export async function POST() {
   }
 
   const now = Date.now();
+  /*
+   * Оптимистичная конкуренция по plan: тариф мог смениться между SELECT выше
+   * и этим UPDATE (параллельный вебхук оплаты). Без `AND plan = ?` грант
+   * вечного тарифа затирался пробником: expires_at у beta_life — NULL, и
+   * условие `plan_expires_at IS NULL` его пропускало. Права в entitlements
+   * при этом сохранялись, но витрина показывала trial вместо оплаченного
+   * «навсегда» до следующей пересборки. Теперь смена тарифа даёт 0 строк и
+   * честный 409 с перечитанной причиной ниже.
+   */
   const res = db
     .prepare(
       `UPDATE users SET plan = 'trial', plan_period = 1, plan_activated_at = ?, plan_expires_at = ?, trial_started_at = ?
-       WHERE id = ? AND trial_started_at IS NULL AND (plan_expires_at IS NULL OR plan_expires_at <= ?)`,
+       WHERE id = ? AND plan = ? AND trial_started_at IS NULL AND (plan_expires_at IS NULL OR plan_expires_at <= ?)`,
     )
-    .run(now, now + TRIAL_MS, now, user.id, now);
+    .run(now, now + TRIAL_MS, now, user.id, fresh.plan, now);
   if (res.changes === 0) {
     // Условный UPDATE ничего не обновил: второй параллельный запрос успел
     // первым, либо тариф активен. Перечитываем, чтобы ответить точно.

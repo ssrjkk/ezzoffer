@@ -33,12 +33,25 @@ export async function PUT(request: Request) {
    * «выше ожиданий».
    */
   if (data && 'salaryExpectation' in data) {
-    const raw = data.salaryExpectation;
+    // Тип из JSON недоверенный: валидация идёт по runtime-типу, а не по объявленному.
+    const raw: unknown = data.salaryExpectation;
     if (raw === null || raw === undefined) {
       db.prepare('UPDATE users SET salary_expectation = NULL WHERE id = ?').run(user.id);
     } else {
-      const value = Number(raw);
-      if (!Number.isFinite(value) || value < 0 || value > 100_000_000) {
+      /*
+       * Строгая форма вместо голого Number(): тот принимал `true` → 1,
+       * `[150000]` → 150000, `'0x10'` → 16 — ожидания тихонько менялись
+       * на мусор. Ноль разрешён явно (трактуется как «без ожиданий»),
+       * в отличие от toPositiveNumber для фильтров.
+       */
+      let value: number | null = null;
+      if (typeof raw === 'number') {
+        value = raw;
+      } else if (typeof raw === 'string') {
+        const t = raw.replace(/[\s ]/g, '');
+        if (/^\d+(\.\d+)?$/.test(t)) value = Number(t);
+      }
+      if (value === null || !Number.isFinite(value) || value < 0 || value > 100_000_000) {
         return NextResponse.json(
           { error: 'Зарплатные ожидания должны быть числом от 0 до 100 000 000' },
           { status: 400 },

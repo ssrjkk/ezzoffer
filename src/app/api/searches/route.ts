@@ -6,8 +6,10 @@ import {
   validateSalaryRange,
   badRequest,
 } from '@/lib/api';
+import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { matchCount, type SearchRow } from '@/lib/matcher';
+import { getCatalog } from '@/lib/vacancies';
+import { matchCount, skillsByVacancy, type SearchRow } from '@/lib/matcher';
 import { NO_STORE_HEADERS } from '@/lib/http';
 
 function serialize(row: SearchRow) {
@@ -20,7 +22,15 @@ export async function GET() {
   const rows = db
     .prepare('SELECT * FROM searches WHERE user_id = ? ORDER BY created_at DESC')
     .all(user.id) as SearchRow[];
-  return Response.json({ searches: rows.map(serialize) }, { headers: NO_STORE_HEADERS });
+  // Одна карта навыков на все поиски пользователя, а не пересчёт на каждый:
+  // извлечение навыков — самая дорогая часть подсчёта (regex по словарю
+  // на каждую вакансию), и N поисков делали её N раз подряд.
+  const catalog = getCatalog();
+  const shared = { catalog, skills: skillsByVacancy(catalog) };
+  return Response.json(
+    { searches: rows.map((r) => ({ ...r, match_count: matchCount(r, shared) })) },
+    { headers: NO_STORE_HEADERS },
+  );
 }
 
 export async function POST(request: Request) {
@@ -49,6 +59,22 @@ export async function POST(request: Request) {
 
   const rangeError = validateSalaryRange(salaryMin, salaryMax);
   if (rangeError) return badRequest(rangeError);
+
+  /*
+   * Потолок поисков на пользователя: создание поиска — дешёвая запись, и без
+   * лимита скрипт плодил бы их тысячами (60 запросов в минуту по лимиту API).
+   * 20 — с запасом выше реального использования: активные поиски сверх
+   * десятка уже не просматриваются, а только грузят обновление каталога.
+   */
+  const existing = (
+    db.prepare('SELECT COUNT(*) AS c FROM searches WHERE user_id = ?').get(user.id) as { c: number }
+  ).c;
+  if (existing >= 20) {
+    return NextResponse.json(
+      { error: 'Достигнут лимит поисков (20). Удалите неиспользуемые.' },
+      { status: 409 },
+    );
+  }
 
   const result = db
     .prepare(
