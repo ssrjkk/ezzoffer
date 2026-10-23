@@ -1250,7 +1250,11 @@ async function runApplyFromChat(
   if (!result.ok) {
     const text = `Не отправил: ${escapeHtml(result.error)}`;
     if (replaceMessageId !== undefined) {
-      await editTelegramMessage(chat, replaceMessageId, text, opts);
+      // Как в успешной ветке: правим на месте, новое шлём только если
+      // править нечего. Раньше здесь всегда шли оба — при неуспехе из кнопки
+      // человек получал два одинаковых сообщения подряд.
+      const changed = await editTelegramMessage(chat, replaceMessageId, text, opts);
+      if (changed) return true;
     }
     return sendTelegramMessage(chat, text, opts);
   }

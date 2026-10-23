@@ -37,25 +37,57 @@ export function claimSend(input: {
   searchId?: number | null;
 }): OutboxClaim | { duplicate: true } {
   try {
-    const result = db
-      .prepare(
-        `INSERT INTO apply_outbox (user_id, job_slug, resume_id, letter_id, message, search_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        input.userId,
-        input.jobSlug,
-        input.resumeId,
-        input.letterId,
-        input.message,
-        input.searchId ?? null,
-        Date.now(),
-      );
-    return { id: Number(result.lastInsertRowid) };
+    return doClaim(input);
   } catch (err) {
-    if (isUniqueViolation(err)) return { duplicate: true };
-    throw err;
+    if (!isUniqueViolation(err)) throw err;
+    /*
+     * Дубликат протухшей заявки: процесс умер между claim и complete, а
+     * сборщик планировщика не добежал (автоотклики выключены, тарифа нет —
+     * runAutoApply вообще не ходит). Без этого ручная кнопка вечно отвечала
+     * бы «отправка уже идёт», хотя отправлять некому.
+     *
+     * Забираем только протухшую (старше OUTBOX_STALE_MS): свежая — это живой
+     * параллельный прогон, её трогать нельзя. Гонка двух подбирающих: оба
+     * DELETE, один INSERT выигрывает, второй получает второй UNIQUE и
+     * честный duplicate — повторной отправки нет.
+     */
+    const stale = db
+      .prepare('SELECT id, created_at FROM apply_outbox WHERE user_id = ? AND job_slug = ?')
+      .get(input.userId, input.jobSlug) as { id: number; created_at: number } | undefined;
+    if (!stale || stale.created_at > Date.now() - OUTBOX_STALE_MS) return { duplicate: true };
+    db.prepare('DELETE FROM apply_outbox WHERE id = ?').run(stale.id);
+    try {
+      return doClaim(input);
+    } catch (retryErr) {
+      if (isUniqueViolation(retryErr)) return { duplicate: true };
+      throw retryErr;
+    }
   }
+}
+
+function doClaim(input: {
+  userId: number;
+  jobSlug: string;
+  resumeId: string | null;
+  letterId: number | null;
+  message: string;
+  searchId?: number | null;
+}): OutboxClaim {
+  const result = db
+    .prepare(
+      `INSERT INTO apply_outbox (user_id, job_slug, resume_id, letter_id, message, search_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      input.userId,
+      input.jobSlug,
+      input.resumeId,
+      input.letterId,
+      input.message,
+      input.searchId ?? null,
+      Date.now(),
+    );
+  return { id: Number(result.lastInsertRowid) };
 }
 
 /** Заявка выполнена (успех или отказ площадки): строка больше не нужна. */
