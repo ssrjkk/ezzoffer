@@ -1,6 +1,6 @@
 import type { Level, WorkFormat } from '../data';
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from './types';
-import { sanitizeExternalUrl, toSalaryNumber } from './util';
+import { sanitizeExternalUrl, toRub, toSalaryNumber } from './util';
 import { parsePublishedAt } from './published';
 import { httpFetch, parseJson } from '../http-client';
 
@@ -130,8 +130,9 @@ export function mapTrudVacancy(raw: TrudVacancyRaw): Vacancy | null {
     title: raw['job-name'],
     company: raw.company?.name ?? 'Работодатель',
     salary: salaryDisplay(raw),
-    salary_min: toSalaryNumber(raw.salary_min),
-    salary_max: toSalaryNumber(raw.salary_max),
+    // Портал российский, но валюту нормализуем явно: сравнения идут в рублях.
+    salary_min: toRub(toSalaryNumber(raw.salary_min), raw.currency),
+    salary_max: toRub(toSalaryNumber(raw.salary_max), raw.currency),
     level: inferLevel(raw),
     format: inferFormat(raw.schedule),
     city: extractCity(raw),

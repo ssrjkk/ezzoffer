@@ -149,7 +149,7 @@ test('зарплата ниже ожиданий снижает оценку', (
 });
 
 test('отсутствие зарплаты в вакансии не штрафуется', () => {
-  const noSalary = makeVacancy({ salary_min: null, salary: 'по договорённости' });
+  const noSalary = makeVacancy({ salary_min: null, salary_max: null, salary: 'по договорённости' });
   const scored = scoreVacancyForResume(
     noSalary,
     'React, TypeScript. 5 лет.',
@@ -164,6 +164,22 @@ test('отсутствие зарплаты в вакансии не штраф�
     salaryFactor.max,
     'отсутствие зарплаты в вакансии посчитано как минус',
   );
+});
+
+test('потолок «до X» ниже ожиданий снижает оценку', () => {
+  // Регрессия: фактор смотрел только salary_min — вакансия «до 100 000»
+  // при ожиданиях 200 000 считалась нейтральной («не указана») и получала
+  // полный балл, хотя столько заплатить не сможет.
+  const capped = makeVacancy({ salary_min: null, salary_max: 100000, salary: 'до 100 000 ₽' });
+  const scored = scoreVacancyForResume(
+    capped,
+    'Senior React Developer. Опыт 5 лет. React, TypeScript, Next.js.',
+    'Senior Frontend Developer',
+    undefined,
+    200000,
+  );
+  const salaryFactor = scored.factors.find((f) => f.label === 'Зарплата')!;
+  assert.ok(salaryFactor.earned < salaryFactor.max, 'потолок ниже ожиданий не снизил оценку');
 });
 
 test('длина описания вакансии не влияет на оценку', () => {

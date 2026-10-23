@@ -1,6 +1,6 @@
 import type { Level, WorkFormat } from '../data';
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from './types';
-import { cleanHtml, sanitizeExternalUrl, toSalaryNumber } from './util';
+import { cleanHtml, sanitizeExternalUrl, toRubMonthly, toSalaryNumber } from './util';
 import { parsePublishedAt } from './published';
 import { httpFetch, parseJson } from '../http-client';
 
@@ -27,30 +27,61 @@ export type RemoteOkRaw = {
   currency?: string;
 };
 
+/**
+ * Сырые значения из API — ГОДОВЫЕ USD (конвенция RemoteOK: salary_min 120000
+ * означает $120k в год). Возвращаются как есть; в рубли в месяц переводит
+ * mapRemoteOkVacancy. Разделение намеренное: парсинг и нормализация —
+ * разные решения, и тест проверяет парсинг без привязки к курсу.
+ */
 export function remoteOkSalaryValues(raw: RemoteOkRaw): { min: number | null; max: number | null } {
-  const min = toSalaryNumber(raw.salary?.min ?? raw.salary_min);
-  const max = toSalaryNumber(raw.salary?.max ?? raw.salary_max);
+  const min = parseRemoteOkAmount(raw.salary?.min ?? raw.salary_min);
+  const max = parseRemoteOkAmount(raw.salary?.max ?? raw.salary_max);
   if (
     min == null &&
     max == null &&
     typeof raw.salary_min === 'string' &&
     typeof raw.salary_max === 'string'
   ) {
-    const a = raw.salary_min.replace(/[^0-9-]/g, '');
-    const b = raw.salary_max.replace(/[^0-9-]/g, '');
-    if (a && b) {
-      const s = Number(a.replace('-', ''));
-      const e = Number(b.replace('-', ''));
-      if (Number.isFinite(s) && Number.isFinite(e) && s > 0 && e >= s) return { min: s, max: e };
-    }
+    const s = parseRemoteOkAmount(raw.salary_min);
+    const e = parseRemoteOkAmount(raw.salary_max);
+    if (s != null && e != null && e >= s) return { min: s, max: e };
   }
   return { min, max };
+}
+
+/**
+ * Число RemoteOK с суффиксами: API отдаёт и 120000, и "120k", и "$120k-$160k".
+ *
+ * Раньше "100k" превращалось в 100: toSalaryNumber давал null, а фолбэк
+ * вырезал всё кроме цифр (`[^0-9-]`) и получал "100" — ошибка в 1000 раз.
+ * Дальше вакансия с $100k/год выглядела как $100 и отлетала от фильтров.
+ */
+function parseRemoteOkAmount(v: number | string | null | undefined): number | null {
+  if (typeof v === 'number') return toSalaryNumber(v);
+  if (typeof v !== 'string') return null;
+  const direct = toSalaryNumber(v);
+  if (direct != null) return direct;
+  const cleaned = v.replace(/[$,\s\u00A0]/g, '');
+  const m = cleaned.match(/^([\d.]+)\s*([KkMm])?$/);
+  if (!m) return null;
+  const base = Number(m[1]);
+  if (!Number.isFinite(base) || base <= 0) return null;
+  const mult = m[2] ? (/[Mm]/.test(m[2]) ? 1_000_000 : 1_000) : 1;
+  return Math.round(base * mult) || null;
 }
 
 export function mapRemoteOkVacancy(raw: RemoteOkRaw): Vacancy | null {
   if (!raw.slug && !raw.id) return null;
   const title = raw.position ?? 'Вакансия';
   const salary = remoteOkSalaryValues(raw);
+  /*
+   * Значения API — годовые USD. В рубли в месяц: /12 и курс. Display —
+   * исходный вид ($120,000 — это годовая вилка площадки), min/max — рубли
+   * в месяц для фильтров и скоринга. Без /12 вакансия $120k/год выглядела
+   * как 120 000 ₽/мес и ломала фильтр «от 150 000» в обе стороны.
+   */
+  const salaryMinRub = toRubMonthly(salary.min, 'USD', 'year');
+  const salaryMaxRub = toRubMonthly(salary.max, 'USD', 'year');
   const salaryField =
     salary.min != null && salary.max != null
       ? `$${salary.min.toLocaleString('en-US')}–$${salary.max.toLocaleString('en-US')}`
@@ -85,8 +116,8 @@ export function mapRemoteOkVacancy(raw: RemoteOkRaw): Vacancy | null {
     title,
     company: raw.company?.replace(/\s+$/g, '') ?? 'Компания',
     salary: salaryField,
-    salary_min: salary.min,
-    salary_max: salary.max,
+    salary_min: salaryMinRub,
+    salary_max: salaryMaxRub,
     level: inferLevel(title),
     format: inferFormat(),
     city: loc || 'Remote',

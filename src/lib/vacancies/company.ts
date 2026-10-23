@@ -67,7 +67,13 @@ function salaryFromText(text: string): { display: string; min: number | null; ma
       };
     }
   }
-  const single = text.match(/(\d[\d\s\u00A0]{3,})\s*₽|руб/);
+  /*
+   * Скобки вокруг (?:₽|руб) обязательны: без них `A\s*₽|руб` читается как
+   * «(A с рублём) ИЛИ (голое слово "руб")», и любое описание со словом «руб»
+   * без числа давало match с m[1] === undefined — дальше падало на
+   * undefined.replace. Один такой фид ронял весь refreshProviders компании.
+   */
+  const single = text.match(/(\d[\d\s\u00A0]{3,})\s*(?:₽|руб)/);
   if (single) {
     const n = toSalaryNumber(single[1].replace(/\s/g, ''));
     if (n) return { display: `от ${n.toLocaleString('ru-RU')} ₽`, min: n, max: null };

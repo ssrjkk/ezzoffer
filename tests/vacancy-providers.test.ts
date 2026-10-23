@@ -19,8 +19,9 @@ test('mapRemoteOkVacancy мапит валидную вакансию', () => {
     position: 'Senior Frontend Engineer',
     tags: ['react', 'remote'],
     location: 'Remote',
-    salary_min: 120,
-    salary_max: 160,
+    // Значения API — годовые USD: $120k–$160k в год.
+    salary_min: 120000,
+    salary_max: 160000,
     apply_url: 'https://remoteok.com/apply/senior-frontend-abc',
     description: '<p>Senior role</p>',
   });
@@ -30,9 +31,25 @@ test('mapRemoteOkVacancy мапит валидную вакансию', () => {
   assert.equal(v!.level, 'Senior');
   assert.equal(v!.format, 'Удалённо');
   assert.equal(v!.company, 'Acme Inc');
-  assert.equal(v!.salary_min, 120);
-  assert.equal(v!.salary_max, 160);
+  // Рубли в месяц: 120000/12*90 = 900 000, 160000/12*90 = 1 200 000.
+  assert.equal(v!.salary_min, 900000);
+  assert.equal(v!.salary_max, 1200000);
   assert.equal(v!.source_url, 'https://remoteok.com/apply/senior-frontend-abc');
+});
+
+test('mapRemoteOkVacancy понимает K-суффиксы', () => {
+  // Регрессия: "100k" превращалось в 100 (фолбэк вырезал всё кроме цифр),
+  // ошибка в 1000 раз — вакансия отлетала от фильтров.
+  const v = mapRemoteOkVacancy({
+    slug: 'dev-1',
+    position: 'Developer',
+    salary_min: '$100k',
+    salary_max: '$160k',
+    location: 'Remote',
+  });
+  assert.ok(v);
+  assert.equal(v!.salary_min, 750000);
+  assert.equal(v!.salary_max, 1200000);
 });
 
 test('mapRemoteOkVacancy с пустым id/slug даёт null', () => {
@@ -128,17 +145,35 @@ test('parseSalaryText парсит свободную строку зарпла�
 });
 
 test('parseSalaryText определяет валюту из строки', () => {
+  // min/max — рубли в месяц (USD→×90, EUR→×98), display — исходный вид.
   assert.deepEqual(parseSalaryText('1 800-2 500 $'), {
     display: '1 800–2 500 $',
-    min: 1800,
-    max: 2500,
+    min: 162000,
+    max: 225000,
   });
   assert.deepEqual(parseSalaryText('3 500–4 500 $'), {
     display: '3 500–4 500 $',
-    min: 3500,
-    max: 4500,
+    min: 315000,
+    max: 405000,
   });
-  assert.deepEqual(parseSalaryText('от 200€'), { display: 'от 200 €', min: 200, max: null });
+  assert.deepEqual(parseSalaryText('от 200€'), { display: 'от 200 €', min: 19600, max: null });
+});
+
+test('parseSalaryText игнорирует не зарплату: команды, годы, сроки', () => {
+  // Регрессия: любое число из текста считалось зарплатой — «команда из 5
+  // человек» давала min=5, «опыт 2026 года» — min=2026, а пара «5–200 000 ₽»
+  // показывалась как диапазон. Без маркера (валюта/от/до/K) и меньше 10 000 —
+  // не зарплата.
+  assert.deepEqual(parseSalaryText('команда из 5 человек, опыт 2026 года'), {
+    display: 'команда из 5 человек, опыт 2026 года',
+    min: null,
+    max: null,
+  });
+  assert.deepEqual(parseSalaryText('команда из 5 человек, зарплата 200K ₽'), {
+    display: 'от 200 000 ₽',
+    min: 200000,
+    max: null,
+  });
 });
 
 test('unwrapExtended распаковывает MongoDB extended JSON', () => {
@@ -196,9 +231,46 @@ test('mapJobicyVacancy мапит валидную вакансию Jobicy', () 
   assert.ok(v);
   assert.equal(v!.source, 'jobicy');
   assert.equal(v!.level, 'Senior');
-  assert.equal(v!.salary_min, 220000);
+  // 220 000 USD без периода считаются месячными: 220000×90 = 19 800 000 ₽.
+  assert.equal(v!.salary_min, 19800000);
+  assert.equal(v!.salary_max, 23400000);
   assert.equal(v!.company, 'Maze');
   assert.equal(v!.source_url, 'https://jobicy.com/jobs/154138');
+});
+
+test('mapJobicyVacancy делит годовые на 12', () => {
+  // Регрессия: $120 000/год сравнивались с ожиданиями «в месяц» как 120 000 —
+  // в 12 раз выше правды. 120000/12×90 = 900 000 ₽/мес.
+  const v = mapJobicyVacancy({
+    id: 1,
+    jobTitle: 'Dev',
+    salaryMin: 120000,
+    salaryMax: 120000,
+    salaryCurrency: 'USD',
+    salaryPeriod: 'yearly',
+  });
+  assert.ok(v);
+  assert.equal(v!.salary_min, 900000);
+  assert.equal(v!.salary_max, 900000);
+});
+
+test('mapCompanyFeedItem не падает на слове «руб» без числа', () => {
+  // Регрессия: /(\d...)\s*₽|руб/ читалось как «(число с рублём) ИЛИ (голое
+  // "руб")» — match без числа давал m[1] === undefined и падение на
+  // undefined.replace. Один такой фид ронял весь refreshProviders.
+  const v = mapCompanyFeedItem(
+    {
+      title: 'Менеджер',
+      link: 'https://example.com/jobs/1',
+      description: 'Зарплата в рублях обсуждается на собеседовании',
+      pubDate: 'today',
+      company: 'Example',
+    },
+    'feed-0',
+  )!;
+  assert.ok(v);
+  assert.equal(v.salary_min, null);
+  assert.equal(v.salary_max, null);
 });
 
 test('mapWwRItem мапит RSS-элемент We Work Remotely', () => {

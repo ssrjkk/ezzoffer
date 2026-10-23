@@ -230,15 +230,21 @@ export function scoreVacancyForResume(
    * именно по ней человек решает, стоит ли отклик. Если в вакансии зарплата
    * не указана — фактор нейтрален, а не нулевой: отсутствие цифры не
    * означает «зарплата плохая».
+   *
+   * Берётся salary_min (нижняя граница вилки), а если его нет — salary_max
+   * («до 100 000» при ожиданиях 150 000 платить 150 000 не сможет, и молчать
+   * об этом — значит завышать оценку). Значения уже в рублях в месяц.
    */
   let salaryFactor = { ratio: 1 as number, detail: 'Зарплата в вакансии не указана' };
-  if (salaryExpectation && salaryExpectation > 0 && vacancy.salary_min) {
+  const salaryFloor = vacancy.salary_min ?? vacancy.salary_max;
+  if (salaryExpectation && salaryExpectation > 0 && salaryFloor) {
+    const ceilingNote = vacancy.salary_min == null ? 'потолок ' : '';
     salaryFactor =
-      vacancy.salary_min >= salaryExpectation
-        ? { ratio: 1, detail: `${vacancy.salary_min.toLocaleString('ru-RU')} ₽ — не ниже ожиданий` }
+      salaryFloor >= salaryExpectation
+        ? { ratio: 1, detail: `${ceilingNote}${salaryFloor.toLocaleString('ru-RU')} ₽ — не ниже ожиданий` }
         : {
-            ratio: Math.max(0, 1 - (salaryExpectation - vacancy.salary_min) / salaryExpectation),
-            detail: `${vacancy.salary_min.toLocaleString('ru-RU')} ₽ против ожиданий ${salaryExpectation.toLocaleString('ru-RU')} ₽`,
+            ratio: Math.max(0, 1 - (salaryExpectation - salaryFloor) / salaryExpectation),
+            detail: `${ceilingNote}${salaryFloor.toLocaleString('ru-RU')} ₽ против ожиданий ${salaryExpectation.toLocaleString('ru-RU')} ₽`,
           };
   }
   factors.push({

@@ -183,7 +183,7 @@ export function matchesSearch(
   if (s.format && s.format !== vacancy.format) return false;
   if (s.city && !vacancy.city.toLowerCase().includes(s.city.toLowerCase())) return false;
 
-  const salary = vacancy.salary_min ?? 0;
+  const salary = vacancy.salary_min ?? vacancy.salary_max ?? 0;
   if (s.salary_min != null && salary > 0 && salary < s.salary_min) return false;
   if (s.salary_max != null && salary > 0 && salary > s.salary_max) return false;
 

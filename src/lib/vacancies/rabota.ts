@@ -1,6 +1,6 @@
 import type { Level, WorkFormat } from '../data';
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from './types';
-import { sanitizeExternalUrl, toSalaryNumber } from './util';
+import { sanitizeExternalUrl, toRubMonthly, toSalaryNumber } from './util';
 import { parsePublishedAt } from './published';
 import { httpFetch } from '../http-client';
 import { htmlToText } from '../text-decode';
@@ -131,10 +131,12 @@ function salaryDisplay(raw: RabotaJsonLd): {
 
   let min: number | null = null;
   let max: number | null = null;
+  let unit: string | undefined;
   if (salary.value && typeof salary.value === 'object') {
-    const v = salary.value as { minValue?: number | string; maxValue?: number | string };
+    const v = salary.value as { minValue?: number | string; maxValue?: number | string; unitText?: string };
     min = toSalaryNumber(v.minValue);
     max = toSalaryNumber(v.maxValue);
+    unit = v.unitText;
   } else {
     const flat = toSalaryNumber(salary.value as number | string | null);
     if (flat != null) {
@@ -143,6 +145,13 @@ function salaryDisplay(raw: RabotaJsonLd): {
     }
   }
   if (min == null && max == null) return { display: 'по договорённости', min: null, max: null };
+  /*
+   * Значения — в валюте площадки за период unitText (HOUR/MONTH/YEAR).
+   * Display — исходный вид, min/max — рубли в месяц: иначе часовая ставка
+   * $50 выглядела как 50 ₽/мес и вакансия отлетала от любого фильтра.
+   */
+  min = toRubMonthly(min, currency, unit);
+  max = toRubMonthly(max, currency, unit);
   if (min != null && max != null && min !== max) {
     return {
       display: `${min.toLocaleString('ru-RU')}–${max.toLocaleString('ru-RU')} ${symbol}`,

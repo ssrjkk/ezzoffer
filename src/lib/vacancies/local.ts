@@ -1,11 +1,19 @@
 import { jobs } from '../data';
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from './types';
 
+/**
+ * Минимум из строки витрины («от 250 000 ₽», «120 000–160 000 ₽»).
+ *
+ * Раньше понималось только «от ...»: диапазон давал null (фильтры считали
+ * зарплату нулевой и пропускали всё), а «до 90 000 ₽» вообще не замечалось.
+ * Строки витрины — рубли, нормализация не нужна.
+ */
 function parseSalaryMin(text: string): number | null {
-  const m = text.match(/от\s*([\d\s]+)/);
-  if (!m) return null;
-  const n = parseInt(m[1].replace(/\s/g, ''), 10);
-  return Number.isFinite(n) ? n : null;
+  const nums = [...text.matchAll(/(\d[\d\s\u00A0]*)/g)]
+    .map((m) => parseInt(m[1].replace(/[\s\u00A0]/g, ''), 10))
+    .filter((n) => Number.isFinite(n) && n >= 10_000);
+  if (nums.length === 0) return null;
+  return Math.min(...nums);
 }
 
 export function localVacancy(job: (typeof jobs)[number]): Vacancy {

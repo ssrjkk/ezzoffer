@@ -1,6 +1,6 @@
 import type { Level } from '../data';
 import type { Vacancy, VacancyFetchResult, VacancyProvider, VacancyQuery } from './types';
-import { cleanHtml, toSalaryNumber } from './util';
+import { cleanHtml, toRubMonthly, toSalaryNumber } from './util';
 import { parsePublishedAt } from './published';
 import { httpFetch, parseJson } from '../http-client';
 
@@ -53,15 +53,23 @@ function salaryDisplay(job: JobicyJob): {
 } {
   const min = toSalaryNumber(job.salaryMin) ?? 0;
   const max = toSalaryNumber(job.salaryMax) ?? 0;
+  /*
+   * Числа — в валюте salaryCurrency за период salaryPeriod (часто годовые),
+   * а подбор сравнивает рубли в месяц. Display — исходный вид, min/max —
+   * нормализованные: иначе $3 000/год выглядели как 3 000 ₽/мес и проходили
+   * фильтр «от 150 000», хотя реально это ~22 500 ₽/мес.
+   */
+  const normMin = toRubMonthly(min || null, job.salaryCurrency, job.salaryPeriod) ?? 0;
+  const normMax = toRubMonthly(max || null, job.salaryCurrency, job.salaryPeriod) ?? 0;
   const symbol = currencySymbol(job.salaryCurrency);
   if (min > 0 && max > 0)
     return {
       display: `${symbol}${min.toLocaleString('en-US')}–${symbol}${max.toLocaleString('en-US')}`,
-      min,
-      max,
+      min: normMin,
+      max: normMax,
     };
-  if (min > 0) return { display: `от ${symbol}${min.toLocaleString('en-US')}`, min, max: null };
-  if (max > 0) return { display: `до ${symbol}${max.toLocaleString('en-US')}`, min: null, max };
+  if (min > 0) return { display: `от ${symbol}${min.toLocaleString('en-US')}`, min: normMin, max: null };
+  if (max > 0) return { display: `до ${symbol}${max.toLocaleString('en-US')}`, min: null, max: normMax };
   return { display: 'по договорённости', min: null, max: null };
 }
 

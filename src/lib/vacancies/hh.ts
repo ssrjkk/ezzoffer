@@ -6,7 +6,7 @@ import type {
   VacancyProvider,
   VacancyQuery,
 } from './types';
-import { sanitizeExternalUrl, toSalaryNumber } from './util';
+import { sanitizeExternalUrl, toRub, toSalaryNumber } from './util';
 import { parsePublishedAt } from './published';
 import { httpFetch, parseJson } from '../http-client';
 import { getHhAppToken, hhSearchConfigured } from '../hh-app-token';
@@ -105,8 +105,13 @@ export function mapHhVacancy(raw: HhVacancyRaw): Vacancy | null {
     title: raw.name,
     company: raw.employer?.name ?? 'Компания',
     salary: salaryDisplay(raw.salary),
-    salary_min: toSalaryNumber(raw.salary?.from),
-    salary_max: toSalaryNumber(raw.salary?.to),
+    /*
+     * hh отдаёт зарплату в своей валюте (RUR/USD/EUR/KZT/...), а сравнения
+     * в подборе идут в рублях. Нормализация здесь, display — как было:
+     * человек видит исходную валюту, математика — рубли в месяц.
+     */
+    salary_min: toRub(toSalaryNumber(raw.salary?.from), raw.salary?.currency),
+    salary_max: toRub(toSalaryNumber(raw.salary?.to), raw.salary?.currency),
     level: inferLevel(raw.name),
     format: inferFormat(raw.schedule?.id),
     city: raw.area?.name ?? 'Россия',

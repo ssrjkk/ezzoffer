@@ -53,7 +53,18 @@ export async function GET(request: Request) {
 
   let list = getCatalog();
   if (text) {
-    list = list.filter((v) => `${v.title} ${v.company} ${v.category}`.toLowerCase().includes(text));
+    /*
+     * Искать по тем же полям, что matcher.haystackOf (заголовок, компания,
+     * категория, описание, требования, обязанности). Раньше здесь были только
+     * title+company+category: вакансия с React в requirements находилась
+     * подбором, но пропадала из /api/jobs по тому же запросу — два разных
+     * ответа на один вопрос.
+     */
+    list = list.filter((v) =>
+      `${v.title} ${v.company} ${v.category} ${v.about} ${v.requirements.join(' ')} ${v.responsibilities.join(' ')}`
+        .toLowerCase()
+        .includes(text),
+    );
   }
   if (level) list = list.filter((v) => v.level === level);
   if (format) list = list.filter((v) => v.format === format);
