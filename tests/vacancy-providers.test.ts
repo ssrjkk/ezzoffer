@@ -176,6 +176,16 @@ test('parseSalaryText игнорирует не зарплату: команды
   });
 });
 
+test('parseSalaryText не склеивает число через точку с пробелом', () => {
+  // «стаж 5. Зарплата 100 000 ₽»: жадный класс [\d\s.] глотал «5. 100 000»
+  // одним токеном, numToSalary давал 5.1, и настоящие 100 000 терялись.
+  assert.deepEqual(parseSalaryText('стаж 5. Зарплата 100 000 ₽'), {
+    display: 'от 100 000 ₽',
+    min: 100000,
+    max: null,
+  });
+});
+
 test('unwrapExtended распаковывает MongoDB extended JSON', () => {
   assert.equal(unwrapExtended({ $numberLong: '1790233146020' }), 1790233146020);
   assert.equal(unwrapExtended({ $date: { $numberLong: '1790233146020' } }), 1790233146020);

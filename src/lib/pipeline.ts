@@ -122,7 +122,13 @@ export function nextActions(userId: number, now = Date.now()): NextAction[] {
 
   const followups = collectFollowups(apps, now);
   if (followups.length > 0) {
-    const oldest = followups[followups.length - 1]!;
+    /*
+     * Старейший — по просмотру, а не по отправке. Список идёт по sent_at,
+     * и последний в нём — самый рано отправленный, но его могли посмотреть
+     * вчера, а другой — десять дней назад. Без этого подпись «самый старый
+     * просмотр — N дней назад» врала, и черновик писался не под тот отклик.
+     */
+    const oldest = followups.reduce((a, b) => (a.viewed_at! <= b.viewed_at! ? a : b));
     const days = Math.floor((now - oldest.viewed_at!) / 86_400_000);
     actions.push({
       kind: 'followup',

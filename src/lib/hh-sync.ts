@@ -158,7 +158,12 @@ export async function syncHhStatuses(userId: number): Promise<{ updated: number;
       if (!previous) hhVacancies.set(vacancyId, n);
     }
 
-    let updated = 0;
+    /*
+     * Счётчик — по откликам, а не по записям: viewed_at и decline одного
+     * отклика — это два UPDATE, но один «обновлённый статус». Иначе один
+     * отказ учитывался бы дважды и врал в лог «обновлено статусов».
+     */
+    const touched = new Set<number>();
     /*
      * Отклики hh берутся напрямую по slug, без JOIN с vacancies.
      *
@@ -213,7 +218,7 @@ export async function syncHhStatuses(userId: number): Promise<{ updated: number;
         const r = db
           .prepare('UPDATE applications SET viewed_at = ? WHERE id = ? AND viewed_at IS NULL')
           .run(updatedAt, app.id);
-        if (r.changes > 0) updated++;
+        if (r.changes > 0) touched.add(app.id);
       }
 
       /*
@@ -224,43 +229,83 @@ export async function syncHhStatuses(userId: number): Promise<{ updated: number;
        * Ключевое: перезаписывать уже записанный ответ нельзя. Отклик, который
        * сначала пригласили, а потом отказали, должен остаться приглашением с
        * пометкой об отказе — иначе приглашение исчезает из статистики навсегда.
+       * Раньше здесь стоял безусловный UPDATE в status='declined',
+       * response='decline': инвайт затирался, хотя комментарий требовал ровно
+       * обратного. Теперь приглашение не трогаем — только метки и причину.
+       *
+       * Второе: пишем только если есть что менять. Без проверки каждый тик
+       * переписывал все закрытые и приглашённые строки теми же значениями:
+       * WAL-шум на каждую минуту и врёт счётчик «обновлено статусов».
        */
       if (closed) {
-        const r = db
-          .prepare(
+        /*
+         * Приглашение сильнее последующего отказа, но отказ — тоже факт:
+         * пометка дописывается к существующей («Приглашение; Отказ: …»).
+         * Проверка по вхождению метки, а не по пустоте: иначе каждый тик
+         * дописывал бы причину заново и заметка росла бы бесконечно.
+         */
+        if (app.response === 'interview') {
+          const declineLabel = label ?? 'отказ';
+          const note = app.response_note ?? '';
+          const newNote = note
+            ? note.includes(declineLabel)
+              ? note
+              : `${note}; ${declineLabel}`
+            : declineLabel;
+          const needViewed = reviewed && app.viewed_at == null;
+          const needResponded = app.responded_at == null;
+          if (!needViewed && !needResponded && newNote === note) continue;
+          db.prepare(
             `UPDATE applications
-             SET viewed_at = COALESCE(viewed_at, ?),
-                 responded_at = COALESCE(responded_at, ?),
-                 status = 'declined',
-                 response = 'decline',
-                 response_note = COALESCE(NULLIF(response_note, ''), ?)
+              SET viewed_at = COALESCE(viewed_at, ?),
+                  responded_at = COALESCE(responded_at, ?),
+                  response_note = ?
              WHERE id = ?`,
-          )
-          .run(reviewed ? updatedAt : null, updatedAt, label ?? 'отказ', app.id);
-        if (r.changes > 0) updated++;
+          ).run(reviewed ? updatedAt : null, updatedAt, newNote, app.id);
+          touched.add(app.id);
+          continue;
+        }
+        const needViewed = reviewed && app.viewed_at == null;
+        const needResponded = app.responded_at == null;
+        const needNote = !app.response_note;
+        const needState = app.status !== 'declined' || app.response !== 'decline';
+        if (!needViewed && !needResponded && !needNote && !needState) continue;
+        db.prepare(
+          `UPDATE applications
+            SET viewed_at = COALESCE(viewed_at, ?),
+                responded_at = COALESCE(responded_at, ?),
+                status = 'declined',
+                response = 'decline',
+                response_note = COALESCE(NULLIF(response_note, ''), ?)
+           WHERE id = ?`,
+        ).run(reviewed ? updatedAt : null, updatedAt, label ?? 'отказ', app.id);
+        touched.add(app.id);
         continue;
       }
 
       if (response === 'interview') {
-        const r = db
-          .prepare(
-            `UPDATE applications
-             SET viewed_at = COALESCE(viewed_at, ?),
-                 responded_at = COALESCE(responded_at, ?),
-                 status = 'responded',
-                 response = 'interview',
-                 response_note = COALESCE(NULLIF(response_note, ''), ?)
-             WHERE id = ?`,
-          )
-          .run(reviewed ? updatedAt : null, updatedAt, label ?? 'приглашение', app.id);
-        if (r.changes > 0) updated++;
+        const needViewed = reviewed && app.viewed_at == null;
+        const needResponded = app.responded_at == null;
+        const needNote = !app.response_note;
+        const needState = app.status !== 'responded' || app.response !== 'interview';
+        if (!needViewed && !needResponded && !needNote && !needState) continue;
+        db.prepare(
+          `UPDATE applications
+            SET viewed_at = COALESCE(viewed_at, ?),
+                responded_at = COALESCE(responded_at, ?),
+                status = 'responded',
+                response = 'interview',
+                response_note = COALESCE(NULLIF(response_note, ''), ?)
+           WHERE id = ?`,
+        ).run(reviewed ? updatedAt : null, updatedAt, label ?? 'приглашение', app.id);
+        touched.add(app.id);
       }
     }
 
-    if (updated > 0) {
-      logInfo('hh:sync', `обновлено статусов: ${updated}`, { userId });
+    if (touched.size > 0) {
+      logInfo('hh:sync', `обновлено статусов: ${touched.size}`, { userId });
     }
-    return { updated };
+    return { updated: touched.size };
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'network error';
     return { updated: 0, error: msg };

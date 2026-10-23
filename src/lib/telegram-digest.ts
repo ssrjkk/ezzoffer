@@ -43,6 +43,12 @@ export type DigestWindow = {
  * Считается по самой таблице откликов, а не по метаданным прогона: так в окно
  * попадает всё, что человек сделал в кабинете вручную, и это не зависит от того,
  * был ли плановый прогон в этом тике.
+ *
+ * Граница — по моменту СОБЫТИЯ, а не отправки: просмотр и ответ HR относятся
+ * к окну, в котором случились. Раньше фильтр был только `sent_at >= since`,
+ * и ответ на отклик недельной давности не попадал ни в один дайджест:
+ * sendAlerts шлёт сразу только interview/decline, а вопрос HR ("question")
+ * по старому отклику исчезал молча — ни алерта, ни дайджеста.
  */
 export function digestWindow(userId: number, sinceMs: number): DigestWindow {
   /*
@@ -55,23 +61,34 @@ export function digestWindow(userId: number, sinceMs: number): DigestWindow {
    * вместо «Приглашение на собеседование» — без совета подготовиться.
    *
    * Теперь источник один и тот же, что и в `stats.ts`: `response`. И
-   * `responded_at IS NOT NULL` в условии — иначе приглашение попадало бы в
-   * окно дайджеста сразу после отправки отклика, то есть задолго до того,
-   * как площадка на него ответила.
+   * `responded_at >= since`, а не NOT NULL — иначе приглашение попадало бы в
+   * каждое окно с момента ответа, а не только в то, когда площадка ответила.
    */
   const row = db
     .prepare(
       `SELECT
-         COUNT(*) AS applied,
-         SUM(CASE WHEN message != '' THEN 1 ELSE 0 END) AS withLetter,
-         SUM(CASE WHEN viewed_at IS NOT NULL THEN 1 ELSE 0 END) AS viewed,
-         SUM(CASE WHEN responded_at IS NOT NULL THEN 1 ELSE 0 END) AS responded,
-         SUM(CASE WHEN response = 'interview' AND responded_at IS NOT NULL THEN 1 ELSE 0 END) AS invites,
-         SUM(CASE WHEN response = 'decline' AND responded_at IS NOT NULL THEN 1 ELSE 0 END) AS declines
+         SUM(CASE WHEN sent_at >= ? THEN 1 ELSE 0 END) AS applied,
+         SUM(CASE WHEN sent_at >= ? AND message != '' THEN 1 ELSE 0 END) AS withLetter,
+         SUM(CASE WHEN viewed_at >= ? THEN 1 ELSE 0 END) AS viewed,
+         SUM(CASE WHEN responded_at >= ? THEN 1 ELSE 0 END) AS responded,
+         SUM(CASE WHEN response = 'interview' AND responded_at >= ? THEN 1 ELSE 0 END) AS invites,
+         SUM(CASE WHEN response = 'decline' AND responded_at >= ? THEN 1 ELSE 0 END) AS declines
        FROM applications
-       WHERE user_id = ? AND sent_at >= ? AND withdrawn = 0`,
+       WHERE user_id = ? AND withdrawn = 0
+         AND (sent_at >= ? OR viewed_at >= ? OR responded_at >= ?)`,
     )
-    .get(userId, sinceMs) as Record<string, number | null> | undefined;
+    .get(
+      sinceMs,
+      sinceMs,
+      sinceMs,
+      sinceMs,
+      sinceMs,
+      sinceMs,
+      userId,
+      sinceMs,
+      sinceMs,
+      sinceMs,
+    ) as Record<string, number | null> | undefined;
 
   return {
     applied: Number(row?.applied ?? 0),

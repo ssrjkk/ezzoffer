@@ -281,6 +281,27 @@ test('в окно попадают только свежие отклики', ()
   assert.equal(w.applied, 1, 'в окно попал отклик старше границы');
 });
 
+test('ответ на старый отклик попадает в окно ответа, а не теряется', () => {
+  /*
+   * Раньше окно фильтровалось только по sent_at: ответ HR на отклик недельной
+   * давности не попадал ни в один дайджест (sendAlerts шлёт сразу только
+   * interview/decline). Вопрос по старому отклику исчезал молча.
+   */
+  const uid = seedUser();
+  const now = Date.now();
+  seedApp(uid, {
+    slug: 'hh-old',
+    sentAt: now - 48 * 3600_000,
+    status: 'responded',
+    response: 'question',
+    respondedAt: now - 3600_000,
+  });
+
+  const w = digestWindow(uid, now - 6 * 3600_000);
+  assert.equal(w.applied, 0, 'старая отправка посчитана как новая');
+  assert.equal(w.responded, 1, 'свежий ответ на старый отклик потерян');
+});
+
 test('отозванные отклики не показываются', () => {
   const uid = seedUser();
   db.prepare(

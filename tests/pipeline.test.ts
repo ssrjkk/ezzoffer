@@ -415,3 +415,23 @@ test('текст напоминания короткий и без извине�
   assert.ok(draft.length < 400, `слишком длинное напоминание: ${draft.length} символов`);
   assert.doesNotMatch(draft, /извин|простите|смущ/i, 'извинения снижают шанс на ответ');
 });
+
+test('старейший для напоминания считается по просмотру, а не по отправке', () => {
+  /*
+   * Список идёт по sent_at, и последним в нём стоит самый рано отправленный.
+   * Но его могли посмотреть вчера, а другой — десять дней назад: подпись
+   * «самый старый просмотр» и черновик обязаны указывать на самый давний
+   * просмотр, а не на самую давнюю отправку.
+   */
+  const uid = user();
+  vacancy('hh-old-sent', 'Старая отправка');
+  vacancy('hh-old-view', 'Давний просмотр');
+  application({ uid, slug: 'hh-old-sent', sentDaysAgo: 20, viewedDaysAgo: 5 });
+  application({ uid, slug: 'hh-old-view', sentDaysAgo: 10, viewedDaysAgo: 9 });
+
+  const actions = nextActions(uid, NOW);
+  const followup = actions.find((a) => a.kind === 'followup');
+  assert.ok(followup, 'нет напоминания');
+  assert.match(followup.detail, /9 дней/, 'подпись указывает не на самый давний просмотр: ' + followup.detail);
+  assert.ok((followup.draft ?? '').includes('Давний просмотр'), 'черновик написан не под самый давний просмотр');
+});

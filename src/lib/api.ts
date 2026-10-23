@@ -35,8 +35,7 @@ const MAX_JSON_CHARS = 200_000;
  */
 const MAX_JSON_BYTES = 2_000_000;
 
-export async function readJson<T>(request: Request): Promise<{ data?: T; error?: NextResponse }> {
-  /*
+export async function readJson<T>(request: Request): Promise<{ data?: T; error?: NextResponse }> {  /*
    * Тело читается потоком с прерыванием, а не целиком.
    *
    * Раньше здесь было `await request.text()` и проверка длины ПОСЛЕ чтения:
@@ -87,5 +86,49 @@ export async function readJson<T>(request: Request): Promise<{ data?: T; error?:
     return { data };
   } catch {
     return { error: badRequest('Некорректный JSON') };
+  }
+}
+
+/**
+ * Сырое тело запроса с потолком — для вебхуков, где подпись считается именно
+ * по байтам тела (HMAC) и JSON-парсинг до проверки невозможен.
+ *
+ * Без потолка `await request.text()` складывает всё тело в память до любых
+ * проверок: вебхук открыт наружу без авторизации (доверие — подпись, а она
+ * проверяется ПОСЛЕ чтения), и гигабайтный POST клал бы процесс. Рубежи те же,
+ * что у readJson: заявленная длина из заголовка, затем счётчик по ходу чтения.
+ */
+export async function readRawText(
+  request: Request,
+  maxBytes = 64 * 1024,
+): Promise<{ text?: string; error?: NextResponse }> {
+  const declared = Number(request.headers.get('content-length') ?? '');
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    return { error: badRequest('Слишком большой запрос') };
+  }
+  try {
+    const reader = request.body?.getReader();
+    if (!reader) return { text: '' };
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        return { error: badRequest('Слишком большой запрос') };
+      }
+      chunks.push(value);
+    }
+    const total = new Uint8Array(size);
+    let offset = 0;
+    for (const c of chunks) {
+      total.set(c, offset);
+      offset += c.byteLength;
+    }
+    return { text: new TextDecoder().decode(total) };
+  } catch {
+    return { error: badRequest('Некорректный запрос') };
   }
 }

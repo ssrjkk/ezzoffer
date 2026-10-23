@@ -130,7 +130,13 @@ export async function getHhAppToken(): Promise<string | null> {
         }
 
         // Если hh не отдал срок — считаем час, типичное значение для клиентских токенов.
-        const ttlMs = (data.expires_in ?? 3600) * 1000;
+        // Границы с обеих сторон: 0/отрицательный TTL давал бы протухший кэш
+        // сразу (шторм запросов к /token на каждый тик каталога), а огромный —
+        // мёртвый, но «валидный» токен на годы: поиск лежал бы с 401 до
+        // истечения, и ничто его не сбрасывало бы. 12 часов — с запасом выше
+        // любых реальных TTL hh.
+        const ttlSec = Math.min(Math.max(data.expires_in ?? 3600, 60), 12 * 3600);
+        const ttlMs = ttlSec * 1000;
         cached = { token: data.access_token, expiresAt: now + ttlMs };
         logInfo('hh:app-token', `токен приложения получен, ttl ${Math.round(ttlMs / 1000)} с`);
         return cached;

@@ -98,6 +98,18 @@ test('вебхук без подписи отвергнут', async () => {
   assert.equal((await POST(hook(body, null), params('card'))).status, 401);
 });
 
+test('тело вебхука больше лимита отклоняется до чтения', async () => {
+  /*
+   * Вебхук открыт наружу без авторизации (доверие — подпись, а она считается
+   * ПОСЛЕ чтения тела). Без потолка гигабайтный POST складывался в память
+   * целиком до любых проверок.
+   */
+  const { POST } = await webhook();
+  const body = 'x'.repeat(70 * 1024);
+  const res = await POST(hook(body, sign(body)), params('card'));
+  assert.equal(res.status, 400, `переполненный вебхук принят: ${res.status}`);
+});
+
 test('подпись, посчитанная чужим секретом, отвергнута', async () => {
   const { POST } = await webhook();
   const body = JSON.stringify({

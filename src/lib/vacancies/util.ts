@@ -191,8 +191,15 @@ export function parseSalaryText(
     );
 
   const CUR = String.raw`₽|руб\.?|\$|€|£|zł|₺|₸|USD|EUR|GBP|KZT|PLN|TRY|BYN|UAH|RUR|RUB`;
+  /*
+   * Число — цифры, склеенные пробелами или точкой ТОЛЬКО если за разделителем
+   * идёт цифра («1 800», «2.5», «100 000»). Точка с пробелом без цифры
+   * («стаж 5. Зарплата 100 000») — конец числа, а не его часть: иначе токен
+   * «5. 100 000» глотался целиком, numToSalary давал 5.1, и настоящие
+   * 100 000 терялись вместе с мусором.
+   */
   const tokRe = new RegExp(
-    String.raw`(?<lead>CUR)?\s*(?<pre>от|до|up\s*to)?\s*(?<num>\d[\d\s.]*)\s*(?<k>[KkMm])?\s*(?<post>CUR)?`.replaceAll(
+    String.raw`(?<lead>CUR)?\s*(?<pre>от|до|up\s*to)?\s*(?<num>\d+(?:[ .]\d+)*)\s*(?<k>[KkMm])?\s*(?<post>CUR)?`.replaceAll(
       'CUR',
       CUR,
     ),

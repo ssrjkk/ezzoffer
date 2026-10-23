@@ -278,3 +278,37 @@ test('токен приложения запрашивается один раз
 
   assert.equal(tokenCalls, 1, `токен запрашивался ${tokenCalls} раз — обмен должен кэшироваться`);
 });
+
+test('срок токена приложения ограничен с обеих сторон', async () => {
+  /*
+   * expires_in = 0 давал протухший кэш сразу — шторм запросов к /token на
+   * каждый тик каталога. expires_in = 10^9 давал мёртвый, но «валидный»
+   * токен на 31 год — поиск лежал бы с 401, и ничто его не сбрасывало бы.
+   * Допустимо: [60с, 12ч]; типичные 3600с hh не задеты.
+   */
+  process.env.HH_CLIENT_ID = 'app-id';
+  process.env.HH_CLIENT_SECRET = 'app-secret';
+  const { getHhAppToken, hhAppTokenCache } = await import('../src/lib/hh-app-token');
+
+  for (const [expiresIn, minTtl, maxTtl] of [
+    [0, 60_000, 60_000],
+    [-5, 60_000, 60_000],
+    [3600, 3_600_000, 3_600_000],
+    [1_000_000_000, 12 * 3600_000, 12 * 3600_000],
+  ] as const) {
+    resetHhAppToken();
+    globalThis.fetch = (async () =>
+      ({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ access_token: 't', expires_in: expiresIn }),
+      }) as unknown as Response) as typeof globalThis.fetch;
+    const before = Date.now();
+    await getHhAppToken();
+    const ttl = (hhAppTokenCache()?.expiresAt ?? 0) - before;
+    assert.ok(
+      ttl >= minTtl && ttl <= maxTtl,
+      `expires_in=${expiresIn} дал ttl ${ttl} мс, ждали [${minTtl}, ${maxTtl}]`,
+    );
+  }
+});

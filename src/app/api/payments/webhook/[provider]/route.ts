@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { registry } from '@/lib/payments/registry';
 import { grant, revoke } from '@/lib/payments/entitlements';
+import { readRawText } from '@/lib/api';
 
 /**
  * POST /api/payments/webhook/[provider] — приём подтверждения об оплате.
@@ -39,7 +40,8 @@ export async function POST(request: Request, ctx: { params: Promise<{ provider: 
     );
   }
 
-  const body = await request.text();
+  const { text: body, error: bodyError } = await readRawText(request);
+  if (bodyError || body === undefined) return bodyError ?? NextResponse.json({ error: 'Некорректный запрос' }, { status: 400 });
   const event = impl.verify({ body, headers: request.headers });
   if (!event) {
     return NextResponse.json(
@@ -52,10 +54,29 @@ export async function POST(request: Request, ctx: { params: Promise<{ provider: 
    * Возврат отзывает права, а не выдаёт. Раньше событие "refunded" отбрасывал
    * сам verify (там принимался только "paid"): деньги возвращались, а тариф
    * оставался — подписка за чужой счёт.
+   *
+   * Ветка явная по kind, а не «всё остальное — grant»: будущий вид события
+   * ("pending", "created") иначе упал бы в выдачу прав за неоплаченные деньги.
+   * Неизвестный kind — 400, провайдер разберётся.
    */
   try {
-    const applied = event.kind === 'refunded' ? revoke(event) : grant(event);
-    return NextResponse.json({ ok: true, applied, externalId: event.externalId });
+    if (event.kind === 'refunded') {
+      const applied = revoke(event);
+      return NextResponse.json({ ok: true, applied, externalId: event.externalId });
+    }
+    if (event.kind === 'paid') {
+      const applied = grant(event);
+      return NextResponse.json({ ok: true, applied, externalId: event.externalId });
+    }
+    /*
+     * Исчерпывающая проверка: после двух ветвей от kind остаётся never. Если
+     * в VerifiedEvent добавится вид ("pending", "created"), tsc упадёт здесь
+     * и заставит решить явно — выдать, отозвать или отклонить — вместо
+     * молчаливого провала в одну из веток по умолчанию (которой больше нет).
+     */
+    const unknownKind: never = event.kind;
+    void unknownKind;
+    return NextResponse.json({ error: 'Неизвестный вид события' }, { status: 400 });
   } catch {
     // Временная ошибка БД (занята, диск): провайдер должен повторить доставку.
     return NextResponse.json({ error: 'Временная ошибка, повторите позже' }, { status: 500 });
