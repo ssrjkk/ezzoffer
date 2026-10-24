@@ -646,6 +646,18 @@ function statsReply(user: User): string {
     '',
     `Просмотры: ${fmt(stats.viewRate)}% · Ответы: ${fmt(stats.respondRate)}% · Приглашения: ${fmt(stats.inviteRate)}%`,
   ];
+  /*
+   * Ориентиры воронки из открытых разборов (~1 ответ на 10 откликов): только
+   * когда выборки хватает, иначе цифры прыгают от каждого ответа. Формулировка
+   * намеренно не обещает: это чужие средние для самопроверки.
+   */
+  if (stats.benchmarks.enough) {
+    lines.push(
+      '',
+      `Ориентиры: ответы ${fmt(stats.benchmarks.replyRate)}% (обычно ~${fmt(stats.benchmarks.replyRef)}%), ` +
+        `приглашения ${fmt(stats.benchmarks.inviteRate)}% (обычно ~${fmt(stats.benchmarks.inviteRef)}%)`,
+    );
+  }
   if (stats.hint) lines.push('', stats.hint);
   return lines.join('\n');
 }

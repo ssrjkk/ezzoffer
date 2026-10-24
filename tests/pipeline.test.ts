@@ -408,6 +408,38 @@ test('склонение чисел не по умолчанию', () => {
   assert.equal(plural(12, 'чат', 'чата', 'чатов'), 'чатов');
 });
 
+test('ноль ответов на тридцати откликах — действие про резюме и выбор', () => {
+  const uid = user();
+  for (let i = 0; i < 30; i++) {
+    application({ uid, slug: 'hh-nr-' + i, sentDaysAgo: 10, viewedDaysAgo: null });
+  }
+  const actions = nextActions(uid, NOW);
+  const nr = actions.find((a) => a.kind === 'noresponse');
+  assert.ok(nr, 'нет диагностики нулевых ответов');
+  assert.equal(nr.urgency, 1);
+  assert.equal(nr.href, '/dashboard/resumes');
+});
+
+test('единичный ответ снимает диагностику нулевых ответов', () => {
+  const uid = user();
+  for (let i = 0; i < 30; i++) {
+    application({
+      uid,
+      slug: 'hh-ok-' + i,
+      sentDaysAgo: 10,
+      viewedDaysAgo: i === 0 ? 9 : null,
+      respondedDaysAgo: i === 0 ? 8 : null,
+      response: i === 0 ? 'question' : '',
+    });
+  }
+  const actions = nextActions(uid, NOW);
+  assert.equal(
+    actions.find((a) => a.kind === 'noresponse'),
+    undefined,
+    'один ответ — уже не ноль, диагностика не должна срабатывать',
+  );
+});
+
 test('текст напоминания короткий и без извинений', () => {
   const draft = followupDraft('ООО Тест', 'React-разработчик');
   assert.ok(draft.includes('ООО Тест'), 'компания не подставлена');

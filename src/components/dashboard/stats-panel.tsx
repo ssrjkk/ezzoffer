@@ -31,6 +31,10 @@ export function StatsPanel({ initial }: { initial: Stats }) {
   useEffect(() => {
     let alive = true;
     const tick = async () => {
+      // Тот же режим, что у списка откликов: 30 секунд и только видимая
+      // вкладка. Опрос каждые 5 секунд дёргал API на полном пересчёте
+      // статистики, а цифры всё равно меняются не чаще тика планировщика.
+      if (document.hidden) return;
       try {
         const res = await fetch('/api/stats', { cache: 'no-store' });
         if (!res.ok) return;
@@ -38,7 +42,7 @@ export function StatsPanel({ initial }: { initial: Stats }) {
         if (alive && data.stats) setStats(data.stats);
       } catch {}
     };
-    const id = setInterval(tick, 5000);
+    const id = setInterval(tick, 30_000);
     return () => {
       alive = false;
       clearInterval(id);
@@ -69,7 +73,7 @@ export function StatsPanel({ initial }: { initial: Stats }) {
         </Panel>
         <Panel className="flex items-center justify-between">
           <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
-            Отответы HR
+            Ответы HR
           </span>
           <span className="font-mono text-xl tabular-nums text-ink">{stats.respondRate}%</span>
         </Panel>
@@ -80,6 +84,46 @@ export function StatsPanel({ initial }: { initial: Stats }) {
           <span className="font-mono text-xl tabular-nums text-ink">{stats.inviteRate}%</span>
         </Panel>
       </div>
+
+      <Panel>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-serif text-lg">Воронка против ориентиров</h2>
+          <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+            {stats.benchmarks.enough ? 'хватает данных' : 'мало данных'}
+          </span>
+        </div>
+        {/*
+          Ориентиры — из открытых разборов поиска работы (~1 ответ на 10
+          откликов, ~2 приглашения на 100), а не из наших данных и не обещание
+          сервиса: у кого-то воронка уже, у кого-то шире. Ниже 20 отправленных
+          сравнивать рано — цифры прыгают от каждого ответа.
+        */}
+        {stats.benchmarks.enough ? (
+          <dl className="mt-4 space-y-2 text-sm">
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-muted">Ответы от отправленных</dt>
+              <dd className="font-mono tabular-nums text-ink">
+                {stats.benchmarks.replyRate}% <span className="text-muted">/ ~{stats.benchmarks.replyRef}%</span>
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <dt className="text-muted">Приглашения от отправленных</dt>
+              <dd className="font-mono tabular-nums text-ink">
+                {stats.benchmarks.inviteRate}% <span className="text-muted">/ ~{stats.benchmarks.inviteRef}%</span>
+              </dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="measure mt-3 text-sm leading-relaxed text-muted">
+            Ориентиры появятся после 20 отправленных откликов: {stats.sent} из 20. Раньше считать
+            рано — один ответ меняет картину вдвое.
+          </p>
+        )}
+        <p className="measure mt-3 text-xs leading-relaxed text-muted">
+          Чужие средние для самопроверки, а не норма: ниже ориентира при живых откликах — повод
+          проверить резюме и выбор вакансий, а не приговор.
+        </p>
+      </Panel>
 
       <Panel>
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">

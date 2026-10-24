@@ -59,6 +59,8 @@ const STATS = {
   viewRate: 90,
   respondRate: 12,
   inviteRate: 5,
+  respondedWeek: 7,
+  benchmarks: { enough: true, replyRate: 10, replyRef: 10, inviteRate: 5, inviteRef: 2 },
   series: [
     { label: 'пн', sent: 10, viewed: 30, invited: 2 },
     { label: 'вт', sent: 20, viewed: 40, invited: 1 },

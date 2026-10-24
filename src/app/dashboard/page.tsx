@@ -83,21 +83,21 @@ export default async function DashboardPage() {
       <NextActionsPanel actions={actions} />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard label="Отправлено" value={stats.sent} trend={weeklyTrend(stats.series, 'sent')} />
+        <StatCard label="Отправлено" value={stats.sent} trend={weeklyTrend(stats, 'sent')} />
         <StatCard
           label="Просмотрено"
           value={stats.viewed}
-          trend={weeklyTrend(stats.series, 'viewed')}
+          trend={weeklyTrend(stats, 'viewed')}
         />
         <StatCard
           label="Ответов HR"
           value={stats.responded}
-          trend={weeklyTrend(stats.series, 'responded')}
+          trend={weeklyTrend(stats, 'responded')}
         />
         <StatCard
           label="Приглашения"
           value={stats.invited}
-          trend={weeklyTrend(stats.series, 'invited')}
+          trend={weeklyTrend(stats, 'invited')}
         />
       </div>
 
@@ -154,21 +154,37 @@ function greeting(nowMs: number = Date.now()): string {
  * то есть показывали выдуманные числа рядом с реальной статистикой из getStats.
  * Теперь обе витрины считаются по той же series, что и график в StatsPanel.
  */
-function weeklyTrend(series: Series, key: SeriesKey): string | null {
-  const totals = series.reduce(
+function weeklyTrend(stats: Stats, key: SeriesKey): string | null {
+  /*
+   * Ответы берутся из respondedWeek, а не из series: в series такой колонки
+   * нет, и подстановка sent-minus-viewed показывала под видом «ответов»
+   * непросмотренные отклики — то есть ровно выдуманные числа, которые
+   * убрали выше. Остальные ключи — суммы недельного окна series.
+   */
+  if (key === 'responded') {
+    if (stats.respondedWeek <= 0) return null;
+    const week = Math.round(stats.respondedWeek / stats.series.length);
+    return week > 0 ? `~${week}/день` : null;
+  }
+  const totals = seriesTotals(stats.series);
+  const total = totals[key];
+  if (total === 0) return null;
+  const week = Math.round(total / stats.series.length);
+  return week > 0 ? `~${week}/день` : null;
+}
+
+function seriesTotals(series: Series): Record<SeriesKey, number> {
+  return series.reduce(
     (acc, d) => {
       acc.sent += d.sent;
       acc.viewed += d.viewed;
       acc.invited += d.invited;
-      acc.responded += d.viewed > 0 ? d.sent - d.viewed : 0;
+      // responded intentionally 0: ответы берутся из respondedWeek выше, а не
+      // выводятся из series, где такой колонки нет.
       return acc;
     },
     { sent: 0, viewed: 0, invited: 0, responded: 0 } as Record<SeriesKey, number>,
   );
-  const total = totals[key];
-  if (total === 0) return null;
-  const week = Math.round(total / series.length);
-  return week > 0 ? `~${week}/день` : null;
 }
 
 function weekRows(stats: Stats): { day: string; value: number; max: number }[] {

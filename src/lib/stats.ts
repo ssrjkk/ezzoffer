@@ -18,6 +18,24 @@ export type Stats = {
   withdrawn: number;
   hint: string | null;
   series: { label: string; sent: number; viewed: number; invited: number }[];
+  /** Ответов за последние 7 дней — для недельного темпа (тренд под карточкой). */
+  respondedWeek: number;
+  /**
+   * Воронка против внешних ориентиров.
+   *
+   * replyRate — доля откликов с ответом от отправленных; inviteRate уже есть.
+   * Референсы (~10% ответов, ~2% приглашений) — из открытых разборов поиска
+   * работы, а не из наших данных: это чужие средние для самопроверки, а не
+   * обещание сервиса. enough=false (меньше 20 отправленных), пока выборки
+   * нет — считать по единицам значит врать уверенностью.
+   */
+  benchmarks: {
+    enough: boolean;
+    replyRate: number;
+    replyRef: number;
+    inviteRate: number;
+    inviteRef: number;
+  };
 };
 
 export function getStats(userId: number): Stats {
@@ -74,6 +92,19 @@ export function getStats(userId: number): Stats {
   const viewRate = sent ? Math.round((viewed / sent) * 100) : 0;
   const respondRate = viewed ? Math.round((responded / viewed) * 100) : 0;
   const inviteRate = sent ? Math.round((invited / sent) * 100) : 0;
+
+  // Ответов за последние 7 дней — числитель недельного темпа под карточкой
+  // «Ответов HR». Берётся отдельным запросом, а не из series: в series нет
+  // колонки responded, и подставлять туда sent-minus-viewed (как раньше делал
+  // тренд в dashboard/page) — значит показывать непросмотренные под видом
+  // ответов.
+  const respondedWeek = (
+    db
+      .prepare(
+        'SELECT COUNT(*) AS c FROM applications WHERE user_id = ? AND responded_at >= ? AND withdrawn = 0',
+      )
+      .get(userId, todayStart - 6 * DAY_MS) as { c: number }
+  ).c;
 
   let hint: string | null = null;
   if (sent === 0) {
@@ -143,5 +174,13 @@ export function getStats(userId: number): Stats {
     withdrawn: Number(base.withdrawn),
     hint,
     series,
+    respondedWeek: Number(respondedWeek),
+    benchmarks: {
+      enough: sent >= 20,
+      replyRate: sent ? Math.round((responded / sent) * 100) : 0,
+      replyRef: 10,
+      inviteRate,
+      inviteRef: 2,
+    },
   };
 }

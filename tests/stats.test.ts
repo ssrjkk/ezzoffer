@@ -63,3 +63,51 @@ test('getStats без откликов возвращает нули и подс
   assert.equal(s.viewRate, 0);
   assert.ok(s.hint);
 });
+
+test('бенчмарки воронки считаются от отправленных и требуют выборку', () => {
+  const uid = insertUser('stats-bench@example.com');
+  const now = Date.now();
+  const ins = db.prepare(
+    `INSERT INTO applications (user_id, job_slug, status, response, sent_at, viewed_at, responded_at, withdrawn)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+  );
+  // 20 отправленных, 2 ответа (10%), 1 приглашение: ровно на ориентирах.
+  for (let i = 0; i < 20; i++) {
+    const responded = i < 2;
+    ins.run(
+      uid,
+      `b-${i}`,
+      responded ? 'responded' : 'sent',
+      i === 0 ? 'interview' : responded ? 'question' : '',
+      now - 1000,
+      now - 500,
+      responded ? now - 100 : null,
+    );
+  }
+  const s = getStats(uid);
+  assert.equal(s.benchmarks.enough, true, '20 откликов обязаны считаться выборкой');
+  assert.equal(s.benchmarks.replyRate, 10, `доля ответов: ${s.benchmarks.replyRate}`);
+  assert.equal(s.benchmarks.replyRef, 10);
+  assert.equal(s.benchmarks.inviteRate, 5, `доля приглашений: ${s.benchmarks.inviteRate}`);
+  assert.equal(s.benchmarks.inviteRef, 2);
+});
+
+test('бенчмарки молчат при малой выборке', () => {
+  const uid = insertUser('stats-bench-small@example.com');
+  const s = getStats(uid);
+  assert.equal(s.benchmarks.enough, false, 'ноль откликов — не выборка');
+});
+
+test('недельный темп ответов считается по responded_at, а не из series', () => {
+  const uid = insertUser('stats-week@example.com');
+  const now = Date.now();
+  const ins = db.prepare(
+    `INSERT INTO applications (user_id, job_slug, status, response, sent_at, viewed_at, responded_at, withdrawn)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0)`,
+  );
+  // Ответ пришёл на этой неделе; отправка могла быть раньше — важно responded_at.
+  ins.run(uid, 'w-1', 'responded', 'question', now - 30 * 86_400_000, now - 1000, now - 500);
+  ins.run(uid, 'w-2', 'sent', '', now - 1000, null, null);
+  const s = getStats(uid);
+  assert.equal(s.respondedWeek, 1, `недельных ответов: ${s.respondedWeek}`);
+});

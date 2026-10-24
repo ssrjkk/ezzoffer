@@ -30,7 +30,7 @@ import { extractSkills } from './skills';
  * работать (звонок HR), раньше того, что можно сделать завтра.
  */
 
-export type ActionKind = 'followup' | 'interview' | 'declines' | 'search' | 'profile' | 'start';
+export type ActionKind = 'followup' | 'interview' | 'declines' | 'search' | 'profile' | 'start' | 'noresponse';
 
 export type NextAction = {
   kind: ActionKind;
@@ -118,6 +118,29 @@ export function nextActions(userId: number, now = Date.now()): NextAction[] {
         count: 1,
       },
     ];
+  }
+
+  /*
+   * Ноль ответов при живом объёме отправок: проблема не в конкретных отказах
+   * (их тоже нет), а во входе воронки — резюме не открывает двери и/или
+   * отклики идут не в те вакансии. Порог 30 — чтобы не срабатывать на
+   * недозрелой выборке: по чужим наблюдениям ориентир — от 1 ответа на 10
+   * откликов, и ноль на тридцати уже не шум. Проверяется раньше частных
+   * разборов: чинить формулировки отказов, когда ответов нет вообще, нечего.
+   */
+  const respondedTotal = apps.filter((a) => a.responded_at !== null).length;
+  if (apps.length >= 30 && respondedTotal === 0) {
+    actions.push({
+      kind: 'noresponse',
+      title: `Ноль ответов на ${apps.length} откликов — проверьте резюме и выбор вакансий`,
+      detail:
+        'Обычно к этому объёму приходит хотя бы несколько ответов. Раз откликов много, ' +
+        'а не отвечает никто: резюме не открывает двери (заголовок, первые строки, навыки ' +
+        'слово в слово как в вакансиях) или отклики уходят не в те вакансии — сузьте поиск.',
+      href: '/dashboard/resumes',
+      urgency: 1,
+      count: apps.length,
+    });
   }
 
   const followups = collectFollowups(apps, now);
