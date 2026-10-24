@@ -59,7 +59,15 @@ export function Hero() {
     <section className="border-b border-line pt-14 pb-16 md:pt-20 md:pb-24">
       <div className="container-x">
         <div className="grid gap-12 lg:grid-cols-12 lg:gap-16">
-          <div className="lg:col-span-7">
+          {/*
+            min-w-0 на колонках: внутри правой — карточки вакансий с truncate
+            (white-space: nowrap), чья min-content-ширина равна всей строке.
+            Без min-w-0 grid-колонка раздвигается под самое длинное название,
+            и на телефоне страница уезжает вбок. Тот же приём уже используется
+            в mobile-nav и dashboard-nav — здесь он защищает от длинных
+            названий вакансий, которые придут из каталога.
+          */}
+          <div className="min-w-0 lg:col-span-7">
             <Eyebrow>Автоотклик с сопроводительным письмом</Eyebrow>
 
             <h1 className="display mt-7 text-[2.75rem] text-balance sm:text-6xl md:text-7xl">
@@ -84,7 +92,7 @@ export function Hero() {
             </p>
           </div>
 
-          <div className="lg:col-span-5">
+          <div className="min-w-0 lg:col-span-5">
             <Listings />
           </div>
         </div>
