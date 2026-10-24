@@ -3,6 +3,11 @@ services:
     build: .
     container_name: ezoffer
     restart: unless-stopped
+    # Процесс внутри работает НЕ root (см. USER в Dockerfile), а том ./data
+    # принадлежит хосту. Без этой строки на свежей машине каталог data/ создаёт
+    # сам Docker от root — и сервер падает с SQLITE_CANTOPEN, т.к. писать некому.
+    # UID/GID хост-пользователя подставляются автоматически.
+    user: '${UID:-1000}:${GID:-1000}'
     ports:
       - '3000:3000'
     environment:

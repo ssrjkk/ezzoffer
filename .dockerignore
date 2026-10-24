@@ -1,15 +1,44 @@
-node_modules
-.next
-.git
-data
-*.md
-.env*
+# Контекст сборки Docker: что НЕ отправлять демону и НЕ класть в слои образа.
+#
+# Главное — секреты. Dockerfile делает `COPY . .`, и всё попавшее в контекст
+# навсегда остаётся в слоях образа: последующий `rm -rf /app/data` в другом
+# слое файлы только прячет, но не удаляет. Кто угодно с образом (реестр,
+# `docker save`, бэкап) достаёт их обратно. Поэтому здесь в первую очередь
+# живые секреты, а не мусор.
+
+# Живые секреты (токен бота, SMTP-пароли, Client Secret hh, токены реестров).
+.env
+.env.*
+!.env.example
+.npmrc
+
+# База и всё производное: хэши паролей, OAuth-токены, чаты, бэкапы, логи.
+# В образе им не место: данные приходят из volume (/app/data) при запуске.
+data/
+*.db
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Сам Dockerfile/Compose: их изменения не должны ронять кэш COPY-слоя.
 Dockerfile*
 docker-compose*
-.npmrc
+.ezprobe
 
 # Собранные пакеты деплоя. Без этого deploy-out попадал в контекст сборки
 # вместе с data/ezoffer.db* внутри себя, и Dockerfile переносил её в образ.
-deploy-out
-pages-out
-.ezprobe
+deploy-out/
+pages-out/
+
+# Мусор контекста: замедляет каждую сборку и раздувает слои.
+node_modules
+.next
+/.git
+*.md
+npm-debug.log*
+coverage/
+.DS_Store
+Thumbs.db

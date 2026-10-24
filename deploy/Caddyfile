@@ -7,7 +7,7 @@
 # Секрет бота передаётся приложению, а Caddy о нём не знает: /api/telegram/webhook
 # проверяет заголовок сам, и в Caddy он просто пробрасывается.
 
-ezoffer.ru {
+{$SITE_HOST:ezoffer.ru} {
 	encode zstd gzip
 
 	# Без этого отдавался бы index.html на любой путь, и несуществующая

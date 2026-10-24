@@ -14,8 +14,17 @@ services:
     build: .
     container_name: ezoffer-app
     restart: unless-stopped
+    # Процесс внутри работает НЕ root (см. USER в Dockerfile), а том ./data
+    # принадлежит хосту. Без этой строки на свежем VPS каталог data/ создаёт
+    # сам Docker от root — и сервер падает с SQLITE_CANTOPEN, т.к. писать некому.
+    # UID/GID владельца репозитория на сервере подставляются автоматически.
+    user: '${UID:-1000}:${GID:-1000}'
     environment:
       - NODE_ENV=production
+      # Домен для Caddyfile ({$SITE_HOST} в deploy/Caddyfile) и для ссылок
+      # в письмах/боте. Без него — значение по умолчанию ezoffer.ru.
+      # Если меняешь SITE_HOST — поменяй и SITE_URL ниже на тот же домен.
+      - SITE_HOST=${SITE_HOST:-ezoffer.ru}
       - SITE_URL=${SITE_URL:-https://ezoffer.ru}
       - PORT=3000
       # Московское время внутри контейнера: границы суток, лимиты и «рабочие

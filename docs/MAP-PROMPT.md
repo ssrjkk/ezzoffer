@@ -253,8 +253,9 @@ CREATE TABLE tg_inbox (update_id INTEGER PRIMARY KEY, body TEXT NOT NULL,
   `docker-compose.prod.yml` и `scripts/backup.mjs`; разворачивается одной
   командой `docker compose -f docker-compose.prod.yml up -d --build`.
   - ❗ **`ezoffer.ru` уже занят** (замерено 17.10.2026: отдаёт парковочную
-    страницу регистратора, `Server: openresty`). Строка `SITE_URL=https://ezoffer.ru`
-    в `docker-compose.yml` указывает на чужой домен и должна быть заменена.
+    страницу регистратора, `Server: openresty`). Строки `SITE_HOST`/`SITE_URL`
+    в `docker-compose.prod.yml` указывают на чужой домен и должны быть заменены
+    на свой (обе, согласованно; Caddy берёт домен из `SITE_HOST`).
     `ezoffer.com` не резолвится. Регистрация домена и DNS — только через
     аккаунт ssrjkk, агент это сделать не может.
 
