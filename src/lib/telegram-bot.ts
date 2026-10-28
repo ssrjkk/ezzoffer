@@ -1,4 +1,5 @@
 import { mainKeyboard, commandKeyboard, keyboardFor, slugHash, DYNAMIC_LABELS } from './telegram-keyboard';
+import { handleAdminMessage, handleAdminCallback } from './telegram-admin';
 
 // Реэкспорт: клавиатуры живут в отдельном модуле, но это часть бота, и
 // потребители (тесты, превью) обращаются к telegram-bot.
@@ -1012,6 +1013,11 @@ async function handleCallback(update: TelegramUpdate): Promise<boolean | null> {
   const chat = String(chatId);
 
   const user = userByChatId(chat) ?? null;
+  // Админ-кнопки разбираются до проверки привязки: владелец может не быть
+  // привязан как пользователь, а чужим здесь всё равно только «недоступно».
+  if (data === 'admin:overview' || data === 'admin:catalog' || data === 'admin:tokens') {
+    return handleAdminCallback(chat, data, cb.id, cb.message_id);
+  }
   if (!user) {
     if (cb.id) await answerCallbackQuery(cb.id, { text: 'Аккаунт не привязан' });
     return sendTelegramMessage(chat, NOT_LINKED, { keyboard: commandKeyboard(), html: true });
@@ -1020,6 +1026,7 @@ async function handleCallback(update: TelegramUpdate): Promise<boolean | null> {
   // Формат кнопок: `kind:value` или `kind:value:hash` (apply и избранное
   // несут хеш вакансии — см. slugHash: индекс без хеша указывал бы на N-ю
   // вакансию текущего списка, а не показанного).
+  //
   const [kind, value, tag] = data.split(':');
 
   if (kind === 'menu') {
@@ -1211,6 +1218,14 @@ export async function handleUpdate(update: TelegramUpdate): Promise<boolean | nu
       } as TelegramUpdate);
     }
     return sendTelegramMessage(chat, `Пришлите команду, например /start.\n\n${HELP}`);
+  }
+
+  /*
+   * Админ-панель — до резолва пользователя: владелец проверяется по chat_id,
+   * а не по привязке. Чужим handleAdminMessage отвечает неотличимо от опечатки.
+   */
+  if (parsed.command === 'admin') {
+    return handleAdminMessage(chat);
   }
 
   const replyingUser = userByChatId(chat) ?? null;
