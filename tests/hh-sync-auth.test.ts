@@ -82,3 +82,76 @@ test('syncAllHhUsers возвращает пользователей с мёрт
     restore();
   }
 });
+
+/** Мок успешных переговоров со счётчиком GET. */
+function mockOk(counter: { gets: number }): () => void {
+  const saved = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL) => {
+    if (String(url).includes('/negotiations')) {
+      counter.gets++;
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ items: [], found: 0 }),
+      } as unknown as Response;
+    }
+    return saved(url);
+  }) as typeof fetch;
+  return () => {
+    globalThis.fetch = saved;
+  };
+}
+
+test('повторный опрос внутри интервала в сеть не ходит', async () => {
+  const uid = seedUser();
+  const { syncHhStatuses } = await import('../src/lib/hh-sync');
+  const counter = { gets: 0 };
+  const restore = mockOk(counter);
+  try {
+    const first = await syncHhStatuses(uid);
+    assert.equal(first.throttled, undefined, 'первый опрос заткнули троттлингом');
+    assert.equal(counter.gets, 1, 'первый опрос не дошёл до сети');
+    const second = await syncHhStatuses(uid);
+    assert.equal(second.updated, 0);
+    assert.equal(second.throttled, true, 'повторный опрос не помечен троттлингом');
+    assert.equal(counter.gets, 1, 'повторный опрос ударил в сеть');
+  } finally {
+    restore();
+  }
+});
+
+test('force обходит троттлинг, старая отметка разрешает опрос', async () => {
+  const uid = seedUser();
+  const { syncHhStatuses, hhSyncMinIntervalMs } = await import('../src/lib/hh-sync');
+  const counter = { gets: 0 };
+  const restore = mockOk(counter);
+  try {
+    await syncHhStatuses(uid);
+    assert.equal(counter.gets, 1);
+    const forced = await syncHhStatuses(uid, { force: true });
+    assert.equal(forced.throttled, undefined, 'force не обошёл троттлинг');
+    assert.equal(counter.gets, 2, 'force не дошёл до сети');
+    // Отметка старше интервала — обычный опрос снова идёт в сеть.
+    db.prepare('UPDATE meta SET value = ? WHERE key = ?').run(
+      String(Date.now() - hhSyncMinIntervalMs() - 1000),
+      `hh:last-sync:${uid}`,
+    );
+    const afterWindow = await syncHhStatuses(uid);
+    assert.equal(afterWindow.throttled, undefined, 'опрос после окна заткнули');
+    assert.equal(counter.gets, 3, 'опрос после окна не дошёл до сети');
+  } finally {
+    restore();
+  }
+});
+
+test('интервал опроса: дефолт 15 минут, пол — минута', async () => {
+  const { hhSyncMinIntervalMs } = await import('../src/lib/hh-sync');
+  assert.equal(hhSyncMinIntervalMs(), 15 * 60 * 1000, 'дефолт не 15 минут');
+  process.env.HH_SYNC_MIN_INTERVAL_MS = '60000';
+  assert.equal(hhSyncMinIntervalMs(), 60_000);
+  process.env.HH_SYNC_MIN_INTERVAL_MS = '1000';
+  assert.equal(hhSyncMinIntervalMs(), 60_000, 'пол минуты не держится');
+  process.env.HH_SYNC_MIN_INTERVAL_MS = 'мусор';
+  assert.equal(hhSyncMinIntervalMs(), 15 * 60 * 1000, 'мусор не даёт дефолт');
+  delete process.env.HH_SYNC_MIN_INTERVAL_MS;
+});

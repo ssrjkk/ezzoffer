@@ -139,9 +139,51 @@ async function fetchNegotiations(token: string): Promise<HhNegotiation[]> {
   return out;
 }
 
+/**
+ * Минимальный интервал между опросами переписок одного пользователя, мс.
+ *
+ * Живой человек открывает страницу откликов несколько раз в день, а не
+ * 288 раз в сутки. Полный дамп `GET /negotiations?status=all` постранично
+ * на каждом тике планировщика — громкий и бессмысленный сигнал: статусы
+ * не меняются каждую минуту, а дайджест всё равно ходит раз в 6 часов.
+ */
+export function hhSyncMinIntervalMs(): number {
+  const raw = process.env.HH_SYNC_MIN_INTERVAL_MS;
+  if (raw === undefined || raw.trim() === '') return 15 * 60 * 1000;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 15 * 60 * 1000;
+  return Math.max(60_000, Math.floor(n));
+}
+
+function lastSyncKey(userId: number): string {
+  return `hh:last-sync:${userId}`;
+}
+
 export async function syncHhStatuses(
   userId: number,
-): Promise<{ updated: number; error?: string; authFailed?: boolean }> {
+  opts?: { force?: boolean; minIntervalMs?: number },
+): Promise<{ updated: number; error?: string; authFailed?: boolean; throttled?: boolean }> {
+  const now = Date.now();
+  /*
+   * Троттлинг опроса переписок: чаще раза в интервал не ходим.
+   *
+   * Отметка ставится ДО сети по попытке, а не по успеху: лежащий hh.ru
+   * иначе давал бы горячий цикл 401/502 на каждом тике, а частые 401 —
+   * отдельный плохой сигнал (похоже на перебор). Ручной вызов с force
+   * (кнопка «обновить» в кабинете) троттлинг обходит.
+   */
+  if (!opts?.force) {
+    const minInterval = opts?.minIntervalMs ?? hhSyncMinIntervalMs();
+    const lastRow = db.prepare('SELECT value FROM meta WHERE key = ?').get(lastSyncKey(userId)) as
+      | { value: string }
+      | undefined;
+    if (lastRow && now - Number(lastRow.value) < minInterval) {
+      return { updated: 0, throttled: true };
+    }
+    db.prepare(
+      'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    ).run(lastSyncKey(userId), String(now));
+  }
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as User | undefined;
   if (!user) return { updated: 0 };
   const token = (await getValidHhToken(user))?.token;
@@ -331,10 +373,15 @@ export async function syncAllHhUsers(heartbeat?: () => boolean): Promise<number[
     id: number;
   }[];
   const authFailed: number[] = [];
+  let throttled = 0;
   for (const u of users) {
     if (heartbeat && !heartbeat()) return authFailed;
     try {
       const res = await syncHhStatuses(u.id);
+      if (res.throttled) {
+        throttled++;
+        continue;
+      }
       if (res.error) {
         logError('scheduler:sync:all', new Error(res.error), { userId: u.id });
       }
@@ -342,6 +389,9 @@ export async function syncAllHhUsers(heartbeat?: () => boolean): Promise<number[
     } catch (err) {
       logError('scheduler:sync:all', err, { userId: u.id });
     }
+  }
+  if (throttled > 0) {
+    logInfo('hh:sync', `пропущено по троттлингу опроса: ${throttled}`);
   }
   return authFailed;
 }

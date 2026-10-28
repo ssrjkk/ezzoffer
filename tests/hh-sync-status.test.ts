@@ -91,7 +91,7 @@ before(async () => {
 });
 
 beforeEach(() => {
-  db.exec('DELETE FROM applications; DELETE FROM users;');
+  db.exec('DELETE FROM applications; DELETE FROM users; DELETE FROM meta;');
 });
 
 test('отказ пишется один раз, повторный прогон ничего не меняет', async () => {
@@ -114,7 +114,7 @@ test('отказ пишется один раз, повторный прогон
     assert.equal(stored.response, 'decline');
     assert.ok(stored.responded_at, 'отказ без responded_at выпадает из конверсии');
 
-    const second = await syncHhStatuses(uid);
+    const second = await syncHhStatuses(uid, { force: true });
     assert.equal(second.updated, 0, 'повтор переписал стабильную строку');
   } finally {
     restore();
@@ -143,7 +143,9 @@ test('приглашение не затирается последующим о
     { vacancyId: '456', state: 'discard', name: 'Отказ после приглашения', reviewed: true },
   ]);
   try {
-    await syncHhStatuses(uid);
+    // force: второй опрос того же пользователя идёт в сеть осознанно —
+    // без него троттлинг опроса вернул бы throttled и проверять было бы нечего.
+    await syncHhStatuses(uid, { force: true });
   } finally {
     restore();
   }
