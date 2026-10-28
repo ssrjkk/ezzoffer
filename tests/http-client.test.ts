@@ -150,6 +150,27 @@ test('тело ошибочного ответа доступно для диа�
   }
 });
 
+test('429 без headers не превращается в сетевую ошибку', async () => {
+  // Заглушки без headers встречаются в тестах провайдеров: чтение
+  // res.headers.get бросало бы в общий catch, и отказ площадки с 429
+  // классифицировался бы как таймаут — с потерей и статуса, и Retry-After.
+  const saved = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls++;
+    return { ok: false, status: 429, text: async () => 'slow down' };
+  }) as unknown as typeof globalThis.fetch;
+  try {
+    const res = await httpFetch('https://example.com/a', { ...fast, attempts: 1 });
+    assert.equal(calls, 1, 'заглушка без headers ушла в повтор');
+    assert.equal(res.ok, false);
+    assert.equal(res.status, 429, 'статус потерян');
+    assert.equal(res.body, 'slow down');
+  } finally {
+    globalThis.fetch = saved;
+  }
+});
+
 test('parseJson не бросает на мусорном ответе', () => {
   assert.deepEqual(parseJson<{ a: number }>('{"a":1}'), { a: 1 });
   assert.equal(parseJson('не json'), null);

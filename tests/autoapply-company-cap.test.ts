@@ -62,10 +62,11 @@ before(async () => {
 
 beforeEach(() => {
   db.exec(
-    'DELETE FROM apply_events; DELETE FROM auth_attempts; DELETE FROM bookmarks; DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies;',
+    'DELETE FROM apply_events; DELETE FROM auth_attempts; DELETE FROM bookmarks; DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies; DELETE FROM send_slots;',
   );
   resetCatalogCache();
   resetPacing();
+  db.exec("DELETE FROM meta WHERE key LIKE 'pacing:%';");
 });
 
 function seedUser(): void {
@@ -184,4 +185,21 @@ test('мусор в потолке не ломает прогон', async () => 
 
   if (saved === undefined) delete process.env.AUTOAPPLY_PER_COMPANY;
   else process.env.AUTOAPPLY_PER_COMPANY = saved;
+});
+
+test('названия одной компании схлопываются независимо от формы', () => {
+  const { normalizeCompany, companySendsToday } = autoapply;
+  assert.equal(normalizeCompany('ООО «Ромашка»'), 'ромашка');
+  assert.equal(normalizeCompany('Ромашка'), 'ромашка');
+  assert.equal(normalizeCompany('РОМАШКА,"ООО"'), 'ромашка');
+  assert.equal(normalizeCompany('  Авито  '), 'авито');
+
+  // Отклики без компании в каталоге (вакансия удалена) в чужой счётчик не идут.
+  seedUser();
+  db.prepare('INSERT INTO applications (user_id, job_slug, status, sent_at) VALUES (1, ?, ?, ?)').run(
+    'hh-gone',
+    'sent',
+    Date.now(),
+  );
+  assert.equal(companySendsToday(1, 'Авито'), 0, 'сирота без вакансии посчитана чужой компании');
 });

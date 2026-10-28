@@ -3,7 +3,7 @@ import { requireUser, unauthorized } from '@/lib/api';
 import { db } from '@/lib/db';
 import { isPlanActive, isTopPlan } from '@/lib/plans';
 import { enhanceResume, scoreResume, detectKeywords } from '@/lib/resume-enhance';
-import { enhanceResumeWithAi, enhanceResumeAIFirst } from '@/lib/ai';
+import { enhanceResumeWithAi, enhanceResumeAIFirst, aiConfigured } from '@/lib/ai';
 import { parseParamId } from '@/lib/http';
 import { rateLimit } from '@/lib/rate-limit';
 
@@ -91,8 +91,14 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
    * Безлимит топ-тарифа: AI-first упаковка на Эксперте идёт мимо счётчика
    * 20/час. Замер делается только внутри ветки: rateLimit фиксирует попытку
    * самим вызовом, и холостой замер жег бы квоту стандартных улучшений.
+   *
+   * Обход действует, только если провайдер реально доступен (aiConfigured):
+   * без ключа enhanceResumeAIFirst вернёт null и запрос откатится на
+   * стандартное AI/правила — то есть на обычную лимитированную услугу.
+   * Иначе флагом ai-first можно было бы жечь ключ владельца без счёта.
    */
-  if (!(aiFirst && isTopPlan(fresh.plan))) {
+  const aiFirstUnlimited = aiFirst && isTopPlan(fresh.plan) && aiConfigured();
+  if (!aiFirstUnlimited) {
     const limiter = rateLimit(`resume-improve:${user.id}`, AI_LIMIT);
     if (!limiter.allowed) {
       return NextResponse.json(

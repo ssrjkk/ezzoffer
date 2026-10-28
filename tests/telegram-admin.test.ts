@@ -224,3 +224,22 @@ test('чужая кнопка панели — тихое «недоступно
     'чужому чату ушёл текст панели',
   );
 });
+
+test('упавший Telegram возвращает false, а не молчание', async () => {
+  // Прямой вызов вместо подмены общего мока: отказ-path нужен один раз,
+  // а глобальная заглушка файла всегда отдаёт ok:true.
+  const saved = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    throw new Error('network down');
+  }) as unknown as typeof globalThis.fetch;
+  try {
+    assert.equal(await admin.handleAdminMessage(OWNER), false, 'успех нарисован при упавшей сети');
+    assert.equal(
+      await admin.handleAdminCallback(OWNER, 'admin:overview', 'cb1', 100),
+      false,
+      'колбэк нарисовал успех при упавшей сети',
+    );
+  } finally {
+    globalThis.fetch = saved;
+  }
+});

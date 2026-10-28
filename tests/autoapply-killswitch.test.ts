@@ -38,12 +38,13 @@ before(async () => {
 beforeEach(() => {
   // Порядок важен: журналы и попытки ссылаются на users через FK.
   db.exec(
-    'DELETE FROM apply_events; DELETE FROM auth_attempts; DELETE FROM applications; DELETE FROM letters; DELETE FROM resumes; DELETE FROM searches; DELETE FROM users; DELETE FROM vacancies;',
+    'DELETE FROM apply_events; DELETE FROM auth_attempts; DELETE FROM applications; DELETE FROM letters; DELETE FROM resumes; DELETE FROM searches; DELETE FROM users; DELETE FROM vacancies; DELETE FROM send_slots;',
   );
   delete process.env.AUTOAPPLY_ENABLED;
   delete process.env.AUTOAPPLY_DRY_RUN;
   resetCatalogCache();
   resetPacing();
+  db.exec("DELETE FROM meta WHERE key LIKE 'pacing:%';");
 });
 
 function seedLiveUser(): number {

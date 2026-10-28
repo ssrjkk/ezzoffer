@@ -82,16 +82,33 @@ export async function exchangeCode(code: string): Promise<HhTokenResponse> {
 }
 
 export async function fetchHhResumeId(accessToken: string): Promise<string | null> {
-  const res = await fetch(RESUMES_URL, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: 'application/json',
-      'User-Agent': 'EZOffer/1.0',
-    },
-    cache: 'no-store',
-  });
+  /*
+   * Таймаут обязателен: голый fetch на зависшем api.hh.ru вешал
+   * GET /api/hh/callback вечно — тот же класс бага, что уже чинили в
+   * exchangeCode и refreshAccessToken. Любой сбой здесь — null, а не
+   * исключение: вызывающий трактует его как «резюме не найдено».
+   */
+  let res: Response;
+  try {
+    res = await fetch(RESUMES_URL, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+        'User-Agent': 'EZOffer/1.0',
+      },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch {
+    return null;
+  }
   if (!res.ok) return null;
-  const data = (await res.json()) as { items?: { id?: string; title?: string }[] };
+  let data: { items?: { id?: string; title?: string }[] };
+  try {
+    data = (await res.json()) as { items?: { id?: string; title?: string }[] };
+  } catch {
+    return null;
+  }
   const item = data.items?.find((r) => r.id);
   return item?.id ?? null;
 }

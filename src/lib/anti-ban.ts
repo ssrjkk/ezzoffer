@@ -130,9 +130,12 @@ export type Pacing = {
 
 /**
  * Снимок состояния паузера для персистентности (мета-таблица).
+ *
+ * Здесь только то, что restore() реально читает: cooldown, backoff,
+ * Retry-After и блокировку. Часовые/суточные счётчики отправок
+ * восстанавливает гидратация из applications, а не снимок.
  */
 export type PacingSnapshot = {
-  lastSentAt: number;
   cooldownMs: number;
   failAt: number;
   failKind: FailureKind;
@@ -210,9 +213,7 @@ export function createPacing(
     },
 
     snapshot(): PacingSnapshot {
-      const sent = sentTimestamps.length > 0 ? Math.max(...sentTimestamps) : 0;
       return {
-        lastSentAt: sent,
         cooldownMs: cooldownUntil,
         failAt: lastFailureAt,
         failKind: failureKind,
@@ -384,7 +385,6 @@ export const FAILURE_LABEL: Record<FailureKind, string> = {
 /** Тестовый хелпер: мгновенная пауза, без лимитов и задержек. */
 export function zeroPacing(): Pacing {
   const empty: PacingSnapshot = {
-    lastSentAt: 0,
     cooldownMs: 0,
     failAt: 0,
     failKind: 'network',

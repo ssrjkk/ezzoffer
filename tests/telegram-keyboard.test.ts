@@ -100,7 +100,7 @@ beforeEach(() => {
    * удаляются раньше родителя — иначе SQLITE_CONSTRAINT_FOREIGNKEY.
    */
   db.exec(
-    'DELETE FROM apply_events; DELETE FROM auth_attempts; DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies;',
+    'DELETE FROM apply_events; DELETE FROM auth_attempts; DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies; DELETE FROM send_slots;',
   );
   // getCatalog() кэширует выборку на 30 секунд и сам сбрасывается только при
   // записи через upsertMany. Прямая вставка в SQL кэш не трогает, и каталог
@@ -112,6 +112,7 @@ beforeEach(() => {
    * и проверка «нажатие отправляет отклик» падала, хотя код исправен.
    */
   resetPacing();
+  db.exec("DELETE FROM meta WHERE key LIKE 'pacing:%';");
   sent = [];
   edited = [];
   answered = [];

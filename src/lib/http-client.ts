@@ -152,7 +152,11 @@ export async function httpFetch(url: string, opts: HttpOptions = {}): Promise<Ht
 
       // 429 часто приходит с Retry-After — уважаем его, но с потолком,
       // иначе один капризный апстрим может остановить обновление каталога.
-      const retryAfterHeader = Number(res.headers.get('retry-after'));
+      // Заголовки — через ту же опциональную цепочку, что выше: заглушка без
+      // headers на 429 роняла бы чтение в catch и теряла и срок, и статус.
+      const retryAfterHeader = Number(
+        typeof res.headers?.get === 'function' ? res.headers.get('retry-after') : NaN,
+      );
       const waitMs =
         Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
           ? Math.min(retryAfterHeader * 1000, retryMaxMs * 4)

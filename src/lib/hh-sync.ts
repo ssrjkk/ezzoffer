@@ -93,6 +93,15 @@ export function sameVacancyId(a: string | null, b: string | null): boolean {
   return a.replace(/^0+/, '') === b.replace(/^0+/, '');
 }
 
+/**
+ * Нормализованный ключ вакансии для Map: та же числовая свертка, что в
+ * sameVacancyId, но заранее. Без неё записи с ведущими нулями не находились
+ * бы в карте вообще, и финальное сравнение было бы мёртвым кодом.
+ */
+export function normVacancyId(id: string): string {
+  return /^\d+$/.test(id) ? id.replace(/^0+/, '') || '0' : id;
+}
+
 /** Момент времени hh; на битой дате — null, чтобы не записать NaN в INTEGER. */
 function timeOf(iso: string | undefined, fallback: number): number {
   if (!iso) return fallback;
@@ -240,13 +249,17 @@ export async function syncHhStatuses(
 
     // По вакансии, а не по флагу разобранного состояния: две переписки по
     // одной вакансии (повторный отклик) должны схлопнуться в одну запись.
+    // Ключ — нормализованный id: hh иногда отдаёт его с ведущими нулями
+    // («030251545» vs slug «hh-30251545»), и сырые строки тогда не встречаются
+    // ни здесь, ни при поиске ниже.
     const hhVacancies = new Map<string, HhNegotiation>();
     for (const n of items) {
       const vacancyId = vacancyIdOf(n);
       if (!vacancyId) continue;
-      const previous = hhVacancies.get(vacancyId);
+      const key = normVacancyId(vacancyId);
+      const previous = hhVacancies.get(key);
       // Список отсортирован по updated_at, поэтому первая — свежайшая.
-      if (!previous) hhVacancies.set(vacancyId, n);
+      if (!previous) hhVacancies.set(key, n);
     }
 
     /*
@@ -282,7 +295,7 @@ export async function syncHhStatuses(
 
     for (const app of apps) {
       const vacancyId = app.job_slug.slice(3);
-      const hh = hhVacancies.get(vacancyId);
+      const hh = hhVacancies.get(normVacancyId(vacancyId));
       if (!hh) continue;
       // Идентификатор из slug и из переписки обязаны совпадать как числа:
       // "30251545" и "030251545" — один id, но строки разные.

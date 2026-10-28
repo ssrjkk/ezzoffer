@@ -9,7 +9,15 @@ import { db } from './db';
  * разбирают, куда уходили отклики, когда воронка врёт.
  */
 
-export type ApplyEventKind = 'sent' | 'failed' | 'dry' | 'blocked' | 'already' | 'expired' | 'skipped_closed';
+export type ApplyEventKind =
+  | 'sent'
+  | 'failed'
+  | 'dry'
+  | 'blocked'
+  | 'already'
+  | 'expired'
+  | 'skipped_closed'
+  | 'skipped';
 
 /** Сколько храним историю внешних эффектов: старше — в бэкап, не в живую базу. */
 const APPLY_EVENTS_TTL_MS = 90 * 86_400_000;

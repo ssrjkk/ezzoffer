@@ -106,10 +106,26 @@ const STRIP_FILES = [
   'fly.toml',
   'package.json',
   'package-lock.json',
+  // .npmrc может содержать токен приватного реестра — в рантайме он не нужен.
+  '.npmrc',
+  '.npmrc.auth',
 ];
+// Source maps уезжать не должны: это исходники сервера открытым текстом.
 for (const file of STRIP_FILES) {
   rmSync(path.join(outDir, file), { force: true });
 }
+// Source maps уезжать не должны: это исходники сервера открытым текстом.
+// Лежат глубоко в .next, поэтому чистка рекурсивная, а не только в корне.
+(function stripMaps(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      stripMaps(full);
+    } else if (entry.name.endsWith('.map')) {
+      rmSync(full);
+    }
+  }
+})(outDir);
 
 /*
  * Проверка на утечку. Дешёвая, но такая ошибка стоит дороже любой экономии
@@ -137,7 +153,10 @@ function findDatabaseFiles(dir) {
     }
     // ezoffer.db, а также -wal/-shm/-journal: они содержат недавние записи,
     // которых нет в основном файле, и потерянный WAL — тоже утечка.
-    if (/^ezoffer\.db(-wal|-shm|-journal)?$/.test(entry.name)) {
+    // Плюс любые другие sqlite-файлы: дамп с чужим именем (backup.sqlite,
+    // data/dump.sqlite) уезжает так же легко, как ezoffer.db. В готовом
+    // пакете sqlite-файлов быть не должно вообще — проверка строгая.
+    if (/^ezoffer\.db(-wal|-shm|-journal)?$/.test(entry.name) || /\.sqlite3?(-wal|-shm|-journal)?$/.test(entry.name)) {
       found.push(path.relative(outDir, full));
     }
   }
@@ -159,6 +178,8 @@ writeFileSync(
     '# Замени SITE_URL на настоящий адрес сервера — он участвует в OAuth',
     '# redirect_uri, в письмах и в sitemap.',
     'SITE_URL=http://localhost:3000',
+    '#SITE_HOST — домен для Caddyfile. Должен совпадать с SITE_URL.',
+    '#SITE_HOST=',
     'PORT=3000',
     'EZOFFER_DB_PATH=./data/ezoffer.db',
     'EZOFFER_SILENT=0',
@@ -166,6 +187,18 @@ writeFileSync(
     'SCHEDULER_INTERVAL_MS=300000',
     '# Лимит автооткликов. 0 означает «без потолка», а не «выключено».',
     'AUTOAPPLY_DAILY_CAP=1',
+    'AUTOAPPLY_HOURLY_CAP=12',
+    'AUTOAPPLY_MIN_INTERVAL_SEC=45',
+    'AUTOAPPLY_MAX_INTERVAL_SEC=180',
+    'AUTOAPPLY_WORK_START=9',
+    'AUTOAPPLY_WORK_END=20',
+    '#AUTOAPPLY_ENABLED=1',
+    '# Холостой режим: подбор без реальных отправок. На проде НЕ включать.',
+    '#AUTOAPPLY_DRY_RUN=',
+    '# Потолок на одну компанию в день (0 — без потолка).',
+    'AUTOAPPLY_PER_COMPANY=4',
+    '# Секрет для вызова /api/autoapply/run внешним cron.',
+    '#CRON_SECRET=',
     '',
     '# Человеческий профиль отправок (анти-детект): длинные перерывы,',
     '# смягчение выходных, прогрев нового отправителя. См. .env.example.',
@@ -177,9 +210,43 @@ writeFileSync(
     'GITHUB_CLIENT_ID=',
     'GITHUB_CLIENT_SECRET=',
     '',
+    '# hh.ru: приложение с dev.hh.ru (нужно для поиска и автооткликов).',
+    '# Без них работает всё, кроме hh.',
+    'HH_CLIENT_ID=',
+    'HH_CLIENT_SECRET=',
+    'HH_REDIRECT_URI=',
+    '# Глобальный токен поиска (обычно не нужен — получается сам).',
+    '#HH_ACCESS_TOKEN=',
+    '# Каталог вакансий: быстрые источники (hh) и медленные агрегаторы.',
+    'CATALOG_FAST_TTL_MS=1800000',
+    'CATALOG_SLOW_TTL_MS=21600000',
+    '# Опрос переписок hh: не чаще раза в интервал на пользователя.',
+    '#HH_SYNC_MIN_INTERVAL_MS=900000',
+    '',
     '# Telegram-бот.',
     'TELEGRAM_BOT_TOKEN=',
     'TELEGRAM_WEBHOOK_SECRET=',
+    '# Владелец для /admin в боте. Без него панель закрыта.',
+    '#ADMIN_TELEGRAM_CHAT_ID=',
+    '#OWNER_ID=',
+    '# Быстрый разбор входящих (0 — только тиком; на бессерверном хостинге 0).',
+    'TELEGRAM_FAST_PATH=1',
+    '',
+    '# Письма (восстановление пароля). Без SMTP не работает.',
+    '#SMTP_HOST=',
+    '#SMTP_PORT=587',
+    '#SMTP_USER=',
+    '#SMTP_PASSWORD=',
+    '#SMTP_FROM=',
+    '',
+    '# AI-улучшение резюме и писем (OpenAI-совместимый API). Без ключа — эвристики.',
+    '#AI_API_KEY=',
+    '#AI_BASE_URL=',
+    '#AI_MODEL=',
+    '',
+    '# RSS-фиды и доски вакансий (через запятую).',
+    '#COMPANY_JOB_FEEDS=',
+    '#GREENHOUSE_BOARDS=',
     '',
     '# Шифрование hh-токенов в БД (ровно 32 байта, hex или base64).',
     '# Без него токены лежат открытым текстом — и в бэкапах тоже. Сгенерировать:',

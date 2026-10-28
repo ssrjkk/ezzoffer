@@ -176,6 +176,45 @@ export function companySendsToday(userId: number, company: string): number {
   return rows.filter((r) => normalizeCompany(r.company) === needle).length;
 }
 
+/** Ключ слота дневного лимита: пользователь + московские сутки. */
+export function slotKeyDaily(userId: number, dayStartMs: number): string {
+  return `d:${userId}:${dayStartMs}`;
+}
+
+/** Ключ слота потолка на компанию: пользователь + сутки + нормализованная компания. */
+export function slotKeyCompany(userId: number, company: string, dayStartMs: number): string {
+  return `c:${userId}:${dayStartMs}:${normalizeCompany(company)}`;
+}
+
+/**
+ * Атомарно списать слот отправки.
+ *
+ * Один statement (INSERT ... ON CONFLICT DO UPDATE ... WHERE cnt < cap
+ * ... RETURNING): параллельные писатели сериализуются самой SQLite, и
+ * второй получает пусто вместо превышения лимита. Возвращает true, если
+ * слот списан. cap <= 0 — потолок выключен, слот не трогаем.
+ *
+ * Старые сутки вычищаются здесь же, чтобы таблица не росла: один DELETE
+ * по индексу первичного ключа за списание — дешевле, чем отдельный сборщик.
+ */
+export function tryConsumeSlot(key: string, cap: number, dayStartMs: number): boolean {
+  if (cap <= 0) return true;
+  db.prepare('DELETE FROM send_slots WHERE day < ?').run(dayStartMs - 86_400_000);
+  const row = db
+    .prepare(
+      `INSERT INTO send_slots (key, day, cnt) VALUES (?, ?, 1)
+       ON CONFLICT(key) DO UPDATE SET cnt = cnt + 1 WHERE cnt < ?
+       RETURNING cnt`,
+    )
+    .get(key, dayStartMs, cap) as { cnt: number } | undefined;
+  return Boolean(row);
+}
+
+/** Вернуть слот: отправки не было (отказ площадки, обрыв, закрытая вакансия). */
+export function refundSlot(key: string): void {
+  db.prepare('UPDATE send_slots SET cnt = MAX(0, cnt - 1) WHERE key = ?').run(key);
+}
+
 /**
  * На сколько останавливаем отклики при 403.
  *
@@ -224,7 +263,7 @@ function setBlockedUntil(userId: number, until: number, reason: string): void {
   ).run(until, reason, userId);
 }
 
-function todayCount(userId: number): number {
+export function todayCount(userId: number): number {
   // Отозванные считаются: внешняя отправка уже состоялась, и слот дневного
   // лимита она съела. Иначе «отправить → отозвать → отправить» давал бы
   // бесконечные отклики мимо лимита.
@@ -289,12 +328,16 @@ export function warmupScaledCap(
  *
  * Площадки пишут как попало: «ООО Ромашка», «Ромашка», «romashka llc». Точное
  * сравнение строк считало это разными компаниями, и потолок не срабатывал.
+ *
+ * Границы слов — через Unicode-классы, а не \b: \b знает только ASCII, и
+ * кириллические «ООО»/«ПАО» им не вычищались (молча считали «ООО Ромашка»
+ * и «Ромашка» разными компаниями).
  */
 export function normalizeCompany(name: string): string {
   return name
     .toLowerCase()
     .replace(/["«»„“]/g, '')
-    .replace(/\b(ооо|оао|зао|пао|ао|ип|llc|ltd|inc|gmbh|bv|sas)\b\.?/gi, '')
+    .replace(/(^|[^\p{L}\p{N}_])(ооо|оао|зао|пао|ао|ип|llc|ltd|inc|gmbh|bv|sas)\.?($|[^\p{L}\p{N}_])/giu, '$1$3')
     .replace(/[^a-zа-яё0-9]+/gi, ' ')
     .trim()
     .replace(/\s+/g, ' ');
@@ -401,12 +444,8 @@ export function pacingFor(userId: number, cfg: Partial<PacingConfig>, nowFn: () 
       | { value: string }
       | undefined;
     if (row?.value) {
-      const parsed = JSON.parse(row.value) as Partial<
-        Record<'cooldownMs' | 'failAt' | 'failStreak' | 'retryAfterUntil' | 'blockUntil', unknown>
-      > &
-        Partial<Pick<PacingSnapshot, 'failKind' | 'retryDetail'>>;
+      const parsed = JSON.parse(row.value) as Partial<PacingSnapshot>;
       created.restore({
-        lastSentAt: 0,
         cooldownMs: 0,
         failAt: 0,
         failKind: 'network',
@@ -1139,6 +1178,40 @@ export async function runAutoApply(opts?: {
             continue;
           }
 
+          /*
+           * Атомарное списание лимитов ДО сети: дневного и на компанию.
+           *
+           * Проверка COUNT выше видит прошлое: два параллельных запроса
+           * (двойной клик, кабинет + планировщик + бот) оба проходят и оба
+           * уходят в hh. Слот списывается одним statement
+           * (INSERT ... WHERE cnt < cap ... RETURNING): второй получает пусто
+           * и не трогает площадку. Возврат — на всех исходах без реальной
+           * переписки (см. ветки ниже); удержан — только если переписка есть.
+           */
+          const dayKey = dayStartMs;
+          const dailySlot = slotKeyDaily(user.id, dayKey);
+          if (!tryConsumeSlot(dailySlot, effectiveDaily, dayKey)) {
+            // Лимит выбран параллельными отправками: до следующего тика.
+            pausedFor = 'daily';
+            completeSend(claim.id);
+            break;
+          }
+          let companySlot: string | null = null;
+          if (company && cap > 0) {
+            companySlot = slotKeyCompany(user.id, company, dayKey);
+            if (!tryConsumeSlot(companySlot, cap, dayKey)) {
+              refundSlot(dailySlot);
+              completeSend(claim.id);
+              skipped++;
+              logApplyEvent(user.id, vacancy.slug, 'skipped', 'потолок на компанию выбран параллельными отправками');
+              continue;
+            }
+          }
+          const refundSlots = (): void => {
+            refundSlot(dailySlot);
+            if (companySlot) refundSlot(companySlot);
+          };
+
           let result: Awaited<ReturnType<NonNullable<typeof hhProvider.apply>>>;
           try {
             result = await hhProvider.apply(vacancy, {
@@ -1147,9 +1220,11 @@ export async function runAutoApply(opts?: {
               accessToken: token ?? undefined,
             });
           } catch (err) {
-            // Сеть упала исключением: заявку снимаем, ошибку — наверх, в
-            // изоляцию пользователя. Пауза здесь не ставится: неизвестно, ушёл
-            // ли отклик, а backoff по неизвестности бил бы по всем остальным.
+            // Сеть упала исключением: заявку снимаем, слоты возвращаем,
+            // ошибку — наверх, в изоляцию пользователя. Пауза здесь не
+            // ставится: неизвестно, ушёл ли отклик, а backoff по неизвестности
+            // бил бы по всем остальным.
+            refundSlots();
             completeSend(claim.id);
             throw err;
           }
@@ -1193,9 +1268,12 @@ export async function runAutoApply(opts?: {
                  * невидим в статистике.
                  *
                  * Пишем как отправленный, но с пустым письмом: текст мы не
-                 * отправляли, а факт переписки — есть. Гонка параллельной
-                 * вставки гасится как обычно: строка уже есть — значит, всё
-                 * уже записано.
+                 * отправляли, а факт переписки — есть. В счётчики applied /
+                 * лимиты тика НЕ идёт: отправки сейчас не было (переписка
+                 * могла появиться дни назад), и раздувать «отправлено» ею —
+                 * враньё в отчёте. Повторная обработка в этом же тике
+                 * невозможна: строка уже есть, и проверка выше её увидит.
+                 * Гонка параллельной вставки гасится как обычно.
                  */
                 try {
                   db.prepare(
@@ -1208,9 +1286,6 @@ export async function runAutoApply(opts?: {
                   logApplyEvent(user.id, vacancy.slug, 'already', 'гонка вставки: строка уже есть');
                   continue;
                 }
-                appliedSet.add(vacancy.slug);
-                applied++;
-                withoutLetter++;
                 logApplyEvent(
                   user.id,
                   vacancy.slug,
@@ -1220,6 +1295,7 @@ export async function runAutoApply(opts?: {
                 continue;
               }
               skipped++;
+              refundSlots();
               logApplyEvent(user.id, vacancy.slug, 'skipped_closed', result.error ?? '');
               continue;
             }
@@ -1256,6 +1332,8 @@ export async function runAutoApply(opts?: {
               slug: vacancy.slug,
               kind,
             });
+            // Отказ площадки: POST отклонён, слота не было — возвращаем оба.
+            refundSlots();
             continue;
           }
 
@@ -1285,6 +1363,9 @@ export async function runAutoApply(opts?: {
             // already_applied и тоже пропустит. Свою заявку гасим: чужую строку
             // создал чужой claim, и она закроется сама.
             if (!isUniqueViolation(err)) throw err;
+            // Строку записал параллельный прогон — у него свой списанный
+            // слот, наш возвращаем.
+            refundSlots();
             completeSend(claim.id);
             skipped++;
             logApplyEvent(user.id, vacancy.slug, 'already', 'гонка вставки: строка уже есть');
@@ -1584,6 +1665,39 @@ export async function applyToVacancy(
   if ('duplicate' in claim) {
     return { ok: false, kind: 'already', error: 'Отправка уже идёт — проверьте отклики через минуту' };
   }
+  /*
+   * Атомарное списание слотов: параллельный ручной отклик и тик планировщика
+   * делят одни счётчики (см. runAutoApply). Возвраты — как в плановом прогоне.
+   */
+  const singleDayKey = mskDayStartMs();
+  const singleDailySlot = slotKeyDaily(user.id, singleDayKey);
+  // Пересчёт перед списанием, а не значение сверху: между проверкой и сетью
+  // параллельный прогон мог уже отправить.
+  const singleLeft = Math.max(0, limit - todayCount(user.id));
+  if (singleLeft <= 0 || !tryConsumeSlot(singleDailySlot, singleLeft, singleDayKey)) {
+    completeSend(claim.id);
+    return { ok: false, kind: 'rate_limit', error: `Дневной лимит тарифа исчерпан (${limit})` };
+  }
+  let singleCompanySlot: string | null = null;
+  if (vacancy.company?.trim()) {
+    const cap = companyDailyCap();
+    if (cap > 0) {
+      singleCompanySlot = slotKeyCompany(user.id, vacancy.company, singleDayKey);
+      if (!tryConsumeSlot(singleCompanySlot, cap, singleDayKey)) {
+        refundSlot(singleDailySlot);
+        completeSend(claim.id);
+        return {
+          ok: false,
+          kind: 'paused',
+          error: `В компанию «${vacancy.company.trim()}» сегодня уже отправлено ${cap} — продолжим завтра`,
+        };
+      }
+    }
+  }
+  const refundSingle = (): void => {
+    refundSlot(singleDailySlot);
+    if (singleCompanySlot) refundSlot(singleCompanySlot);
+  };
   let result: Awaited<ReturnType<NonNullable<typeof hhProvider.apply>>>;
   try {
     result = await hhProvider.apply(vacancy, {
@@ -1592,6 +1706,7 @@ export async function applyToVacancy(
       accessToken: token,
     });
   } catch (err) {
+    refundSingle();
     completeSend(claim.id);
     throw err;
   }
@@ -1600,14 +1715,33 @@ export async function applyToVacancy(
     const kind = result.kind ?? 'other';
     completeSend(claim.id);
     if (kind === 'closed') {
+      if (result.error === ALREADY_APPLIED_ERROR) {
+        // Та же история, что в плановом прогоне: переписка есть на hh,
+        // строки в истории нет — sync её иначе не увидит. Человек смотрит
+        // на результат прямо сейчас, поэтому ошибка возвращается честно,
+        // а строка пишется для будущих синхронизаций.
+        try {
+          db.prepare(
+            `INSERT INTO applications (user_id, job_slug, resume_id, letter_id, message, status, origin, sent_at)
+             VALUES (?, ?, ?, ?, '', 'sent', 'real', ?)`,
+          ).run(user.id, vacancy.slug, sendableId, letter?.letterId ?? null, Date.now());
+        } catch (err) {
+          if (!isUniqueViolation(err)) throw err;
+        }
+        logApplyEvent(user.id, vacancy.slug, 'already', 'переписка уже есть на hh — записано в историю');
+        return { ok: false, kind, error: 'Вы уже откликались на эту вакансию' };
+      }
       // Вакансию сняли — это не отказ платформы, откат здесь только вредит.
+      refundSingle();
       logApplyEvent(user.id, vacancy.slug, 'skipped_closed', result.error ?? '');
     } else if (kind === 'auth') {
       // Отклик из чата тоже может упереться в ограничение аккаунта.
+      refundSingle();
       setBlockedUntil(user.id, Date.now() + BLOCK_STOP_MS, 'hh.ru ограничил доступ к аккаунту');
       pacing.recordFailure('blocked');
       logApplyEvent(user.id, vacancy.slug, 'blocked', result.error ?? '');
     } else {
+      refundSingle();
       pacing.recordFailure(toFailureKind(kind));
       logApplyEvent(user.id, vacancy.slug, 'failed', result.error ?? kind);
     }
@@ -1622,8 +1756,10 @@ export async function applyToVacancy(
     ).run(user.id, vacancy.slug, sendableId, letter?.letterId ?? null, message ?? '', Date.now());
   } catch (err) {
     // Гонка с плановым прогоном: строка уже есть, внешняя отправка уже
-    // случилась. Честный ответ — «уже откликались», а не 500.
+    // случилась. Честный ответ — «уже откликались», а не 500. Слот
+    // возвращаем: запись и слот держит параллельный прогон.
     if (!isUniqueViolation(err)) throw err;
+    refundSingle();
     completeSend(claim.id);
     logApplyEvent(user.id, vacancy.slug, 'already', 'гонка вставки: строка уже есть');
     return { ok: false, kind: 'already', error: 'Вы уже откликались на эту вакансию' };

@@ -15,7 +15,16 @@ import { logApplyEvent } from '@/lib/apply-events';
 import { NO_STORE_HEADERS, isUniqueViolation } from '@/lib/http';
 import { claimSend, completeSend } from '@/lib/apply-outbox';
 import { rateLimit } from '@/lib/rate-limit';
-import { companyDailyCap, companySendsToday } from '@/lib/autoapply';
+import {
+  companyDailyCap,
+  companySendsToday,
+  slotKeyDaily,
+  slotKeyCompany,
+  tryConsumeSlot,
+  refundSlot,
+  todayCount,
+  blockedUntil,
+} from '@/lib/autoapply';
 import { rankLettersForVacancy } from '@/lib/ai-matching';
 
 export async function GET(request: Request) {
@@ -107,13 +116,22 @@ export async function POST(request: Request) {
     );
   }
 
+  /*
+   * Аккаунт под ограничением площадки: ручной отклик из кабинета долбил бы
+   * тот же 403, что остановил планировщик. Бот проверяет это через pacing,
+   * здесь — прямая проверка: иначе кнопка работала бы, пока автоотклик стоит.
+   */
+  const blockedUntilTs = blockedUntil(user.id);
+  if (blockedUntilTs > 0) {
+    return NextResponse.json(
+      { error: 'hh.ru временно ограничил доступ — отклики на паузе до снятия' },
+      { status: 403, headers: { 'Retry-After': String(Math.max(1, Math.ceil((blockedUntilTs - Date.now()) / 1000))) } },
+    );
+  }
+
   const limit = planDailyLimit(user.plan);
-  const todayCount = (
-    db
-      .prepare('SELECT COUNT(*) AS c FROM applications WHERE user_id = ? AND sent_at >= ?')
-      .get(user.id, mskDayStartMs()) as { c: number }
-  ).c;
-  if (limit > 0 && todayCount >= limit) {
+  const sentToday = todayCount(user.id);
+  if (limit > 0 && sentToday >= limit) {
     // Срок — до полуночи МСК: клиент показывает «попробуйте завтра в 00:00»,
     // а не голый 429 без горизонта.
     const retryAfter = Math.max(
@@ -208,6 +226,9 @@ export async function POST(request: Request) {
   // Объявлена здесь, чтобы блок записи ниже мог её закрыть и для user-путей
   // ничего не трогать: у ручной фиксации внешнего эффекта нет.
   let claim: { id: number } | { duplicate: true } | null = null;
+  // Возврат слотов hh-ветки при гонке вставки: объявляется здесь же, чтобы
+  // блок записи видел его вне ветки.
+  let refundRoute: (() => void) | null = null;
   /*
    * Идентификатор резюме на hh для этого отклика.
    *
@@ -331,6 +352,53 @@ export async function POST(request: Request) {
         { status: 429, headers: { 'Retry-After': '60' } },
       );
     }
+    /*
+     * Атомарное списание слотов: параллельный запрос и тик планировщика
+     * делят одни счётчики. Проверка COUNT выше видит прошлое; слот —
+     * нет. Возвраты — как в плановом прогоне.
+     */
+    const routeDay = mskDayStartMs();
+    const routeDailySlot = slotKeyDaily(user.id, routeDay);
+    const routeLeft = Math.max(0, limit - todayCount(user.id));
+    if (routeLeft <= 0 || !tryConsumeSlot(routeDailySlot, routeLeft, routeDay)) {
+      completeSend(claim.id);
+      return NextResponse.json(
+        { error: `Достигнут дневной лимит откликов (${limit}). Обновите тариф.` },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(Math.max(1, Math.ceil((routeDay + 86_400_000 - Date.now()) / 1000))),
+          },
+        },
+      );
+    }
+    let routeCompanySlot: string | null = null;
+    if (vacancy.company?.trim()) {
+      const cap = companyDailyCap();
+      if (cap > 0) {
+        routeCompanySlot = slotKeyCompany(user.id, vacancy.company, routeDay);
+        if (!tryConsumeSlot(routeCompanySlot, cap, routeDay)) {
+          refundSlot(routeDailySlot);
+          completeSend(claim.id);
+          return NextResponse.json(
+            { error: `В эту компанию сегодня уже отправлено ${cap}. Продолжим завтра.` },
+            {
+              status: 429,
+              headers: {
+                'Retry-After': String(
+                  Math.max(1, Math.ceil((routeDay + 86_400_000 - Date.now()) / 1000)),
+                ),
+              },
+            },
+          );
+        }
+      }
+    }
+    const refundRouteInner = (): void => {
+      refundSlot(routeDailySlot);
+      if (routeCompanySlot) refundSlot(routeCompanySlot);
+    };
+    refundRoute = refundRouteInner;
     let sent: Awaited<ReturnType<NonNullable<typeof hhProvider.apply>>>;
     try {
       sent = await hhProvider.apply(vacancy, {
@@ -339,10 +407,12 @@ export async function POST(request: Request) {
         accessToken: valid.token,
       });
     } catch (err) {
+      refundRouteInner();
       completeSend(claim.id);
       throw err;
     }
     if (!sent.ok) {
+      refundRouteInner();
       completeSend(claim.id);
       logApplyEvent(user.id, vacancy.slug, 'failed', sent.error ?? 'hh отклонил (кабинет)');
       return NextResponse.json(
@@ -363,6 +433,29 @@ export async function POST(request: Request) {
    * после сети) — повторный разбор покажет already_applied и пропустит.
    */
   let result: { lastInsertRowid: number | bigint };
+  /*
+   * Ручная фиксация без hh (origin='user') внешнего эффекта не имеет, но
+   * строку в лимит пишет — как и плановый прогон: todayCount считает все
+   * строки, и необоснованный разрыв между счётчиком и лимитом чинить
+   * сложнее, чем списать слот здесь же. hh-путь уже списал до POST.
+   */
+  let insertSlot: { key: string; day: number } | null = null;
+  if (origin !== 'real') {
+    const day = mskDayStartMs();
+    const left = Math.max(0, limit - todayCount(user.id));
+    if (left <= 0 || !tryConsumeSlot(slotKeyDaily(user.id, day), left, day)) {
+      return NextResponse.json(
+        { error: `Достигнут дневной лимит откликов (${limit}). Обновите тариф.` },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(Math.max(1, Math.ceil((day + 86_400_000 - Date.now()) / 1000))),
+          },
+        },
+      );
+    }
+    insertSlot = { key: slotKeyDaily(user.id, day), day };
+  }
   try {
     result = db
       .prepare(
@@ -391,6 +484,10 @@ export async function POST(request: Request) {
       );
   } catch (err) {
     if (isUniqueViolation(err)) {
+      // Гонка вставки: строку записал параллельный запрос — у него свой
+      // списанный слот (или свой 429), наш возвращаем.
+      if (insertSlot) refundSlot(insertSlot.key);
+      refundRoute?.();
       if (claim && !('duplicate' in claim)) completeSend(claim.id);
       return NextResponse.json({ error: 'Вы уже откликались на эту вакансию' }, { status: 409 });
     }

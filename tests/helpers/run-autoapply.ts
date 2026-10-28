@@ -18,9 +18,15 @@ import type { PacingConfig } from '../../src/lib/anti-ban';
 
 /** Полдень сегодняшнего дня: любое время суток одинаково годно для прогона. */
 export const TEST_NOW = (() => {
-  const d = new Date();
-  d.setHours(12, 0, 0, 0);
-  return d.getTime();
+  /*
+   * Полдень именно московский, а не локальный: паузер смотрит московские
+   * часы (см. anti-ban), и локальный полдень вне MSK — это ночь, при которой
+   * прогон молча ничего не отправляет. Формула — начало текущих московских
+   * суток плюс 12 часов; работает при любой TZ процесса.
+   */
+  const MSK = 3 * 60 * 60 * 1000;
+  const dayStartUtc = Math.floor((Date.now() + MSK) / 86_400_000) * 86_400_000;
+  return dayStartUtc - MSK + 12 * 3_600_000;
 })();
 
 export function runAutoApply(opts?: {

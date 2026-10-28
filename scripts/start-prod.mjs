@@ -112,6 +112,15 @@ const child = spawn(process.execPath, ['server.js'], {
 });
 
 child.on('exit', (code) => process.exit(code ?? 0));
+/*
+ * Ошибка запуска (нет server.js, занят порт, нет прав) приходит сюда, а не
+ * в 'exit': без этого обработчика процесс-родитель молча висел бы, а
+ * настоящая причина тонула бы в stdio потомка, которого нет.
+ */
+child.on('error', (err) => {
+  console.error(`Не удалось запустить сервер: ${err.message}`);
+  process.exit(1);
+});
 
 /*
  * Проброс сигналов потомку.

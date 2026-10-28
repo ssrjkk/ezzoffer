@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyApplyFailure } from '../src/lib/vacancies/hh';
+import { classifyApplyFailure, ALREADY_APPLIED_ERROR } from '../src/lib/vacancies/hh';
 import { parsePublishedAt, relativePosted } from '../src/lib/vacancies/published';
 import { onlyFresh } from '../src/lib/autoapply';
 import type { Vacancy } from '../src/lib/vacancies/types';
@@ -66,8 +66,26 @@ test('закрытая вакансия распознаётся и не выз�
   }
 });
 
-test('лимит, истёкший токен и ограничение распознаются отдельно от закрытой вакансии', () => {
-  assert.equal(classifyApplyFailure(429, '').kind, 'rate_limit', '429 — это лимит, а не закрытие');
+test('повторный отклик — это closed, а не блокировка аккаунта', () => {
+  // Штатная ситуация «мы уже здесь были» не должна включать 6-часовую
+  // остановку: раньше любой неизвестный 403 считался ограничением аккаунта.
+  for (const body of [
+    '{"errors":[{"value":"already_applied"}]}',
+    '{"message":"Already responded"}',
+    '{"message":"negotiation already exists"}',
+    '{"message":"duplicate negotiation"}',
+    '{"message":"Вы уже откликались на эту вакансию"}',
+    '{"message":"повторный отклик запрещён"}',
+  ]) {
+    const r = classifyApplyFailure(403, body);
+    assert.equal(r.kind, 'closed', `«${body}» не распознан как повторный отклик`);
+    assert.equal(r.error, ALREADY_APPLIED_ERROR, 'текст уже-отклика должен совпадать с константой');
+  }
+  // Неизвестный 403 остаётся auth: осторожность в другую сторону.
+  assert.equal(classifyApplyFailure(403, '{"message":"something strange"}').kind, 'auth');
+});
+
+test('лимит, истёкший токен и ограничение распознаются отдельно от закрытой вакансии', () => {  assert.equal(classifyApplyFailure(429, '').kind, 'rate_limit', '429 — это лимит, а не закрытие');
   assert.equal(classifyApplyFailure(503, '').kind, 'rate_limit', '503 — временная недоступность');
   /*
    * 401 и 403 разведены намеренно.

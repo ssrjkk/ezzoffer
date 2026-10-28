@@ -11,7 +11,7 @@
  * Остановка: Ctrl+C (снимает offset, дубликатов не будет — inbox держит PK).
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync, writeFileSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -55,6 +55,52 @@ const POLL_TIMEOUT_SEC = 30;
 if (!TOKEN) {
   console.error('TELEGRAM_BOT_TOKEN не задан');
   process.exit(1);
+}
+
+/*
+ * Одиночество поллера: два getUpdates-консьюмера на одном боте делят
+ * обновления между собой, и каждый видит только часть переписки.
+ * Дедуп по tg_inbox спасает от двойной обработки, но не от пропусков:
+ * апдейт, отданный второму процессу, первым уже не получить.
+ *
+ * Pidfile с проверкой живости: stale-файл от упавшего процесса не блокирует
+ * новый запуск (kill с сигналом 0 только проверяет существование).
+ */
+const PID_FILE = path.join(root, 'data', '.bot-poll.pid');
+try {
+  const old = Number(readFileSync(PID_FILE, 'utf8').trim());
+  let alive = Number.isInteger(old) && old > 0;
+  if (alive) {
+    try {
+      process.kill(old, 0);
+    } catch {
+      alive = false;
+    }
+  }
+  if (alive) {
+    console.error(`Поллер уже работает (PID ${old}). Второй экземпляр делит обновления и теряет их.`);
+    process.exit(1);
+  }
+} catch {
+  // Файла нет или не читается — занимаем место.
+}
+mkdirSync(path.dirname(PID_FILE), { recursive: true });
+writeFileSync(PID_FILE, String(process.pid));
+const releasePidFile = () => {
+  try {
+    if (readFileSync(PID_FILE, 'utf8').trim() === String(process.pid)) {
+      unlinkSync(PID_FILE);
+    }
+  } catch {
+    // Уже убран или чужой — не трогаем.
+  }
+};
+process.on('exit', releasePidFile);
+for (const sig of ['SIGINT', 'SIGTERM']) {
+  process.on(sig, () => {
+    releasePidFile();
+    process.exit(0);
+  });
 }
 
 const api = (method, body) =>

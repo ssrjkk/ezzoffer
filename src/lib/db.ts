@@ -319,6 +319,25 @@ CREATE INDEX IF NOT EXISTS idx_applications_user_job ON applications(user_id, jo
 CREATE UNIQUE INDEX IF NOT EXISTS ux_applications_once
   ON applications(user_id, job_slug) WHERE withdrawn = 0;
 CREATE INDEX IF NOT EXISTS idx_letters_user ON letters(user_id);
+
+/*
+ * Атомарные слоты отправки: защита дневного лимита и потолка на компанию
+ * от гонки «проверил → отправил». SELECT COUNT → POST → INSERT считает
+ * правильно, только пока запрос один: два параллельных (двойной клик,
+ * кабинет + планировщик + бот) оба видят count < limit и оба уходят в сеть.
+ * UNIQUE-индекс ловит только дубль той же вакансии, а превышение лимита —
+ * нет. Слот списывается одним statement (INSERT ... ON CONFLICT DO UPDATE
+ * ... WHERE cnt < cap ... RETURNING): второй писатель получает пусто и
+ * встаёт в 429, не трогая площадку.
+ *
+ * Ключ включает московские сутки: лимиты у нас дневные по Москве, старые
+ * дни вычищаются при каждом списании. cap = 0 отключает потолок, как везде.
+ */
+CREATE TABLE IF NOT EXISTS send_slots (
+  key TEXT PRIMARY KEY,
+  day INTEGER NOT NULL,
+  cnt INTEGER NOT NULL DEFAULT 0
+);
 `;
 
 export function createDatabase(filePath: string): Database.Database {

@@ -231,6 +231,13 @@ test('периоды резолвятся в позиции каталога, м
   assert.equal(resolvePeriodPlan('start', 1), null, 'неизвестный период принят');
   assert.equal(resolvePeriodPlan('nope', 30), null, 'неизвестный тариф принят');
   assert.equal(resolvePeriodPlan('beta_life', 30), null, 'вечный тариф продали днями');
+  // Границы: ноль, отрицательный, NaN, пробелы, регистр, суффикс+период.
+  for (const days of [0, -7, NaN, 31]) {
+    assert.equal(resolvePeriodPlan('start', days), null, `период ${days} принят`);
+  }
+  assert.equal(resolvePeriodPlan(' Start ', 7), null, 'пробелы приняты');
+  assert.equal(resolvePeriodPlan('START', 7), null, 'регистр принят');
+  assert.equal(resolvePeriodPlan('start-7', 30), null, 'суффикс+период принят');
 });
 
 test('витрина продаёт ровно то, что есть в каталоге', async () => {

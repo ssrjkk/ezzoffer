@@ -48,6 +48,7 @@ function seedUser(over: Partial<import('../src/lib/db').User> = {}): number {
     'sessions',
     'oauth_states',
     'telegram_codes',
+    'send_slots',
   ]) {
     try {
       appDb.prepare(`DELETE FROM ${t}`).run();

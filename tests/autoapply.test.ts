@@ -1,4 +1,4 @@
-import test, { before } from 'node:test';
+import test, { before, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 type Database = ReturnType<typeof import('../src/lib/db').createDatabase>;
@@ -19,6 +19,17 @@ before(async () => {
   // Часы прогона фиксированы: см. helpers/run-autoapply — иначе ночью
   // паузер не отправляет, и тесты падали по настенным часам.
   runAutoApply = (await import('./helpers/run-autoapply')).runAutoApply;
+});
+
+beforeEach(async () => {
+  // Полная изоляция тестов друг от друга: раньше её не было, и каждый тест
+  // подчищал за собой вручную — пропущенная строка тихо текла в следующий
+  // (поиски и вакансии чужих тестов участвуют в чужом прогоне).
+  db.exec(
+    'DELETE FROM apply_events; DELETE FROM auth_attempts; DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies; DELETE FROM meta; DELETE FROM send_slots;',
+  );
+  (await import('../src/lib/vacancies')).resetCatalogCache();
+  (await import('../src/lib/autoapply')).resetPacing();
 });
 
 test('runAutoApply без hh-подключения не создаёт отклики (никакой симуляции)', async () => {
@@ -60,13 +71,38 @@ test('runAutoApply c hh-подключением пытается отправи
     `INSERT INTO searches (user_id, title, keywords, active, started_at, created_at)
      VALUES (?, ?, ?, 1, ?, ?)`,
   ).run(uid, 's', 'frontend', Date.now(), Date.now());
+  db.prepare(
+    `INSERT INTO vacancies (slug, source, source_id, title, company, salary, salary_min, salary_max,
+       level, format, city, posted, published_at, category, about, requirements, bonus,
+       contact_email, contact_phone, fetched_at)
+     VALUES ('hh-e2e-1', 'hh', 'e2e-1', 'Frontend-разработчик', 'ООО', '200000', 200000, 300000,
+       'Middle', 'Удалённо', 'Москва', 'сегодня', ?, 'Разработка', 'Требуются: Frontend', '["Frontend"]', '[]', NULL, NULL, ?)`,
+  ).run(Date.now(), Date.now());
+  const { resetCatalogCache } = await import('../src/lib/vacancies');
+  resetCatalogCache();
 
-  const result = await runAutoApply();
-  assert.ok(Array.isArray([result.applied, result.failed, result.skipped]));
-  // Воркер отработал, но реальный POST к api.hh.ru недоступен в тестах —
-  // главное, что не падает и не фабрикует строки "sent" вручную.
-  assert.equal(result.demoUsers, 0, 'пользователь в live не должен попадать в счётчик демо-режима');
-  delete process.env.HH_ACCESS_TOKEN;
+  let posts = 0;
+  const saved = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL) => {
+    const u = String(url);
+    if (u.includes('/negotiations')) {
+      posts++;
+      return { ok: true, status: 200, text: async () => '{}' } as unknown as Response;
+    }
+    if (u.includes('/vacancies/e2e-1')) {
+      return { ok: true, status: 200, text: async () => '{"id":"e2e-1"}' } as unknown as Response;
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ items: [] }) };
+  }) as unknown as typeof globalThis.fetch;
+  try {
+    const result = await runAutoApply();
+    assert.equal(posts, 1, 'провайдер не вызван: отправка не дошла до сети');
+    assert.equal(result.applied, 1, `отклик не записан: ${JSON.stringify({ applied: result.applied, failed: result.failed })}`);
+    assert.equal(result.demoUsers, 0, 'пользователь в live не должен попадать в счётчик демо-режима');
+  } finally {
+    globalThis.fetch = saved;
+    delete process.env.HH_ACCESS_TOKEN;
+  }
 });
 
 /**

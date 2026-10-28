@@ -21,9 +21,10 @@ before(async () => {
 });
 
 beforeEach(() => {
-  for (const table of ['resumes', 'letters', 'searches', 'applications', 'users']) {
+  for (const table of ['resumes', 'letters', 'searches', 'applications', 'users', 'send_slots']) {
     db.prepare(`DELETE FROM ${table}`).run();
   }
+  db.exec("DELETE FROM meta WHERE key LIKE 'pacing:%';");
   loginAs();
 });
 
@@ -147,6 +148,28 @@ test('POST /api/applications упирается в потолок компани
   assert.ok(res.headers.get('Retry-After'), 'нет Retry-After у 429 потолка компании');
 });
 
+test('POST /api/applications уважает блокировку аккаунта площадкой', async () => {
+  makeUser(46, 'blocked@example.test');
+  db.prepare(
+    "UPDATE users SET hh_token = 'tok', hh_token_expires_at = ?, hh_resume_id = 'res123', mode = 'live', autoapply_blocked_until = ?, autoapply_block_reason = 'hh.ru ограничил доступ' WHERE id = 46",
+  ).run(Date.now() + 3600_000, Date.now() + 3600_000);
+  db.prepare(
+    `INSERT INTO vacancies (slug, source, source_id, title, company, salary, salary_min, salary_max,
+       level, format, city, posted, published_at, category, about, requirements, bonus,
+       contact_email, contact_phone, fetched_at)
+     VALUES ('hh-blocked-1', 'hh', 'blocked-1', 'React-разработчик', 'Яндекс', '200000', 200000, 300000,
+       'Middle', 'Удалённо', 'Москва', 'сегодня', ?, 'Разработка', 'Требуются: React', '["React"]', '[]', NULL, NULL, ?)`,
+  ).run(Date.now(), Date.now());
+  const { resetCatalogCache } = await import('../src/lib/vacancies');
+  resetCatalogCache();
+  loginAs({ id: 46, plan: 'pro' });
+
+  const { POST } = await import('../src/app/api/applications/route');
+  const res = await POST(post({ jobSlug: 'hh-blocked-1' }));
+  assert.equal(res.status, 403, `отклик из кабинета прошёл мимо блокировки: ${res.status}`);
+  assert.ok(res.headers.get('Retry-After'), 'нет Retry-After у 403 блокировки');
+});
+
 test('POST improve ai-first без топ-тарифа → 402', async () => {
   makeUser(43, 'nofirst@example.test');
   const rid = makeResume(43);
@@ -173,6 +196,68 @@ test('POST improve ai-first на Эксперте работает и честн
   const body = await readJson<{ engine?: string }>(res);
   // Без AI_API_KEY провайдер недоступен: честный откат на правила, а не враньё про ai-first.
   assert.equal(body.engine, 'rules', `движок соврал: ${body.engine}`);
+});
+
+test('POST improve ai-first с провайдером возвращает engine ai-first', async () => {
+  makeUser(45, 'aifirst@example.test');
+  db.prepare("UPDATE users SET plan = 'expert' WHERE id = 45").run();
+  const rid = makeResume(45);
+  loginAs({ id: 45, plan: 'expert' });
+  process.env.AI_API_KEY = 'test-key';
+  const saved = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    const payload = JSON.stringify({
+      choices: [
+        {
+          message: {
+            content: JSON.stringify({
+              content: 'AI-first упакованный текст',
+              notes: ['n'],
+              tips: ['t'],
+            }),
+          },
+        },
+      ],
+    });
+    return { ok: true, status: 200, text: async () => payload, json: async () => JSON.parse(payload) };
+  }) as unknown as typeof globalThis.fetch;
+  try {
+    const { POST } = await import('../src/app/api/resumes/[id]/improve/route');
+    const res = await POST(post({ mode: 'ai-first' }), {
+      params: Promise.resolve({ id: String(rid) }),
+    });
+    assert.equal(res.status, 200, `ai-first с провайдером: ${res.status}`);
+    const body = await readJson<{ engine?: string; resume?: { content?: string } }>(res);
+    assert.equal(body.engine, 'ai-first', `движок не ai-first: ${body.engine}`);
+    assert.match(body.resume?.content ?? '', /упакованный/, 'контент не от провайдера');
+  } finally {
+    globalThis.fetch = saved;
+    delete process.env.AI_API_KEY;
+  }
+});
+
+test('POST improve без режима с провайдером возвращает engine ai', async () => {
+  makeUser(46, 'aistd@example.test');
+  const rid = makeResume(46);
+  loginAs({ id: 46, plan: 'pro' });
+  process.env.AI_API_KEY = 'test-key';
+  const saved = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    const payload = JSON.stringify({
+      choices: [{ message: { content: JSON.stringify({ content: 'Стандартно улучшено', notes: [], tips: [] }) } }],
+    });
+    return { ok: true, status: 200, text: async () => payload, json: async () => JSON.parse(payload) };
+  }) as unknown as typeof globalThis.fetch;
+  try {
+    const { POST } = await import('../src/app/api/resumes/[id]/improve/route');
+    const res = await POST(post({}), { params: Promise.resolve({ id: String(rid) }) });
+    assert.equal(res.status, 200);
+    const body = await readJson<{ engine?: string }>(res);
+    assert.equal(body.engine, 'ai', `движок не ai: ${body.engine}`);
+  } finally {
+    globalThis.fetch = saved;
+    delete process.env.AI_API_KEY;
+  }
 });
 
 test('GET /api/letters без сессии → 401', async () => {
@@ -887,19 +972,34 @@ test('PUT /api/profile отклоняет нечисловые ожидания 
 test('PUT /api/profile требует текущий пароль для смены email', async () => {
   makeUser(1, 'me@example.test');
   const { PUT } = await import('../src/app/api/profile/route');
+  const { authCalls, setVerifyPasswordResult } = await import('./helpers/route-session');
 
   // Без пароля — отказ.
   const noPass = await PUT(write('PUT', { email: 'new@example.test' }));
   assert.equal(noPass.status, 403);
 
-  // С паролем — email занят другим аккаунтом.
+  // С паролем — email занят другим аккаунтом. Роут обязан спросить пароль:
+  // без вызова verifyPassword смена email требовала бы только знания адреса.
+  const before = authCalls.verifyPassword;
   makeUser(2, 'taken@example.test');
   const taken = await PUT(write('PUT', { email: 'taken@example.test', currentPassword: 'old' }));
   assert.equal(taken.status, 409);
+  assert.ok(authCalls.verifyPassword > before, 'роут не вызвал verifyPassword');
 
   // С валидным паролем и свободным email — успех.
   const ok = await PUT(write('PUT', { email: 'fresh@example.test', currentPassword: 'old' }));
   assert.equal(ok.status, 200);
+
+  // Неверный пароль — 403, email не меняется (остаётся fresh@example.test с прошлого шага).
+  setVerifyPasswordResult(false);
+  try {
+    const wrong = await PUT(write('PUT', { email: 'other@example.test', currentPassword: 'wrong' }));
+    assert.equal(wrong.status, 403, 'чужой пароль принят');
+    const kept = db.prepare('SELECT email FROM users WHERE id = 1').get() as { email: string };
+    assert.equal(kept.email, 'fresh@example.test', 'email сменился при неверном пароле');
+  } finally {
+    setVerifyPasswordResult(true);
+  }
 });
 
 test('POST /api/searches ограничен двадцатью на пользователя', async () => {

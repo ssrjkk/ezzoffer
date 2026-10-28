@@ -50,7 +50,7 @@ before(async () => {
 beforeEach(() => {
   // Порядок обязателен: дети удаляются раньше родителя.
   db.exec(
-    'DELETE FROM apply_events; DELETE FROM auth_attempts; DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies;',
+    'DELETE FROM apply_events; DELETE FROM auth_attempts; DELETE FROM applications; DELETE FROM searches; DELETE FROM resumes; DELETE FROM users; DELETE FROM vacancies; DELETE FROM send_slots;',
   );
   /*
    * getCatalog() кэширует выборку на 30 секунд и сам сбрасывается только
@@ -59,6 +59,7 @@ beforeEach(() => {
    * этого тест с двумя вакансиями видел одну и цикл не доходил до паузы.
    */
   resetCatalogCache();
+  db.exec("DELETE FROM meta WHERE key LIKE 'pacing:%';");
   sent = [];
 });
 

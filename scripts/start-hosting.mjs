@@ -64,6 +64,12 @@ const child = spawn(process.execPath, ['server.js'], {
   stdio: 'inherit',
 });
 child.on('exit', (code) => process.exit(code ?? 0));
+// Ошибка запуска (нет server.js, занят порт) приходит сюда, а не в 'exit':
+// без обработчика родитель молча висел бы без диагностики.
+child.on('error', (err) => {
+  console.error(`Не удалось запустить сервер: ${err.message}`);
+  process.exit(1);
+});
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => child.kill(sig));
 }

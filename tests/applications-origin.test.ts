@@ -222,6 +222,8 @@ test('POST /api/applications по не-hh вакансии пишет origin=use
   appDb.prepare('DELETE FROM apply_events').run();
   appDb.prepare('DELETE FROM applications').run();
   appDb.prepare('DELETE FROM users WHERE id = 1').run();
+  appDb.prepare('DELETE FROM send_slots').run();
+  appDb.prepare("DELETE FROM meta WHERE key LIKE 'pacing:%'").run();
   appDb
     .prepare(
       "INSERT INTO users (id, email, password_hash, plan, plan_expires_at, created_at, email_verified) VALUES (1,'o@test','h','pro',?, ?,1)",
@@ -254,6 +256,8 @@ test('applyToVacancy через hh API пишет origin=real', async () => {
     appDb.prepare('DELETE FROM apply_events').run();
     appDb.prepare('DELETE FROM applications').run();
     appDb.prepare('DELETE FROM users WHERE id = 1').run();
+    appDb.prepare('DELETE FROM send_slots').run();
+    appDb.prepare("DELETE FROM meta WHERE key LIKE 'pacing:%'").run();
     const uid = Number(
       appDb
         .prepare(

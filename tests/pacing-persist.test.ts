@@ -28,7 +28,7 @@ before(async () => {
 });
 
 beforeEach(() => {
-  db.exec('DELETE FROM meta; DELETE FROM users;');
+  db.exec('DELETE FROM meta; DELETE FROM users; DELETE FROM send_slots;');
   resetPacing();
 });
 
@@ -67,6 +67,30 @@ test('битый снимок — как его отсутствие', () => {
   b.restore({} as never);
   const d = b.decide(NOW);
   assert.ok(d.allowed, 'битый снимок сломал паузер');
+});
+
+test('мусор в снимке санитизируется, а не роняет паузер', () => {
+  const cfg = { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0, workStartHour: 0, workEndHour: 24 };
+  const dirty = {
+    cooldownMs: 'через час' as never,
+    failAt: NaN,
+    failKind: 'blocked' as const,
+    failStreak: -5,
+    retryAfterUntil: Infinity,
+    retryDetail: 42 as never,
+    blockUntil: -100,
+  };
+  const p = antiBan.createPacing(cfg);
+  p.restore(dirty as never);
+  // Отрицательный/NaN/Infinity мусор обнулён: паузер разрешает отправку.
+  const d = p.decide(NOW);
+  assert.ok(d.allowed, `мусор заблокировал паузер: ${JSON.stringify(d)}`);
+  // Корректная часть мусора применяется: валидный failKind переживает restore.
+  const q = antiBan.createPacing(cfg);
+  q.restore({ ...dirty, failAt: NOW, failStreak: 2, failKind: 'blocked' } as never);
+  const d2 = q.decide(NOW + 1000);
+  assert.equal(d2.allowed, false, 'валидный blocked не восстановлен');
+  assert.equal(d2.reason, 'backoff');
 });
 
 test('pacingFor сохраняет снимок на живую отправку и поднимает его после рестарта', () => {

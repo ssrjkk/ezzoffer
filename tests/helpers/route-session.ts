@@ -75,6 +75,18 @@ export const authCalls = {
   verifyPassword: 0,
 };
 
+/*
+ * Принудительный результат проверки пароля для тестов неверного пароля.
+ * По умолчанию true (как раньше): большинство тестов проверяют не саму
+ * криптографию — она покрыта юнит-тестами паролей, — а ветвление роутов.
+ * После использования вернуть true (в finally), иначе следующий тест
+ * унаследует чужой отказ.
+ */
+let verifyResult = true;
+export function setVerifyPasswordResult(v: boolean): void {
+  verifyResult = v;
+}
+
 mock.module('../../src/lib/auth.ts', {
   exports: {
     getCurrentUser: async (): Promise<User | undefined> => currentUser ?? undefined,
@@ -84,7 +96,7 @@ mock.module('../../src/lib/auth.ts', {
     },
     verifyPassword: async (): Promise<boolean> => {
       authCalls.verifyPassword++;
-      return true;
+      return verifyResult;
     },
     needsRehash: (): boolean => false,
     SESSION_COOKIE: 'ez_session',

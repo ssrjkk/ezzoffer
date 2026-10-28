@@ -20,7 +20,7 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 
 /**
- * Часы, привязанные к локальному времени и не заходящие за границу рабочего дня.
+ * Часы, привязанные к московскому времени и не заходящие за границу рабочего дня.
  *
  * Две ловушки, обе уже стоили прогона.
  *
@@ -31,14 +31,17 @@ const HOUR = 60 * MINUTE;
  * Вторая: попытка починить это через `setHours(18)` дала три часа вместо
  * семи — стрелка ставилась на локальные 18:00, то есть на 15:00 UTC.
  *
- * Теперь старт — локальные 09:00, а `hours()` двигает время вперёд по часам.
- * Рабочее окно по умолчанию 9:00–20:00, поэтому любой шаг должен укладываться
- * в 09:00–19:00 — это видно глазами в каждом тесте.
+ * Третья (поймана аудитом): старт через локальные `setHours(9)` и проверка
+ * окна локальными часами работают только в MSK-таймзоне процесса. Вне её
+ * локальные 09:00 — это ночь по Москве, и тест измеряет backoff вместо
+ * рабочего дня. Поэтому старт — абсолютный MSK-полдень через Date.UTC,
+ * а проверка окна — тоже по Москве.
  */
-function makeClock(localStartHour = 9) {
-  const d = new Date();
-  d.setHours(localStartHour, 0, 0, 0);
-  let t = d.getTime();
+const MSK_OFFSET_MS = 3 * 60 * 60 * 1000;
+
+function makeClock(mskStartHour = 12) {
+  const dayStartUtc = Math.floor((Date.now() + MSK_OFFSET_MS) / 86_400_000) * 86_400_000;
+  let t = dayStartUtc - MSK_OFFSET_MS + mskStartHour * 3_600_000;
   return {
     now: () => t,
     advance: (ms: number) => {
@@ -49,9 +52,9 @@ function makeClock(localStartHour = 9) {
     },
     /** Только для проверок: утверждает, что время внутри рабочего окна. */
     assertWorkHour() {
-      const h = new Date(t).getHours();
+      const h = new Date(t + MSK_OFFSET_MS).getUTCHours();
       if (h < 9 || h >= 20) {
-        throw new Error(`тест ушёл в ${h}:00 — decide() вернёт «ночь» и измерит не то`);
+        throw new Error(`тест ушёл в ${h}:00 МСК — decide() вернёт «ночь» и измерит не то`);
       }
     },
   };
@@ -163,7 +166,7 @@ test('успешная отправка обнуляет серию отказо
 });
 
 test('сетевой сбой не растёт как отказ площадки', () => {
-  const clock = makeClock();
+  const clock = makeClock(9);
   const p = pacingFor(clock);
 
   const waits: number[] = [];
