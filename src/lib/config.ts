@@ -71,6 +71,62 @@ export function workEndHour(): number {
   return Math.min(24, Math.max(1, Math.round(n)));
 }
 
+/**
+ * Вероятность длинного перерыва после отправки (0–1). 0 — выключено.
+ *
+ * Дефолт выключен не потому, что перерывы не нужны, а потому, что это
+ * политика объёма: её включает деплой (.env, compose), а не код. Тесты и
+ * локальная разработка идут без искусственных пауз.
+ */
+export function longBreakChance(): number {
+  const raw = process.env.AUTOAPPLY_LONG_BREAK_CHANCE;
+  if (raw === undefined || raw.trim() === '') return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(1, Math.max(0, n));
+}
+
+/** Границы длинного перерыва, секунды. Перепутанные min/max схлопываются сами. */
+export function longBreakMinSec(): number {
+  return Math.max(0, num(process.env.AUTOAPPLY_LONG_BREAK_MIN_SEC, 900));
+}
+
+export function longBreakMaxSec(): number {
+  return Math.max(0, num(process.env.AUTOAPPLY_LONG_BREAK_MAX_SEC, 2700));
+}
+
+/**
+ * Множитель суточного лимита на выходных (0–1). 1 — выключено.
+ *
+ * Живой соискатель в выходные либо отдыхает, либо наоборот разбирает
+ * накопившееся — но ровные будние объёмы семь дней в неделю без единого
+ * спада выглядят машинными. 0.5 режет выходные вдвое, 0 оставляет дежурный
+ * минимум в один отклик (полный ноль прятал бы причину остановки).
+ */
+export function weekendFactor(): number {
+  const raw = process.env.AUTOAPPLY_WEEKEND_FACTOR;
+  if (raw === undefined || raw.trim() === '') return 1;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 1;
+  return Math.min(1, Math.max(0, n));
+}
+
+/**
+ * Прогрев нового отправителя, дней. 0 — выключено.
+ *
+ * Свежий аккаунт, в первый же день упирающийся в полный дневной лимит, —
+ * классический триггер ограничений: ни один живой человек так не начинает.
+ * Прогрев растит доступный объём линейно от 1/warmupDays в день первой
+ * отправки до полного к концу срока. Верх — 30 дней, дольше тянуть бессмысленно.
+ */
+export function warmupDays(): number {
+  const raw = process.env.AUTOAPPLY_WARMUP_DAYS;
+  if (raw === undefined || raw.trim() === '') return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(30, Math.max(0, Math.floor(n)));
+}
+
 export type EffectivePacing = {
   dailyCap: number;
   hourlyCap: number;
@@ -78,6 +134,11 @@ export type EffectivePacing = {
   maxDelayMs: number;
   workStartHour: number;
   workEndHour: number;
+  /** Вероятность длинного перерыва после отправки (0–1). */
+  longBreakChance: number;
+  /** Границы длинного перерыва, мс. */
+  longBreakMinMs: number;
+  longBreakMaxMs: number;
 };
 
 /** Параметры паузинга с учётом глобальных мягких лимитов. */
@@ -93,6 +154,8 @@ export function effectivePacing(planDaily: number): EffectivePacing {
    */
   const loSec = Math.min(minApplyIntervalSec(), maxApplyIntervalSec());
   const hiSec = Math.max(minApplyIntervalSec(), maxApplyIntervalSec());
+  const loBreakSec = Math.min(longBreakMinSec(), longBreakMaxSec());
+  const hiBreakSec = Math.max(longBreakMinSec(), longBreakMaxSec());
   return {
     dailyCap,
     hourlyCap: globalHourlyCap(),
@@ -100,5 +163,8 @@ export function effectivePacing(planDaily: number): EffectivePacing {
     maxDelayMs: hiSec * 1000,
     workStartHour: workStartHour(),
     workEndHour: workEndHour(),
+    longBreakChance: longBreakChance(),
+    longBreakMinMs: loBreakSec * 1000,
+    longBreakMaxMs: hiBreakSec * 1000,
   };
 }

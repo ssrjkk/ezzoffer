@@ -57,6 +57,14 @@ services:
       - AUTOAPPLY_HOURLY_CAP=${AUTOAPPLY_HOURLY_CAP:-12}
       - AUTOAPPLY_MIN_INTERVAL_SEC=${AUTOAPPLY_MIN_INTERVAL_SEC:-45}
       - AUTOAPPLY_MAX_INTERVAL_SEC=${AUTOAPPLY_MAX_INTERVAL_SEC:-180}
+      # Человеческий профиль отправок (анти-детект): редкие длинные перерывы
+      # вместо ровного потока, вдвое меньше объёма в выходные, линейный
+      # прогрев нового отправителя за 7 дней. Ноль/пусто — механизм выключен.
+      - AUTOAPPLY_LONG_BREAK_CHANCE=${AUTOAPPLY_LONG_BREAK_CHANCE:-0.12}
+      - AUTOAPPLY_LONG_BREAK_MIN_SEC=${AUTOAPPLY_LONG_BREAK_MIN_SEC:-900}
+      - AUTOAPPLY_LONG_BREAK_MAX_SEC=${AUTOAPPLY_LONG_BREAK_MAX_SEC:-2700}
+      - AUTOAPPLY_WEEKEND_FACTOR=${AUTOAPPLY_WEEKEND_FACTOR:-0.5}
+      - AUTOAPPLY_WARMUP_DAYS=${AUTOAPPLY_WARMUP_DAYS:-7}
       - TRUST_PROXY=1
     volumes:
       - ./data:/app/data

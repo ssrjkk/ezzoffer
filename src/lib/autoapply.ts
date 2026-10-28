@@ -1,12 +1,12 @@
 import { db, type User } from './db';
-import { mskDayStartMs } from './moscow-day';
+import { mskDayStartMs, MSK_OFFSET_MS, DAY_MS } from './moscow-day';
 import { isPlanActive, planDailyLimit } from './plans';
 import { matchesSearch, skillsByVacancy, type SearchRow } from './matcher';
 import { getCatalog } from './vacancies';
 import { hhProvider } from './vacancies/hh';
 import { getValidHhToken } from './hh-oauth';
 import { createPacing, type FailureKind, type Pacing, type PacingConfig } from './anti-ban';
-import { effectivePacing, autoapplyEnabled, autoapplyDryRun } from './config';
+import { effectivePacing, autoapplyEnabled, autoapplyDryRun, weekendFactor, warmupDays } from './config';
 import { notifyAccountBlocked, notifyHhTokenExpiredForUser, clearHhTokenWarning } from './telegram-digest';
 import { renderLetterTemplate } from './cover-letter';
 import { rankLettersForVacancy } from './ai-matching';
@@ -191,6 +191,55 @@ function todayCount(userId: number): number {
     .prepare('SELECT COUNT(*) AS c FROM applications WHERE user_id = ? AND sent_at >= ?')
     .get(userId, start) as { c: number };
   return row.c;
+}
+
+/** Момент первой в истории отправки пользователя. Нет отправок — null. */
+export function firstApplySentAt(userId: number): number | null {
+  const row = db
+    .prepare('SELECT MIN(sent_at) AS v FROM applications WHERE user_id = ?')
+    .get(userId) as { v: number | null } | undefined;
+  return typeof row?.v === 'number' ? row.v : null;
+}
+
+/** День недели по Москве: 0 — воскресенье, 6 — суббота. */
+export function mskWeekday(nowMs: number): number {
+  return new Date(nowMs + MSK_OFFSET_MS).getUTCDay();
+}
+
+/**
+ * Смягчение объёма на выходных.
+ *
+ * Ровные будние объёмы семь дней в неделю без единого спада выглядят
+ * машинными. factor = 1 (дефолт env) — выключено. Внизу — дежурный минимум
+ * в один отклик: полный ноль прятал бы причину остановки за «паузой».
+ */
+export function weekendScaledCap(cap: number, nowMs: number): number {
+  const factor = weekendFactor();
+  if (factor >= 1) return cap;
+  const day = mskWeekday(nowMs);
+  if (day !== 0 && day !== 6) return cap;
+  return Math.max(1, Math.floor(cap * factor));
+}
+
+/**
+ * Прогрев нового отправителя: линейный рост доступного объёма.
+ *
+ * Свежий аккаунт, в первый же день упирающийся в полный дневной лимит, —
+ * классический триггер ограничений. Отсчёт — от первой реальной отправки
+ * (поведенческий возраст, а не created_at: аккаунт мог год лежать без
+ * единой отправки). days = 0 (дефолт env) — выключено. Нет отправок —
+ * самый строгий режим: первая неделя начинается с 1/warmupDays объёма.
+ */
+export function warmupScaledCap(
+  cap: number,
+  firstSentAt: number | null,
+  days: number,
+  nowMs: number,
+): number {
+  if (days <= 0) return cap;
+  const ageDays = firstSentAt === null ? 0 : Math.max(0, Math.floor((nowMs - firstSentAt) / DAY_MS));
+  const factor = Math.min(1, (ageDays + 1) / days);
+  return Math.max(1, Math.floor(cap * factor));
 }
 
 /**
@@ -559,7 +608,16 @@ export async function runAutoApply(opts?: {
       // Анти-бан: суточный лимит = остаток от тарифа (с учётом глобального
       // потолка), часовой лимит и паузы — из конфигурации.
       const eff = effectivePacing(limit);
-      const effectiveDaily = Math.min(remaining, eff.dailyCap);
+      /*
+       * Человеческий профиль объёма: прогрев нового отправителя и смягчение
+       * выходных. Оба множителя по умолчанию выключены (env) и включаются
+       * деплоем; подробности — у хелперов выше. Дежурный минимум — 1: полный
+       * ноль прятал бы причину остановки за generic-паузой.
+       */
+      let effectiveDaily = Math.min(remaining, eff.dailyCap);
+      effectiveDaily = weekendScaledCap(effectiveDaily, nowFn());
+      effectiveDaily = warmupScaledCap(effectiveDaily, firstApplySentAt(user.id), warmupDays(), nowFn());
+      if (effectiveDaily <= 0) continue;
       // effectivePacing отдаёт hourlyCap, а PacingConfig ждёт hourlyLimit:
       // имена разные, и прямое spread-кладение effectivePacing в configure
       // оставляло часовой лимит дефолтным (12) при любом AUTOAPPLY_HOURLY_CAP.
@@ -569,6 +627,9 @@ export async function runAutoApply(opts?: {
         maxDelayMs: eff.maxDelayMs,
         workStartHour: eff.workStartHour,
         workEndHour: eff.workEndHour,
+        longBreakChance: eff.longBreakChance,
+        longBreakMinMs: eff.longBreakMinMs,
+        longBreakMaxMs: eff.longBreakMaxMs,
       };
       /*
        * Переданные извне паузы имеют приоритет над конфигурацией.

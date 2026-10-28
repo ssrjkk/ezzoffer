@@ -47,6 +47,18 @@ export type PacingConfig = {
   workEndHour: number;
   /** Минуты, округляем вниз к границе часа (защита от ровного ритма). */
   jitterMinutes: number;
+  /**
+   * Вероятность длинного перерыва после отправки (0–1). 0 — выключено.
+   *
+   * Равномерные 45 секунд – 6 минут заполняют каждый час одинаково плотно,
+   * а живой человек так не работает: он отвлекается на полчаса-час. Без
+   * длинных перерывов распределение отправок по дню выглядит машинным даже
+   * при случайных интервалах.
+   */
+  longBreakChance: number;
+  /** Границы длинного перерыва, мс. */
+  longBreakMinMs: number;
+  longBreakMaxMs: number;
 };
 
 export const DEFAULT_PACING: PacingConfig = {
@@ -57,6 +69,9 @@ export const DEFAULT_PACING: PacingConfig = {
   workStartHour: 9,
   workEndHour: 20,
   jitterMinutes: 3,
+  longBreakChance: 0,
+  longBreakMinMs: 15 * 60_000,
+  longBreakMaxMs: 45 * 60_000,
 };
 
 const MINUTE = 60_000;
@@ -148,6 +163,18 @@ export function createPacing(
   let pendingDelayMs = 0;
 
   const randomDelay = (): number => {
+    /*
+     * Длинный перерыв вместо обычной паузы: человек отвлёкся, ушёл обедать,
+     * закрыл вкладку. Вероятность маленькая, но именно эти разрывы ломают
+     * машинную равномерность: без них каждый час дня заполнен одинаково.
+     * chance = 0 (дефолт и все существующие тесты) — поведение прежнее.
+     */
+    const chance = Math.min(1, Math.max(0, cfg.longBreakChance));
+    if (chance > 0 && Math.random() < chance) {
+      const lo = Math.max(0, Math.min(cfg.longBreakMinMs, cfg.longBreakMaxMs));
+      const hi = Math.max(cfg.longBreakMinMs, cfg.longBreakMaxMs);
+      return Math.round(lo + Math.random() * (hi - lo));
+    }
     const base = Math.round(cfg.minDelayMs + Math.random() * (cfg.maxDelayMs - cfg.minDelayMs));
     const jitter = Math.floor(Math.random() * (cfg.jitterMinutes + 1)) * 60_000;
     return base + jitter;
