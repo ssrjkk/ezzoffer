@@ -12,6 +12,17 @@ export const PLAN_NAMES: Record<string, string> = {
   beta_life: 'Навсегда (бета)',
 };
 
+/**
+ * Топ-тариф: Эксперт и вечная бета с лимитами Эксперта.
+ *
+ * Здесь живут привилегии без лимитов — AI-first упаковка резюме и подобные:
+ * квота считается не на запрос, а на тариф. Новый «безлимит» добавляется
+ * сюда, а не размазывается проверками `plan === 'expert'` по роутам.
+ */
+export function isTopPlan(plan: string): boolean {
+  return plan === 'expert' || plan === 'beta_life';
+}
+
 export function planDailyLimit(plan: string): number {
   switch (plan) {
     case 'trial':

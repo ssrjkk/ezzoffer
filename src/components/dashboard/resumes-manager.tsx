@@ -126,11 +126,15 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
     }
   };
 
-  const improve = async (id: number) => {
+  const improve = async (id: number, mode: 'standard' | 'ai-first' = 'standard') => {
     setImprovingId(id);
     setError(null);
     try {
-      const res = await fetch(`/api/resumes/${id}/improve`, { method: 'POST' });
+      const res = await fetch(`/api/resumes/${id}/improve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode }),
+      });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? 'Не удалось улучшить резюме');
@@ -392,6 +396,21 @@ export function ResumesManager({ initial }: { initial: Resume[] }) {
                 >
                   <Sparkles className="size-4" />
                   {improvingId === r.id ? 'Усиляем…' : 'Улучшить с AI'}
+                </button>
+                {/*
+                  AI-first упаковка — привилегия топ-тарифа (Эксперт и вечная
+                  бета), там же она без лимита 20/час. Гейт — на сервере
+                  (402 с названием тарифа), здесь отдельная кнопка, а не
+                  скрытие: человек должен знать, что такое существует.
+                */}
+                <button
+                  type="button"
+                  disabled={improvingId === r.id}
+                  className={btnGhost}
+                  onClick={() => improve(r.id, 'ai-first')}
+                >
+                  <Sparkles className="size-4" />
+                  {improvingId === r.id ? 'Упаковываем…' : 'AI-first упаковка'}
                 </button>
                 <a href={`/api/resumes/export?resumeId=${r.id}`} className={btnGhost}>
                   <FileDown className="size-4" />

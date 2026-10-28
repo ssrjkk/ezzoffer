@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { requireUser, unauthorized } from '@/lib/api';
 import { db } from '@/lib/db';
-import { isPlanActive } from '@/lib/plans';
+import { isPlanActive, isTopPlan } from '@/lib/plans';
 import { enhanceResume, scoreResume, detectKeywords } from '@/lib/resume-enhance';
-import { enhanceResumeWithAi } from '@/lib/ai';
+import { enhanceResumeWithAi, enhanceResumeAIFirst } from '@/lib/ai';
 import { parseParamId } from '@/lib/http';
 import { rateLimit } from '@/lib/rate-limit';
 
@@ -14,7 +14,7 @@ import { rateLimit } from '@/lib/rate-limit';
  */
 const AI_LIMIT = { windowMs: 60 * 60 * 1000, max: 20 };
 
-export async function POST(_request: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   if (!user) return unauthorized();
 
@@ -45,38 +45,100 @@ export async function POST(_request: Request, ctx: { params: Promise<{ id: strin
   const id = parseParamId(rawId);
   if (id === null) return NextResponse.json({ error: 'Некорректный id' }, { status: 400 });
 
+  /*
+   * Режим улучшения читается терпимо: старые клиенты тела не шлют вовсе,
+   * и это стандартный режим, а не ошибка. Битое тело — тоже стандартный
+   * режим: раньше тело игнорировалось целиком, и ломать это ради флага нельзя.
+   *
+   * Читаем напрямую, а не через readJson: тому нужны заголовки запроса,
+   * а флаг — опциональный довесок к телу, которого может не быть вообще.
+   * Потолок 1 КБ: флаг режима больше не весит, а JSON.parse без него на
+   * гигабайтном теле складывал бы всё в память до проверки.
+   */
+  let aiFirst = false;
+  try {
+    const text = await request.text();
+    if (text.trim() && text.length <= 1024) {
+      aiFirst = (JSON.parse(text) as { mode?: unknown })?.mode === 'ai-first';
+    }
+  } catch {
+    aiFirst = false;
+  }
+
+  /*
+   * AI-first упаковка — привилегия топ-тарифа, а не отдельный товар.
+   *
+   * 402, а не 403: дело в оплате, как и у базового улучшения выше. Текст
+   * называет конкретный тариф, иначе человек гадает, чего ему не хватает.
+   */
+  if (aiFirst && !isTopPlan(fresh.plan)) {
+    return NextResponse.json(
+      {
+        error:
+          'AI-first упаковка резюме доступна на тарифе «Эксперт» — там же она без лимитов. ' +
+          'Стандартное улучшение уже применено вашим тарифом.',
+      },
+      { status: 402 },
+    );
+  }
+
   const resume = db
     .prepare('SELECT * FROM resumes WHERE id = ? AND user_id = ?')
     .get(id, user.id) as { id: number; content: string } | undefined;
   if (!resume) return NextResponse.json({ error: 'Резюме не найдено' }, { status: 404 });
 
-  const limiter = rateLimit(`resume-improve:${user.id}`, AI_LIMIT);
-  if (!limiter.allowed) {
-    return NextResponse.json(
-      { error: 'Слишком много улучшений подряд. Попробуйте через час.' },
-      { status: 429, headers: { 'Retry-After': String(limiter.retryAfterSeconds) } },
-    );
+  /*
+   * Безлимит топ-тарифа: AI-first упаковка на Эксперте идёт мимо счётчика
+   * 20/час. Замер делается только внутри ветки: rateLimit фиксирует попытку
+   * самим вызовом, и холостой замер жег бы квоту стандартных улучшений.
+   */
+  if (!(aiFirst && isTopPlan(fresh.plan))) {
+    const limiter = rateLimit(`resume-improve:${user.id}`, AI_LIMIT);
+    if (!limiter.allowed) {
+      return NextResponse.json(
+        { error: 'Слишком много улучшений подряд. Попробуйте через час.' },
+        { status: 429, headers: { 'Retry-After': String(limiter.retryAfterSeconds) } },
+      );
+    }
   }
 
   const before = scoreResume(resume.content);
 
+  /*
+   * Каскад движков — сверху вниз по качеству, engine в ответе честный.
+   *
+   * AI-first при недоступном провайдере откатывается на стандартное AI, а не
+   * на правила: молча подменять заказанную упаковку эвристиками — враньё
+   * в интерфейсе («AI-first применён», а по факту нет).
+   */
+  const aiFirstResult = aiFirst ? await enhanceResumeAIFirst(resume.content) : null;
   // Сначала пробуем реальный ИИ-провайдер, если настроен; иначе — локальные эвристики.
-  const ai = await enhanceResumeWithAi(resume.content);
-  const enhanced = ai
+  const ai = aiFirstResult ?? (await enhanceResumeWithAi(resume.content));
+  const enhanced = aiFirstResult
     ? {
-        content: ai.content,
-        notes: ai.notes,
-        tips: ai.tips,
-        keywords: detectKeywords(ai.content),
+        content: aiFirstResult.content,
+        notes: aiFirstResult.notes,
+        tips: aiFirstResult.tips,
+        keywords: detectKeywords(aiFirstResult.content),
         before,
-        after: scoreResume(ai.content),
-        engine: 'ai' as const,
+        after: scoreResume(aiFirstResult.content),
+        engine: 'ai-first' as const,
       }
-    : {
-        ...enhanceResume(resume.content),
-        before,
-        engine: 'rules' as const,
-      };
+    : ai
+      ? {
+          content: ai.content,
+          notes: ai.notes,
+          tips: ai.tips,
+          keywords: detectKeywords(ai.content),
+          before,
+          after: scoreResume(ai.content),
+          engine: 'ai' as const,
+        }
+      : {
+          ...enhanceResume(resume.content),
+          before,
+          engine: 'rules' as const,
+        };
 
   // Владение проверяется в самой записи, а не только SELECT'ом выше: см.
   // api/letters/[id]/route.ts.
