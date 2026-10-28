@@ -134,3 +134,32 @@ test('прогрев не трогает отправителя со стаже�
   }
   assert.equal(sentCount(), 11, 'зрелый отправитель урезан прогревом');
 });
+
+test('pickLetterVariant детерминирован и покрывает диапазон', async () => {
+  const { pickLetterVariant } = autoapply;
+  assert.equal(pickLetterVariant('1:hh-1', 3), pickLetterVariant('1:hh-1', 3), 'тот же сид дал другой индекс');
+  const seen = new Set<number>();
+  for (let i = 0; i < 30; i++) {
+    const v = pickLetterVariant(`1:hh-v-${i}`, 3);
+    assert.ok(v >= 0 && v < 3, `индекс вне диапазона: ${v}`);
+    seen.add(v);
+  }
+  assert.ok(seen.size >= 2, 'ротации нет — все письма одинаковые');
+});
+
+test('письма на разные вакансии различаются boilerplate-частью', async () => {
+  seedUser('start');
+  for (let i = 0; i < 8; i++) seedVacancy(i);
+  await autoapply.runAutoApply(FAST_PACING);
+  const rows = db
+    .prepare('SELECT message FROM applications WHERE user_id = 1')
+    .all() as { message: string }[];
+  assert.equal(rows.length, 8, 'ушли не все 8');
+  // Срезаем вакансию-специфику (названия совпадают у всех сидов): остаются
+  // приветствие, заход и концовка — раньше они были побайтово одинаковы.
+  const boilerplates = rows.map((r) =>
+    r.message.replace(/React-разработчик \d/g, 'V').replace(/Компания \d/g, 'C'),
+  );
+  const distinct = new Set(boilerplates).size;
+  assert.ok(distinct >= 2, `все ${rows.length} писем побайтово одинаковы`);
+});

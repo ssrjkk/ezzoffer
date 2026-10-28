@@ -185,13 +185,13 @@ test('паузер помнит часовые отправки после ре�
    * отправленного. Гидратация поднимает последние 24ч меток из applications.
    */
   const { pacingFor, resetPacing } = await import('../src/lib/autoapply');
-  const now = Date.now();
+  const realNow = Date.now();
   const uid = Number(
     db
       .prepare(
         "INSERT INTO users (email, password_hash, plan, plan_expires_at, created_at, mode) VALUES (?,?,?,?,?,'live')",
       )
-      .run('hydrate@example.com', 'h', 'pro', now + 100000, now).lastInsertRowid,
+      .run('hydrate@example.com', 'h', 'pro', realNow + 100000, realNow).lastInsertRowid,
   );
   const ins = db.prepare(
     'INSERT INTO applications (user_id, job_slug, status, sent_at) VALUES (?, ?, ?, ?)',
@@ -203,7 +203,14 @@ test('паузер помнит часовые отправки после ре�
    * гарантированно лежат в одном часовом окне.
    */
   const MSK = 3 * 60 * 60 * 1000;
-  const hourStart = now - ((now + MSK) % 3_600_000);
+  const hourStart = realNow - ((realNow + MSK) % 3_600_000);
+  /*
+   * «Сейчас» — середина часа, а не реальное время. Прогон в первые 11 секунд
+   * часа давал cooldownUntil = hourStart + 11с в будущем (гидратация ставит
+   * cooldown от последней метки) — и decide отвечал backoff вместо hourly.
+   * Предсуществующий флейк, виден только на границе часа.
+   */
+  const now = hourStart + 30 * 60_000;
   for (let i = 0; i < 12; i++) {
     ins.run(uid, `hh-hyd-${i}`, 'sent', hourStart + i * 1000);
   }

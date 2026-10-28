@@ -13,6 +13,7 @@ import { rankLettersForVacancy } from './ai-matching';
 import { rankVacancies, bestResumeFor, type ResumeTarget } from './resume-targeting';
 import { DEMO_MODE_MESSAGE, isLiveMode } from './user-mode';
 import { claimSend, completeSend, sweepStaleOutbox } from './apply-outbox';
+import { slugHash } from './telegram-keyboard';
 import type { Vacancy, VacancyApplyResult } from './vacancies/types';
 import { isUniqueViolation } from './http';
 import { logApplyEvent } from './apply-events';
@@ -366,6 +367,7 @@ async function buildLetter(
   vacancy: Vacancy,
   letters: LetterRow[],
   resumeContent: string,
+  seed: string,
 ): Promise<{ text: string; letterId: number | null } | null> {
   if (letters.length > 0) {
     const ranked = rankLettersForVacancy(letters, vacancy);
@@ -381,9 +383,42 @@ async function buildLetter(
     }
   }
 
-  const template = defaultLetterTemplate(resumeContent);
+  const template = defaultLetterTemplate(resumeContent, seed);
   const text = renderLetterTemplate(template, vacancy).trim();
   return text ? { text, letterId: null } : null;
+}
+
+/**
+ * Детерминированная ротация формулировок шаблона.
+ *
+ * Все пользователи без сохранённых писем слали дословно один текст,
+ * отличавшийся только тремя подстановками: с одного IP это дословный
+ * кластер, который виден без всякого анализа поведения. Три варианта
+ * приветствия, захода и концовки дают 27 комбинаций — тексты перестают
+ * быть побайтово одинаковыми, а смысл и тон не меняются.
+ *
+ * Выбор — хешем пары (пользователь, вакансия), а не random: повторная
+ * отправка на ту же вакансию даёт тот же текст, иначе повтор выглядел бы
+ * как два разных человека. Сохранённые письма пользователя не трогаем —
+ * это его слова, а не наш шаблон.
+ */
+const LETTER_GREETINGS = ['Здравствуйте!', 'Добрый день!', 'Здравствуйте.'];
+
+const LETTER_OPENINGS = [
+  'Меня заинтересовала вакансия {вакансия} в компании {компания} ({город}).',
+  'Откликаюсь на вакансию {вакансия} ({компания}, {город}).',
+  'Увидел вакансию {вакансия} в компании {компания} ({город}) — она мне подходит.',
+];
+
+const LETTER_CLOSINGS = [
+  'Буду рад обсудить задачи и рассказать, как могу быть полезен.\n\nС уважением',
+  'Готов выйти на связь и обсудить детали.\n\nС уважением',
+  'Буду рад рассказать о своём опыте подробнее.\n\nС уважением',
+];
+
+export function pickLetterVariant(seed: string, count: number): number {
+  const h = parseInt(slugHash(seed).slice(0, 8), 16);
+  return (Number.isFinite(h) ? h : 0) % count;
 }
 
 /**
@@ -393,7 +428,7 @@ async function buildLetter(
  * на главный вопрос работодателя «почему вы», а «Здравствуйте, меня
  * заинтересовала ваша вакансия» не отвечает ни на что.
  */
-function defaultLetterTemplate(resumeContent: string): string {
+function defaultLetterTemplate(resumeContent: string, seed: string): string {
   const achievement = (resumeContent ?? '')
     .split(/\r?\n/)
     .map((l) => l.trim())
@@ -404,11 +439,11 @@ function defaultLetterTemplate(resumeContent: string): string {
     : 'Готов обсудить детали и показать релевантные примеры.';
 
   return (
-    'Здравствуйте!\n\n' +
-    'Меня заинтересовала вакансия {вакансия} в компании {компания} ({город}). ' +
-    `${why}\n\n` +
-    'Буду рад обсудить задачи и рассказать, как могу быть полезен.\n\n' +
-    'С уважением'
+    LETTER_GREETINGS[pickLetterVariant(`g:${seed}`, LETTER_GREETINGS.length)] +
+    '\n\n' +
+    LETTER_OPENINGS[pickLetterVariant(`o:${seed}`, LETTER_OPENINGS.length)] +
+    ` ${why}\n\n` +
+    LETTER_CLOSINGS[pickLetterVariant(`c:${seed}`, LETTER_CLOSINGS.length)]
   );
 }
 
@@ -899,7 +934,12 @@ export async function runAutoApply(opts?: {
            * а отклик уходил с резюме «React». Берём то, что действительно отправляется.
            */
           const letterResumeText = picked?.content || primaryResumeText;
-          const letter = await buildLetter(vacancy, letters, letterResumeText);
+          const letter = await buildLetter(
+            vacancy,
+            letters,
+            letterResumeText,
+            `${user.id}:${vacancy.slug}`,
+          );
           const message = letter?.text;
 
           /*
@@ -1322,7 +1362,12 @@ export async function applyToVacancy(
     };
   }
 
-  const letter = await buildLetter(vacancy, getLetters(user.id), picked?.content ?? '');
+  const letter = await buildLetter(
+    vacancy,
+    getLetters(user.id),
+    picked?.content ?? '',
+    `${user.id}:${vacancy.slug}`,
+  );
   const message = letter?.text;
   const claim = claimSend({
     userId: user.id,
