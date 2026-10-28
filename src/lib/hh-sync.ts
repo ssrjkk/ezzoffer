@@ -115,11 +115,14 @@ async function fetchNegotiations(token: string): Promise<HhNegotiation[]> {
     });
 
     if (!res.ok) {
-      // Первая страница не пришла — синхронизации нет, и об этом честно
-      // пишем в лог. Дальше — работаем с тем, что есть: часть данных лучше,
-      // чем ничего, и следующий тик доберёт остальное.
+      // Первая страница не пришла — синхронизации нет. Статус цепляем к
+      // ошибке: 401 означает мёртвый токен, о котором надо предупредить
+      // человека, а не просто записать в лог. Текст.match ниже в catch
+      // дублирует проверку на случай, если ошибку обернули по дороге.
       if (page === 0) {
-        throw new Error(`hh.ru вернул HTTP ${res.status}`);
+        const err = new Error(`hh.ru вернул HTTP ${res.status}`) as Error & { hhStatus?: number };
+        err.hhStatus = res.status;
+        throw err;
       }
       break;
     }
@@ -136,7 +139,9 @@ async function fetchNegotiations(token: string): Promise<HhNegotiation[]> {
   return out;
 }
 
-export async function syncHhStatuses(userId: number): Promise<{ updated: number; error?: string }> {
+export async function syncHhStatuses(
+  userId: number,
+): Promise<{ updated: number; error?: string; authFailed?: boolean }> {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as User | undefined;
   if (!user) return { updated: 0 };
   const token = (await getValidHhToken(user))?.token;
@@ -308,25 +313,35 @@ export async function syncHhStatuses(userId: number): Promise<{ updated: number;
     return { updated: touched.size };
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'network error';
-    return { updated: 0, error: msg };
+    /*
+     * 401 — токен мёртв и refresh не спас (или его нечем делать): это не
+     * «сеть», а состояние аккаунта. Флаг забирает планировщик и будит
+     * человека предупреждением вместо тишины в статистике.
+     */
+    const authFailed =
+      (e as { hhStatus?: number } | null)?.hhStatus === 401 || /HTTP 401\b/.test(msg);
+    return authFailed ? { updated: 0, error: msg, authFailed: true } : { updated: 0, error: msg };
   }
 }
 
-export async function syncAllHhUsers(heartbeat?: () => boolean): Promise<void> {
+export async function syncAllHhUsers(heartbeat?: () => boolean): Promise<number[]> {
   const users = db
     .prepare("SELECT id FROM users WHERE hh_token IS NOT NULL AND hh_token != ''")
     .all() as {
     id: number;
   }[];
+  const authFailed: number[] = [];
   for (const u of users) {
-    if (heartbeat && !heartbeat()) return;
+    if (heartbeat && !heartbeat()) return authFailed;
     try {
       const res = await syncHhStatuses(u.id);
       if (res.error) {
-        logError('hh:sync:all', new Error(res.error), { userId: u.id });
+        logError('scheduler:sync:all', new Error(res.error), { userId: u.id });
       }
+      if (res.authFailed) authFailed.push(u.id);
     } catch (err) {
-      logError('hh:sync:all', err, { userId: u.id });
+      logError('scheduler:sync:all', err, { userId: u.id });
     }
   }
+  return authFailed;
 }

@@ -6,6 +6,7 @@ import { useState, type FormEvent } from 'react';
 import { AuthPanel, Field, FormError, SubmitButton, SwitchLink } from '@/components/auth-shell';
 import { Eyebrow } from '@/components/ui';
 import { OAuthButtons } from '@/components/auth/oauth-buttons';
+import { parseRetryAfter, humanRetryDelay } from '@/lib/retry-after';
 
 export type AuthMode = 'login' | 'signup';
 
@@ -51,12 +52,33 @@ export function AuthForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(mode === 'login' ? { email, password } : { name, email, password }),
       });
-      const data = await res.json();
+      /*
+       * Срок из заголовка читаем до разбора тела: 429 от лимитера всегда
+       * несёт Retry-After, а тело может быть не JSON — срок от этого не
+       * зависит и его надо показать в любом случае.
+       */
+      const retryAfterSecs =
+        res.status === 429 ? parseRetryAfter(res.headers.get('Retry-After')) : null;
+      let data: { error?: string } | null = null;
+      try {
+        data = (await res.json()) as { error?: string };
+      } catch {
+        data = null;
+      }
       if (!res.ok) {
-        setError(data.error ?? 'Что-то пошло не так. Попробуйте ещё раз.');
+        /*
+         * Голое «слишком много попыток» без срока заставляет жать «Войти»
+         * снова и получать тот же 429. Сервер срок знает и присылает —
+         * показываем его словами, а не секундами из заголовка.
+         */
+        if (res.status === 429 && retryAfterSecs !== null) {
+          setError(`Слишком много попыток входа. Попробуйте ${humanRetryDelay(retryAfterSecs)}.`);
+        } else {
+          setError(data?.error ?? 'Что-то пошло не так. Попробуйте ещё раз.');
+        }
         return;
       }
-      if (mode === 'signup' && data.needsVerification) {
+      if (mode === 'signup' && (data as { needsVerification?: boolean } | null)?.needsVerification) {
         setNeedsVerification(true);
         return;
       }

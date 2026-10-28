@@ -1,6 +1,7 @@
 import { db } from './db';
 import { notifyUser, sendTelegramMessage, escapeHtml } from './telegram';
 import { mainKeyboard } from './telegram-keyboard';
+import { hhConfigured } from './hh-oauth';
 import type { ApplicationRow } from './applications';
 
 /**
@@ -404,6 +405,112 @@ export async function notifyAccountBlocked(
     ].join('\n'),
     { html: true, keyboard: mainKeyboard() },
   );
+}
+
+/**
+ * Сеанс hh.ru истёк: отклики не уходят, а человек не знает.
+ *
+ * Отправляется один раз на инцидент, а не на каждый тик (дедуп — сутки на
+ * пользователя в notifyHhTokenExpiredForUser). Поэтому отдельная отметка
+ * «уже отправлено» здесь не нужна: вызывающий код знает, что это новое
+ * событие, а повтор через сутки — напоминание, а не спам.
+ *
+ * Молчать здесь нельзя по той же причине, что и при 403: при мёртвом токене
+ * отклики не уходят вообще, и без сообщения человек видит только то, что их
+ * «мало», — то есть не видит ничего.
+ */
+export async function notifyHhTokenExpired(chatId: string | null): Promise<boolean> {
+  if (!chatId) return false;
+
+  return sendTelegramMessage(
+    chatId,
+    [
+      '<b>Сеанс hh.ru истёк</b>',
+      '',
+      'Автоотклики не уходят: площадка больше не принимает наш токен.',
+      '',
+      'Что делать:',
+      '— откройте кабинет и перепривяжите hh.ru заново;',
+      '— убедитесь, что нужное резюме выбрано для откликов.',
+      '',
+      'Пока токен не обновлён, отправка стоит на паузе — добивать аккаунт повторами бот не будет.',
+      '',
+      'Перепривязать: /dashboard/settings',
+    ].join('\n'),
+    { html: true, keyboard: mainKeyboard() },
+  );
+}
+
+/** Не чаще одного предупреждения об истёкшем токене в сутки на пользователя. */
+const HH_TOKEN_WARN_TTL_MS = 24 * 60 * 60 * 1000;
+
+function hhTokenWarnKey(userId: number): string {
+  return `hh:token-warned:${userId}`;
+}
+
+/**
+ * Предупреждение конкретному пользователю с дедупом.
+ *
+ * Возвращает false, если предупреждать не о чем (нет чата) или уже
+ * предупреждали менее суток назад. Ошибка отправки отметку не ставит —
+ * следующий тик попробует снова, а не потеряет предупреждение молча.
+ */
+export async function notifyHhTokenExpiredForUser(
+  userId: number,
+  now: number = Date.now(),
+): Promise<boolean> {
+  const marked = db.prepare('SELECT value FROM meta WHERE key = ?').get(hhTokenWarnKey(userId)) as
+    | { value: string }
+    | undefined;
+  if (marked && now - Number(marked.value) < HH_TOKEN_WARN_TTL_MS) return false;
+  const user = db.prepare('SELECT telegram_chat_id FROM users WHERE id = ?').get(userId) as
+    | { telegram_chat_id: string | null }
+    | undefined;
+  if (!user?.telegram_chat_id) return false;
+  const ok = await notifyHhTokenExpired(user.telegram_chat_id);
+  if (ok) {
+    db.prepare(
+      'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    ).run(hhTokenWarnKey(userId), String(now));
+  }
+  return ok;
+}
+
+/** Живой токен доказан делом — старое предупреждение снято, следующий сбой предупредит заново. */
+export function clearHhTokenWarning(userId: number): void {
+  db.prepare('DELETE FROM meta WHERE key = ?').run(hhTokenWarnKey(userId));
+}
+
+/**
+ * Плановый обход заведомо мёртвых подключений hh.
+ *
+ * Сюда попадают только те, у кого смерть видна без попытки отправки: токен
+ * с прошедшим сроком и без пути обновления (нет refresh_token или OAuth
+ * приложения не настроены). У кого refresh_token есть и приложение настроено,
+ * исход решит попытка обновления в getValidHhToken — её провал ловится
+ * событийно (401 в отправке и синхронизации), а не здесь: заранее
+ * неизвестно, отзовёт ли hh refresh.
+ *
+ * Токен без срока (NULL) пропускаем: getValidHhToken такие пробует, и он
+ * может быть живым — хоронить его предупреждением нельзя.
+ */
+export async function sendHhTokenWarnings(now: number = Date.now()): Promise<number> {
+  const users = db
+    .prepare(
+      `SELECT id, hh_refresh_token FROM users
+        WHERE telegram_chat_id IS NOT NULL
+          AND hh_token IS NOT NULL AND hh_token != ''
+          AND hh_resume_id IS NOT NULL AND hh_resume_id != ''
+          AND hh_token_expires_at IS NOT NULL AND hh_token_expires_at <= ?`,
+    )
+    .all(now) as { id: number; hh_refresh_token: string | null }[];
+  let sent = 0;
+  for (const u of users) {
+    // Путь обновления есть — исход решит живая попытка, а не этот обход.
+    if (u.hh_refresh_token && hhConfigured()) continue;
+    if (await notifyHhTokenExpiredForUser(u.id, now)) sent++;
+  }
+  return sent;
 }
 
 /** Сброс для тестов. */

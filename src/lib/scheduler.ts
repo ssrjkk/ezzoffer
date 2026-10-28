@@ -1,9 +1,11 @@
 import type BetterSqlite3 from 'better-sqlite3';
 import { db } from './db';
+import { envNum } from './env';
 import { refreshCatalogForSearches, slowProvidersDue, fastProvidersDue } from './catalog-refresh';
 import { runAutoApply } from './autoapply';
 import { saveLastRun } from './autoapply-store';
-import { sendAlerts, sendDigests, sendExpiryWarnings } from './telegram-digest';
+import { sendAlerts, sendDigests, sendExpiryWarnings, sendHhTokenWarnings, notifyHhTokenExpiredForUser } from './telegram-digest';
+import { notifyAdmin } from './telegram';
 import { processInbox } from './telegram-bot';
 import { getVacancyBySlug } from './vacancies';
 import { syncAllHhUsers } from './hh-sync';
@@ -202,6 +204,46 @@ async function refreshFastCatalog(now: number): Promise<void> {
 }
 
 /**
+ * Застой каталога при живых поисках: операционный сбой, о котором иначе
+ * узнают по тишине.
+ *
+ * Каталог обновляется только под активные поиски, и если обновление давно
+ * не проходило, а поиски есть, — либо легли провайдеры, либо заклинило
+ * фазу каталога. Пользователю жаловаться не на что конкретное, поэтому
+ * сообщение уходит владельцу (ADMIN_TELEGRAM_CHAT_ID), а не всем чатам.
+ *
+ * Дедуп — не чаще одного предупреждения за окно застоя: отметка снимается,
+ * как только каталог снова шевельнулся, и следующий застой предупредит заново.
+ */
+const CATALOG_STALL_KEY = 'catalog:stall-warned';
+
+export async function checkCatalogStall(now: number = Date.now()): Promise<boolean> {
+  const active = (
+    db.prepare('SELECT COUNT(*) AS c FROM searches WHERE active = 1').get() as { c: number }
+  ).c;
+  if (active === 0) return false;
+  const stallMs = envNum(process.env, 'CATALOG_STALL_WARN_MS', 12 * 60 * 60 * 1000, {
+    min: 60 * 60 * 1000,
+  });
+  const last = Number(getMeta(db, CATALOG_REFRESH_KEY) ?? 0);
+  if (last > 0 && now - last < stallMs) {
+    // Каталог шевелится — снимаем старую отметку.
+    db.prepare('DELETE FROM meta WHERE key = ?').run(CATALOG_STALL_KEY);
+    return false;
+  }
+  const marked = Number(getMeta(db, CATALOG_STALL_KEY) ?? 0);
+  if (marked > 0 && now - marked < stallMs) return false;
+  const age =
+    last > 0 ? `более ${Math.max(1, Math.round((now - last) / 3_600_000))} ч` : 'ни разу с момента запуска';
+  const ok = await notifyAdmin(
+    `Каталог вакансий не обновлялся ${age} при ${active} активных поисках. ` +
+      'Проверьте провайдеры и логи scheduler:catalog.',
+  );
+  if (ok) setMeta(db, CATALOG_STALL_KEY, String(now));
+  return ok;
+}
+
+/**
  * Сессия владения блокировкой: захват, продление, снятие.
  *
  * Токен живёт внутри: каждое продление ставит новое время, и снимается
@@ -295,7 +337,16 @@ export async function runScheduledJobs(): Promise<void> {
        * API чихнул. Входящие команды живут в tg_inbox, им hh не нужен.
        */
       try {
-        await syncAllHhUsers(() => sync.heartbeat());
+        // Возвращает пользователей с 401: их токен мёртв, а молчание здесь
+        // означает вставшие отклики и статусы без объяснений для человека.
+        const authFailed = await syncAllHhUsers(() => sync.heartbeat());
+        for (const userId of authFailed) {
+          try {
+            await notifyHhTokenExpiredForUser(userId);
+          } catch (err) {
+            logError('scheduler:notify-token', err, { userId });
+          }
+        }
       } catch (err) {
         logError('scheduler:sync-hh', err);
       }
@@ -316,6 +367,10 @@ export async function runScheduledJobs(): Promise<void> {
         await sendAlerts((slug) => getVacancyBySlug(slug)?.title ?? null);
         await sendDigests();
         await sendExpiryWarnings();
+        // Мёртвые подключения hh: срок виден без попытки отправки.
+        await sendHhTokenWarnings();
+        // Застой каталога при живых поисках — владельцу, а не всем чатам.
+        await checkCatalogStall();
       } catch (err) {
         logError('scheduler:telegram', err);
       }

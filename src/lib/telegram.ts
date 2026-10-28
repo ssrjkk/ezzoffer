@@ -435,4 +435,17 @@ export async function notifyAll(text: string): Promise<number> {
   return sent;
 }
 
+/**
+ * Сообщение владельцу (ADMIN_TELEGRAM_CHAT_ID): операционные сбои, которые
+ * не привязаны к конкретному пользователю — застой каталога, заявки.
+ *
+ * Best-effort: без настроенного чата возвращается false, а не исключение.
+ * Вызывающий код решает сам — operational-алерты не должны ронять тик.
+ */
+export async function notifyAdmin(text: string): Promise<boolean> {
+  const admin = process.env.ADMIN_TELEGRAM_CHAT_ID?.trim();
+  if (!admin) return false;
+  return sendTelegramMessage(admin, text);
+}
+
 export { CODE_TTL_MS };

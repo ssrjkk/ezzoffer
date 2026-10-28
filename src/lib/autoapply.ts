@@ -7,7 +7,7 @@ import { hhProvider } from './vacancies/hh';
 import { getValidHhToken } from './hh-oauth';
 import { createPacing, type FailureKind, type Pacing, type PacingConfig } from './anti-ban';
 import { effectivePacing, autoapplyEnabled, autoapplyDryRun } from './config';
-import { notifyAccountBlocked } from './telegram-digest';
+import { notifyAccountBlocked, notifyHhTokenExpiredForUser, clearHhTokenWarning } from './telegram-digest';
 import { renderLetterTemplate } from './cover-letter';
 import { rankLettersForVacancy } from './ai-matching';
 import { rankVacancies, bestResumeFor, type ResumeTarget } from './resume-targeting';
@@ -636,6 +636,8 @@ export async function runAutoApply(opts?: {
        */
       let blockedUser = false;
       let blockReason = '';
+      /** Токен протух: 401 от hh, лечится перепривязкой, а не ожиданием. */
+      let tokenExpiredUser = false;
       const blockedUntilCol = blockedUntil(user.id);
       /** Отклики за сегодня — для потолка на компанию. Собирается один раз. */
       let slugs: { job_slug: string; company: string }[] | null = null;
@@ -940,6 +942,16 @@ export async function runAutoApply(opts?: {
               blockedUser = true;
               blockReason = 'hh.ru ограничил доступ к аккаунту';
               logApplyEvent(user.id, vacancy.slug, 'blocked', result.error ?? '');
+            } else if (kind === 'token') {
+              /*
+               * Токен истёк — это не ограничение аккаунта. Шестичасовая
+               * остановка здесь вредила бы: токен сам не воскреснет, а
+               * перепривязка в кабинете занимает минуту. Пауза короткая
+               * (rate_limit через toFailureKind ниже), а человек получает
+               * предупреждение один раз на инцидент — см. ниже.
+               */
+              tokenExpiredUser = true;
+              logApplyEvent(user.id, vacancy.slug, 'failed', result.error ?? '');
             } else {
               logApplyEvent(user.id, vacancy.slug, 'failed', result.error ?? kind);
             }
@@ -1015,6 +1027,9 @@ export async function runAutoApply(opts?: {
               `UPDATE users SET autoapply_blocked_until = 0, autoapply_block_reason = '' WHERE id = ?`,
             ).run(user.id);
           }
+          // Успешная отправка доказывает живой токен: старое предупреждение
+          // об истёкшем сеансе снято, следующий сбой предупредит заново.
+          clearHhTokenWarning(user.id);
         }
       }
 
@@ -1049,6 +1064,20 @@ export async function runAutoApply(opts?: {
         // Остальные пользователи продолжают: 403 — проблема этого аккаунта,
         // а не всего сервиса. Раньше флаг stopAll обрывал прогон для всех —
         // один ограниченный аккаунт лишал откликов остальных до следующего тика.
+      }
+
+      if (tokenExpiredUser) {
+        /*
+         * Сеанс истёк, а не ограничен: чинится перепривязкой hh в кабинете.
+         * Дедуп — сутки на пользователя внутри notifyHhTokenExpiredForUser,
+         * отправка best-effort: тишина здесь хуже повтора, а остановка на
+         * часы не нужна — токен сам не воскреснет ни через час, ни через шесть.
+         */
+        try {
+          await notifyHhTokenExpiredForUser(user.id);
+        } catch (err) {
+          logError('autoapply:notify-token', err, { userId: user.id });
+        }
       }
 
       if (appliedSet.size > 0) {
