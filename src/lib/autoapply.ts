@@ -100,6 +100,20 @@ export type AutoApplyRun = {
    * это уже чужой прогон.
    */
   lockLost: boolean;
+  /**
+   * Пользователи, чей суточный лимит срезан прогревом нового отправителя.
+   *
+   * Без счётчика человек в первую неделю видит «ушло 7 из 50» без причины
+   * и чинит несуществующую поломку: расширяет поиски, дёргает поддержку.
+   * Причина — защита аккаунта, и она должна быть названа.
+   */
+  warmupLimitedUsers: number;
+  /**
+   * Пользователи, чей суточный лимит срезан выходным коэффициентом.
+   * Та же причина счётчика, что и у warmupLimitedUsers: молчаливое
+   * снижение объёма неотличимо от поломки.
+   */
+  weekendLimitedUsers: number;
 };
 
 /**
@@ -531,6 +545,9 @@ export async function runAutoApply(opts?: {
   let lockLost = false;
   /** Холостых отправок в dry-run. В историю не пишутся — это не отклики. */
   let dryRuns = 0;
+  /** Пользователи, срезанные прогревом или выходными (видно в отчёте). */
+  let warmupLimitedUsers = 0;
+  let weekendLimitedUsers = 0;
   const dryRun = autoapplyDryRun();
   /** Отправок в этом тике — предохранитель от вечного тика (см. выше). */
   let sentThisTick = 0;
@@ -554,6 +571,8 @@ export async function runAutoApply(opts?: {
       erroredUsers,
       dryRuns,
       lockLost,
+      warmupLimitedUsers,
+      weekendLimitedUsers,
     };
   }
 
@@ -648,10 +667,21 @@ export async function runAutoApply(opts?: {
        * выходных. Оба множителя по умолчанию выключены (env) и включаются
        * деплоем; подробности — у хелперов выше. Дежурный минимум — 1: полный
        * ноль прятал бы причину остановки за generic-паузой.
+       *
+       * Срезка считается для отчёта: молчаливое снижение объёма неотличимо
+       * от поломки, и человек чинит несуществующую проблему.
        */
-      let effectiveDaily = Math.min(remaining, eff.dailyCap);
-      effectiveDaily = weekendScaledCap(effectiveDaily, nowFn());
-      effectiveDaily = warmupScaledCap(effectiveDaily, firstApplySentAt(user.id), warmupDays(), nowFn());
+      const baseDaily = Math.min(remaining, eff.dailyCap);
+      const afterWeekend = weekendScaledCap(baseDaily, nowFn());
+      if (afterWeekend < baseDaily) weekendLimitedUsers++;
+      const afterWarmup = warmupScaledCap(
+        afterWeekend,
+        firstApplySentAt(user.id),
+        warmupDays(),
+        nowFn(),
+      );
+      if (afterWarmup < afterWeekend) warmupLimitedUsers++;
+      const effectiveDaily = afterWarmup;
       if (effectiveDaily <= 0) continue;
       // effectivePacing отдаёт hourlyCap, а PacingConfig ждёт hourlyLimit:
       // имена разные, и прямое spread-кладение effectivePacing в configure
@@ -1206,6 +1236,8 @@ export async function runAutoApply(opts?: {
     erroredUsers,
     dryRuns,
     lockLost,
+    warmupLimitedUsers,
+    weekendLimitedUsers,
   };
 
   if (!ran) {

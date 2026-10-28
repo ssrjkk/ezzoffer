@@ -22,7 +22,7 @@ let loadLastRun: () => import('../src/lib/autoapply-report').LastRunReport | nul
 let db: import('better-sqlite3').Database;
 
 function run(over: Partial<AutoApplyRun> = {}): AutoApplyRun {
-  return {
+  const base: AutoApplyRun = {
     ran: true,
     searches: 1,
     applied: 0,
@@ -41,8 +41,10 @@ function run(over: Partial<AutoApplyRun> = {}): AutoApplyRun {
     erroredUsers: 0,
     dryRuns: 0,
     lockLost: false,
-    ...over,
+    warmupLimitedUsers: 0,
+    weekendLimitedUsers: 0,
   };
+  return Object.assign(base, over);
 }
 
 before(async () => {

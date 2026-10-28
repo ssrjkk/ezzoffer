@@ -97,6 +97,14 @@ function sentCount(): number {
   ).c;
 }
 
+/** Уже отправленное сегодня — уменьшает остаток дневного лимита. */
+function seedSentToday(n: number): void {
+  const ins = db.prepare(
+    'INSERT INTO applications (user_id, job_slug, status, sent_at) VALUES (1, ?, ?, ?)',
+  );
+  for (let i = 0; i < n; i++) ins.run(`hh-pre-${i}`, 'sent', Date.now());
+}
+
 test('без прогрева уходит всё (start: 10 из 10)', async () => {
   seedUser('start');
   for (let i = 0; i < 10; i++) seedVacancy(i);
@@ -108,13 +116,15 @@ test('прогрев режет первый день: start 50/день → 7',
   seedUser('start');
   for (let i = 0; i < 10; i++) seedVacancy(i);
   process.env.AUTOAPPLY_WARMUP_DAYS = '7';
+  let result: Awaited<ReturnType<typeof autoapply.runAutoApply>> | null = null;
   try {
-    await autoapply.runAutoApply(FAST_PACING);
+    result = await autoapply.runAutoApply(FAST_PACING);
   } finally {
     delete process.env.AUTOAPPLY_WARMUP_DAYS;
   }
   // Первый день: floor(50 * 1/7) = 7.
   assert.equal(sentCount(), 7, 'прогрев не сработал');
+  assert.equal(result?.warmupLimitedUsers, 1, 'срезка прогревом не посчитана');
 });
 
 test('прогрев не трогает отправителя со стажем', async () => {
@@ -147,8 +157,7 @@ test('pickLetterVariant детерминирован и покрывает ди�
   assert.ok(seen.size >= 2, 'ротации нет — все письма одинаковые');
 });
 
-test('письма на разные вакансии различаются boilerplate-частью', async () => {
-  seedUser('start');
+test('письма на разные вакансии различаются boilerplate-частью', async () => {  seedUser('start');
   for (let i = 0; i < 8; i++) seedVacancy(i);
   await autoapply.runAutoApply(FAST_PACING);
   const rows = db
@@ -162,4 +171,46 @@ test('письма на разные вакансии различаются boi
   );
   const distinct = new Set(boilerplates).size;
   assert.ok(distinct >= 2, `все ${rows.length} писем побайтово одинаковы`);
+});
+
+// Полдень МСК субботы и понедельника — детерминированные сутки для выходных.
+const SAT_NOON = Date.UTC(2026, 9, 24, 9, 0, 0);
+const MON_NOON = Date.UTC(2026, 9, 26, 9, 0, 0);
+
+function dayPacing(noon: number): {
+  pacing: { minDelayMs: number; maxDelayMs: number; jitterMinutes: number };
+  now: () => number;
+} {
+  return { pacing: { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0 }, now: () => noon };
+}
+
+test('выходные режут объём: остаток 10 → 5', async () => {
+  seedUser('start');
+  seedSentToday(40);
+  for (let i = 0; i < 12; i++) seedVacancy(i);
+  process.env.AUTOAPPLY_WEEKEND_FACTOR = '0.5';
+  let result: Awaited<ReturnType<typeof autoapply.runAutoApply>> | null = null;
+  try {
+    result = await autoapply.runAutoApply(dayPacing(SAT_NOON));
+  } finally {
+    delete process.env.AUTOAPPLY_WEEKEND_FACTOR;
+  }
+  // Остаток дня: 50 − 40 = 10, выходные режут вдвое.
+  assert.equal(sentCount(), 45, 'выходные не срезали объём');
+  assert.equal(result?.weekendLimitedUsers, 1, 'срезка выходными не посчитана');
+});
+
+test('в будни тот же остаток уходит полностью', async () => {
+  seedUser('start');
+  seedSentToday(40);
+  for (let i = 0; i < 12; i++) seedVacancy(i);
+  process.env.AUTOAPPLY_WEEKEND_FACTOR = '0.5';
+  let result: Awaited<ReturnType<typeof autoapply.runAutoApply>> | null = null;
+  try {
+    result = await autoapply.runAutoApply(dayPacing(MON_NOON));
+  } finally {
+    delete process.env.AUTOAPPLY_WEEKEND_FACTOR;
+  }
+  assert.equal(sentCount(), 50, 'будни урезаны выходным коэффициентом');
+  assert.equal(result?.weekendLimitedUsers ?? 0, 0, 'будни посчитаны как выходные');
 });

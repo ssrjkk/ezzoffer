@@ -14,7 +14,7 @@ import type { AutoApplyRun } from '../src/lib/autoapply';
  */
 
 function run(over: Partial<AutoApplyRun> = {}): AutoApplyRun {
-  return {
+  const base: AutoApplyRun = {
     ran: true,
     searches: 1,
     applied: 0,
@@ -33,8 +33,10 @@ function run(over: Partial<AutoApplyRun> = {}): AutoApplyRun {
     erroredUsers: 0,
     dryRuns: 0,
     lockLost: false,
-    ...over,
+    warmupLimitedUsers: 0,
+    weekendLimitedUsers: 0,
   };
+  return Object.assign(base, over);
 }
 
 test('успешный прогон объясняет, что отклики ушли', () => {
@@ -220,4 +222,22 @@ test('успех и проблема не выглядят одинаково', 
   const warn = explain(run())[0]!.tone;
   assert.notEqual(good, bad, 'успех и отказ показаны одинаковым тоном');
   assert.notEqual(good, warn, 'успех и пустой результат показаны одинаковым тоном');
+});
+
+test('прогрев и выходные объясняются, а не молчат', () => {
+  const warmup = explain(run({ applied: 7, withLetter: 7, warmupLimitedUsers: 1 }));
+  assert.ok(
+    warmup.some((r) => /Прогрев/.test(r.title)),
+    'срезка прогревом не объяснена',
+  );
+  const weekend = explain(run({ applied: 25, withLetter: 25, weekendLimitedUsers: 2 }));
+  assert.ok(
+    weekend.some((r) => /Выходные/.test(r.title)),
+    'срезка выходными не объяснена',
+  );
+  const plain = explain(run({ applied: 7, withLetter: 7 }));
+  assert.ok(
+    !plain.some((r) => /Прогрев|Выходные/.test(r.title)),
+    'причины прогрева/выходных появились без срезки',
+  );
 });
