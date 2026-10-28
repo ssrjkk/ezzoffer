@@ -43,10 +43,50 @@ export const CATALOG: CatalogItem[] = [
     features: ['50 откликов в день', '5 резюме', 'Подбор вакансий'],
   },
   {
+    id: 'start-7',
+    title: 'Старт — 7 дней',
+    priceRub: 690,
+    days: 7,
+    lifetime: false,
+    permanent: false,
+    methods: ['card', 'sbp', 'crypto_usdt'],
+    features: ['50 откликов в день', '5 резюме', 'Подбор вакансий'],
+  },
+  {
+    id: 'start-14',
+    title: 'Старт — 14 дней',
+    priceRub: 1190,
+    days: 14,
+    lifetime: false,
+    permanent: false,
+    methods: ['card', 'sbp', 'crypto_usdt'],
+    features: ['50 откликов в день', '5 резюме', 'Подбор вакансий'],
+  },
+  {
     id: 'pro',
     title: 'Про',
     priceRub: 2990,
     days: 30,
+    lifetime: false,
+    permanent: false,
+    methods: ['card', 'sbp', 'crypto_usdt'],
+    features: ['100 откликов в день', '20 резюме', 'Личные письма', 'Аналитика пробелов'],
+  },
+  {
+    id: 'pro-7',
+    title: 'Про — 7 дней',
+    priceRub: 990,
+    days: 7,
+    lifetime: false,
+    permanent: false,
+    methods: ['card', 'sbp', 'crypto_usdt'],
+    features: ['100 откликов в день', '20 резюме', 'Личные письма', 'Аналитика пробелов'],
+  },
+  {
+    id: 'pro-14',
+    title: 'Про — 14 дней',
+    priceRub: 1790,
+    days: 14,
     lifetime: false,
     permanent: false,
     methods: ['card', 'sbp', 'crypto_usdt'],
@@ -68,7 +108,56 @@ export const CATALOG: CatalogItem[] = [
       'Разбор отказов и конверсии',
     ],
   },
+  {
+    id: 'expert-7',
+    title: 'Эксперт — 7 дней',
+    priceRub: 1990,
+    days: 7,
+    lifetime: false,
+    permanent: false,
+    methods: ['card', 'sbp', 'crypto_usdt'],
+    features: [
+      '250 откликов в день',
+      'Резюме без ограничения',
+      'AI-first упаковка резюме без лимитов',
+      'Telegram-бот',
+      'Разбор отказов и конверсии',
+    ],
+  },
+  {
+    id: 'expert-14',
+    title: 'Эксперт — 14 дней',
+    priceRub: 3490,
+    days: 14,
+    lifetime: false,
+    permanent: false,
+    methods: ['card', 'sbp', 'crypto_usdt'],
+    features: [
+      '250 откликов в день',
+      'Резюме без ограничения',
+      'AI-first упаковка резюме без лимитов',
+      'Telegram-бот',
+      'Разбор отказов и конверсии',
+    ],
+  },
 ];
+
+/**
+ * Период витрины → позиция каталога.
+ *
+ * Витрина продаёт 7/14/30 дней, а выдача прав (`grant`) читает дни из
+ * каталога по planId. Без этого резолвера 7-дневная оплата выдавала 30 дней:
+ * подпись подтверждает авторство вебхука, а не соответствие суммы сроку.
+ * Неизвестная комбинация — null, а не ближайшая: угадывание срока за деньги
+ * недопустимо.
+ */
+export function resolvePeriodPlan(planId: string, periodDays: number): CatalogItem | null {
+  const id = periodDays === 30 ? planId : `${planId}-${periodDays}`;
+  const item = CATALOG.find((c) => c.id === id);
+  if (!item || item.permanent) return null;
+  if (item.days !== periodDays) return null;
+  return item;
+}
 
 export function catalogItem(id: string): CatalogItem | undefined {
   return CATALOG.find((c) => c.id === id);

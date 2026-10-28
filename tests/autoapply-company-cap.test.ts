@@ -118,6 +118,31 @@ test('в одну компанию уходит не больше потолка
   assert.ok((run?.applied ?? 0) >= 2, `прогон ничего не отправил: ${JSON.stringify(run)}`);
 });
 
+test('ручной отклик из чата тоже упирается в потолок компании', async () => {
+  seedUser();
+  for (let i = 0; i < 4; i++) seedVacancy(`hh-hand-${i}`, `React-разработчик ${i}`, 'Авито');
+  seedVacancy('hh-hand-4', 'React-разработчик 4', 'Авито');
+  // Четыре сегодняшних отклика в ту же компанию — потолок по умолчанию (4).
+  const ins = db.prepare(
+    'INSERT INTO applications (user_id, job_slug, status, sent_at) VALUES (1, ?, ?, ?)',
+  );
+  for (let i = 0; i < 4; i++) ins.run(`hh-hand-${i}`, 'sent', Date.now());
+
+  const { getVacancyBySlug } = await import('../src/lib/vacancies');
+  const vacancy = getVacancyBySlug('hh-hand-4');
+  assert.ok(vacancy, 'вакансия не нашлась в каталоге');
+  const user = db.prepare('SELECT * FROM users WHERE id = 1').get() as never;
+  const res = await autoapply.applyToVacancy(user, vacancy!, {
+    now: () => {
+      const d = new Date();
+      d.setHours(12, 0, 0, 0);
+      return d.getTime();
+    },
+  });
+  assert.equal(res.ok, false, 'пятый отклик в компанию ушёл мимо потолка');
+  assert.equal(!res.ok && res.kind, 'paused', `не тот вид отказа: ${JSON.stringify(res)}`);
+});
+
 test('потолок настраивается, а ноль означает «не ограничивать»', async () => {
   seedUser();
   /*

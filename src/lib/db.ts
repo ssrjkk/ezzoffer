@@ -293,6 +293,10 @@ CREATE TABLE IF NOT EXISTS vacancies (
 );
 
 CREATE INDEX IF NOT EXISTS idx_vacancies_source ON vacancies(source);
+/* Чистка протухших фильтрует по source + fetched_at — без составного индекса каждый проход сканировал весь source. */
+CREATE INDEX IF NOT EXISTS idx_vacancies_source_fetched ON vacancies(source, fetched_at);
+/* Активные поиски — горячий фильтр каждого тика каталога. */
+CREATE INDEX IF NOT EXISTS idx_searches_active ON searches(active);
 
 -- Дополнительные индексы для выборок, которые идут по составному ключу.
 -- Без них purgeExpiredAuthRows и todayCount сканировали таблицу целиком.

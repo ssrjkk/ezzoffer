@@ -89,11 +89,19 @@ export function distinctQueries(limit = MAX_QUERIES_PER_RUN): { text: string; ci
 
   for (const row of activeSearches()) {
     const text = buildQueryText(row.keywords);
-    if (!text) continue;
-    const key = `${text.toLowerCase()}|${row.city.toLowerCase()}`;
+    // Нормализация ключа: «Москва» vs « Москва » — один город, а не два
+    // запроса в hh. Без trim дубли дёргали площадку дважды.
+    const city = row.city.trim();
+    /*
+     * Поиск «только город» — валидный запрос: текст пуст, а area идёт
+     * отдельным параметром. Раньше такие поиски молча выпадали (buildQueryText
+     * вернул '' → continue), и каталог не обновлялся вообще, хотя active=1.
+     */
+    if (!text && !city) continue;
+    const key = `${text.toLowerCase()}|${city.toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push({ text, city: row.city });
+    out.push({ text, city });
     if (out.length >= limit) break;
   }
 
@@ -136,6 +144,10 @@ export async function refreshCatalogForSearches(opts?: {
      * всё равно обновлялся общей витриной: работа впустую плюс нагрузка на
      * девять внешних доменов каждые 6 часов ради данных, которые никто не
      * ищет.
+     *
+     * Отчёт пишется и в этом случае: иначе lastRefreshReport врал бы старым
+     * успешным отчётом, пока поисков нет, — админ-панель показывала бы
+     * вчерашние цифры как сегодняшние.
      */
     const report: RefreshReport = {
       ran: false,
@@ -145,6 +157,9 @@ export async function refreshCatalogForSearches(opts?: {
       added: 0,
       durationMs: Date.now() - started,
     };
+    db.prepare(
+      'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    ).run(REPORT_KEY, JSON.stringify(report));
     return report;
   }
 

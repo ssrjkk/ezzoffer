@@ -5,6 +5,7 @@ import { parseParamId } from '@/lib/http';
 import { getValidHhToken } from '@/lib/hh-oauth';
 import { cloneHhResume, canCreateHhResume } from '@/lib/hh-resumes';
 import { NO_STORE_HEADERS } from '@/lib/http';
+import { rateLimit } from '@/lib/rate-limit';
 
 /**
  * POST /api/resumes/[id]/clone — копия резюме на hh.ru.
@@ -19,6 +20,19 @@ import { NO_STORE_HEADERS } from '@/lib/http';
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
   if (!user) return unauthorized();
+
+  /*
+   * Клонирование делает два внешних вызова и создаёт сущность в чужом
+   * аккаунте: без лимита sustained-флуд упирается в квоты hh.ru с серверного
+   * IP (риск бана для всех) и плодит копии резюме. Лимит строгий и часовой.
+   */
+  const limiter = rateLimit(`resume-clone:${user.id}`, { windowMs: 60 * 60 * 1000, max: 5 });
+  if (!limiter.allowed) {
+    return NextResponse.json(
+      { error: 'Слишком много копий подряд. Попробуйте через час.' },
+      { status: 429, headers: { 'Retry-After': String(limiter.retryAfterSeconds) } },
+    );
+  }
 
   const { id: rawId } = await ctx.params;
   const id = parseParamId(rawId);

@@ -88,7 +88,7 @@ export function Hero() {
             </div>
 
             <p className="mt-6 font-mono text-xs text-muted">
-              24 часа бесплатно · без привязки карты · отмена в один клик
+              24 часа бесплатно · без привязки карты · закончится сам
             </p>
           </div>
 

@@ -40,6 +40,8 @@ const COMMANDS = [
   { command: 'statistika', description: 'Воронка откликов' },
   { command: 'sobesedovanie', description: 'Подготовка к собеседованию' },
   { command: 'izbrannoe', description: 'Отложенные вакансии' },
+  { command: 'sovety', description: 'Что делать дальше' },
+  { command: 'navyki', description: 'Пробелы в навыках' },
   { command: 'svyazat', description: 'Привязать аккаунт: /svyazat <код>' },
   { command: 'pauza', description: 'Остановить отправку' },
   { command: 'start', description: 'Продолжить и статус' },

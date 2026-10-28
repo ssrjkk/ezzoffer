@@ -1,7 +1,19 @@
 import type { User } from './db';
 import { catalogItem } from './payments/catalog';
 
-export type PlanId = 'none' | 'trial' | 'start' | 'pro' | 'expert' | 'beta_life';
+export type PlanId =
+  | 'none'
+  | 'trial'
+  | 'start'
+  | 'start-7'
+  | 'start-14'
+  | 'pro'
+  | 'pro-7'
+  | 'pro-14'
+  | 'expert'
+  | 'expert-7'
+  | 'expert-14'
+  | 'beta_life';
 
 export const PLAN_NAMES: Record<string, string> = {
   none: 'Нет тарифа',
@@ -13,6 +25,19 @@ export const PLAN_NAMES: Record<string, string> = {
 };
 
 /**
+ * Базовый тариф без суффикса периода: 'start-7' → 'start'.
+ *
+ * Периоды живут в users.plan (их пишет выдача прав), а лимиты, витрина и
+ * привилегии определены на базовых тарифах. Без нормализации 'start-7'
+ * падал бы в default-ветки: ноль откликов вместо пятидесяти.
+ */
+export function basePlanOf(plan: string): string {
+  const m = /^(.*)-(7|14|30)$/.exec(plan);
+  if (m && PLAN_NAMES[m[1]!] !== undefined) return m[1]!;
+  return plan;
+}
+
+/**
  * Топ-тариф: Эксперт и вечная бета с лимитами Эксперта.
  *
  * Здесь живут привилегии без лимитов — AI-first упаковка резюме и подобные:
@@ -20,11 +45,12 @@ export const PLAN_NAMES: Record<string, string> = {
  * сюда, а не размазывается проверками `plan === 'expert'` по роутам.
  */
 export function isTopPlan(plan: string): boolean {
-  return plan === 'expert' || plan === 'beta_life';
+  const base = basePlanOf(plan);
+  return base === 'expert' || base === 'beta_life';
 }
 
 export function planDailyLimit(plan: string): number {
-  switch (plan) {
+  switch (basePlanOf(plan)) {
     case 'trial':
     case 'start':
       return 50;
@@ -47,7 +73,7 @@ export function planDailyLimit(plan: string): number {
  * её числа, а не наоборот.
  */
 export function planResumeLimit(plan: string): number {
-  switch (plan) {
+  switch (basePlanOf(plan)) {
     case 'start':
       return 5;
     case 'pro':
@@ -82,7 +108,15 @@ export function isPlanActive(user: Pick<User, 'plan' | 'plan_expires_at'> | unde
 }
 
 export function planLabel(user: Pick<User, 'plan'> | undefined): string {
-  return PLAN_NAMES[user?.plan ?? 'none'] ?? user?.plan ?? 'Нет тарифа';
+  const plan = user?.plan ?? 'none';
+  if (PLAN_NAMES[plan] !== undefined) return PLAN_NAMES[plan]!;
+  // Периодный тариф без собственной подписи: «Старт (7 дн.)».
+  const base = basePlanOf(plan);
+  if (base !== plan && PLAN_NAMES[base] !== undefined) {
+    const days = plan.slice(base.length + 1);
+    return `${PLAN_NAMES[base]} (${days} дн.)`;
+  }
+  return plan;
 }
 
 export function planExpiresInMs(user: Pick<User, 'plan_expires_at'> | undefined): number {

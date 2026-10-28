@@ -80,6 +80,19 @@ function vacancyIdOf(n: HhNegotiation): string | null {
   return fromUrl ?? null;
 }
 
+/**
+ * Сравнение идентификаторов вакансий как чисел.
+ *
+ * hh отдаёт id иногда с ведущими нулями — строковое сравнение роняло такие
+ * сопоставления молча. Сравнение только для цифровых строк: мусор вместо id
+ * совпадением не считаем.
+ */
+export function sameVacancyId(a: string | null, b: string | null): boolean {
+  if (!a || !b) return false;
+  if (!/^\d+$/.test(a) || !/^\d+$/.test(b)) return a === b;
+  return a.replace(/^0+/, '') === b.replace(/^0+/, '');
+}
+
 /** Момент времени hh; на битой дате — null, чтобы не записать NaN в INTEGER. */
 function timeOf(iso: string | undefined, fallback: number): number {
   if (!iso) return fallback;
@@ -116,15 +129,25 @@ async function fetchNegotiations(token: string): Promise<HhNegotiation[]> {
 
     if (!res.ok) {
       // Первая страница не пришла — синхронизации нет. Статус цепляем к
-      // ошибке: 401 означает мёртвый токен, о котором надо предупредить
-      // человека, а не просто записать в лог. Текст.match ниже в catch
-      // дублирует проверку на случай, если ошибку обернули по дороге.
+      // ошибке: 401/403 означают мёртвый токен или отозванный доступ — о них
+      // надо предупредить человека, а не просто записать в лог. Текст.match
+      // ниже в catch дублирует проверку на случай, если ошибку обернули.
       if (page === 0) {
         const err = new Error(`hh.ru вернул HTTP ${res.status}`) as Error & { hhStatus?: number };
         err.hhStatus = res.status;
         throw err;
       }
-      break;
+      /*
+       * Обрыв на второй и дальше страницах — частичная выборка, а не успех.
+       * Молчаливый break выдавал обрезанный набор за полный: инвайты и отказы
+       * с deep-страниц терялись без следа и без ошибки в логе.
+       */
+      const err = new Error(
+        `hh.ru оборвал выдачу на странице ${page}: HTTP ${res.status}`,
+      ) as Error & { hhStatus?: number; partial?: HhNegotiation[] };
+      err.hhStatus = res.status;
+      err.partial = out;
+      throw err;
     }
 
     const data = parseJson<HhNegotiationsResponse>(res.body);
@@ -186,13 +209,34 @@ export async function syncHhStatuses(
   }
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId) as User | undefined;
   if (!user) return { updated: 0 };
-  const token = (await getValidHhToken(user))?.token;
-  if (!token || !user.hh_resume_id) {
-    return { updated: 0 };
-  }
-
+  /*
+   * Токен — внутри try: getValidHhToken бросает при битом ключе шифрования,
+   * и раньше исключение вылетало мимо локального catch — пользователь тихо
+   * пропускался без authFailed и без предупреждения.
+   */
   try {
-    const items = await fetchNegotiations(token);
+    const token = (await getValidHhToken(user))?.token;
+    if (!token || !user.hh_resume_id) {
+      return { updated: 0 };
+    }
+
+    /*
+     * Частичная выдача (обрыв на странице 1+) обрабатывается, а не
+     * выбрасывается: первые страницы — настоящие статусы, и терять их ради
+     * ошибки на глубокой странице нельзя. Но и молчать нельзя: итог
+     * помечается ошибкой, чтобы планировщик залогировал, а следующий тик
+     * добрал остаток.
+     */
+    let items: HhNegotiation[];
+    let partialError: string | null = null;
+    try {
+      items = await fetchNegotiations(token);
+    } catch (e) {
+      const partial = (e as { partial?: HhNegotiation[] } | null)?.partial;
+      if (!partial) throw e;
+      items = partial;
+      partialError = e instanceof Error ? e.message : 'network error';
+    }
 
     // По вакансии, а не по флагу разобранного состояния: две переписки по
     // одной вакансии (повторный отклик) должны схлопнуться в одну запись.
@@ -242,7 +286,7 @@ export async function syncHhStatuses(
       if (!hh) continue;
       // Идентификатор из slug и из переписки обязаны совпадать как числа:
       // "30251545" и "030251545" — один id, но строки разные.
-      if (vacancyId !== vacancyIdOf(hh)) continue;
+      if (!sameVacancyId(vacancyId, vacancyIdOf(hh))) continue;
       const now = Date.now();
       const updatedAt = timeOf(hh.updated_at, now);
 
@@ -352,16 +396,19 @@ export async function syncHhStatuses(
     if (touched.size > 0) {
       logInfo('hh:sync', `обновлено статусов: ${touched.size}`, { userId });
     }
-    return { updated: touched.size };
+    return partialError
+      ? { updated: touched.size, error: partialError }
+      : { updated: touched.size };
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'network error';
     /*
-     * 401 — токен мёртв и refresh не спас (или его нечем делать): это не
-     * «сеть», а состояние аккаунта. Флаг забирает планировщик и будит
-     * человека предупреждением вместо тишины в статистике.
+     * 401/403 — токен мёртв, отозван или урезан скоп: это не «сеть», а
+     * состояние аккаунта. Флаг забирает планировщик и будит человека
+     * предупреждением вместо тишины в статистике.
      */
+    const status = (e as { hhStatus?: number } | null)?.hhStatus;
     const authFailed =
-      (e as { hhStatus?: number } | null)?.hhStatus === 401 || /HTTP 401\b/.test(msg);
+      status === 401 || status === 403 || /HTTP 40[13]\b/.test(msg);
     return authFailed ? { updated: 0, error: msg, authFailed: true } : { updated: 0, error: msg };
   }
 }

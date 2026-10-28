@@ -82,7 +82,7 @@ export function PricingSection({ compact = false }: { compact?: boolean }) {
             Тариф, который <span className="text-accent">снимает рутину</span>
           </>
         }
-        sub="Попробуйте весь функционал бесплатно и выберите подходящий период"
+        sub="Попробуйте бесплатно 24 часа и выберите подходящий период"
       />
 
       <div className="mb-10 flex justify-center">

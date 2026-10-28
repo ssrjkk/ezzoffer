@@ -48,13 +48,33 @@ export async function exchangeCode(code: string): Promise<HhTokenResponse> {
     redirect_uri: envOpt(process.env, 'HH_REDIRECT_URI') ?? '',
     code,
   });
-  const res = await fetch(TOKEN_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-    body,
-    cache: 'no-store',
-  });
-  const data = (await res.json()) as HhTokenResponse;
+  /*
+   * Таймаут обязателен: голый fetch на зависшем api.hh.ru держал
+   * GET /api/hh/callback вечно. Тот же приём, что в refreshAccessToken ниже.
+   * Ошибка возвращается значением, а не исключением — вызывающий уже умеет
+   * читать { error } и вести человека на ?hh=failed.
+   */
+  let res: Response;
+  try {
+    res = await fetch(TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+      body,
+      cache: 'no-store',
+      signal: AbortSignal.timeout(15_000),
+    });
+  } catch (err) {
+    return {
+      error: 'network',
+      error_description: err instanceof Error ? err.message : 'не удалось связаться с hh.ru',
+    };
+  }
+  let data: HhTokenResponse;
+  try {
+    data = (await res.json()) as HhTokenResponse;
+  } catch {
+    return { error: `HTTP ${res.status}`, error_description: 'ответ hh.ru не является JSON' };
+  }
   if (!res.ok || !data.access_token) {
     return { error: data.error ?? `HTTP ${res.status}`, error_description: data.error_description };
   }
@@ -180,6 +200,18 @@ export function generateOauthState(): string {
 }
 
 /**
+ * Обновление токена в полёте — одно на пользователя.
+ *
+ * Плановый прогон и ручной запуск идут параллельно (apply-лок и sync-лок
+ * независимы): оба видят протухший токен и оба шлют refresh одним и тем же
+ * refresh_token. У многих провайдеров ротация одноразовая — второй запрос
+ * инвалидирует первый, и оба потока остаются с мёртвым токеном до
+ * перепривязки. Второй пришедший ждёт тот же промис вместо нового запроса;
+ * запись в БД идемпотентна (те же значения), last-writer-wins безвреден.
+ */
+const refreshInFlight = new Map<number, Promise<HhTokenResponse>>();
+
+/**
  * Возвращает актуальный access-токен пользователя, автоматически обновляя
  * протухший токен через refresh_token. Если обновить нечем — null.
  */
@@ -225,7 +257,16 @@ export async function getValidHhToken(
     return { token: accessToken };
   }
 
-  const refreshed = await refreshAccessToken(refreshToken);
+  let inflight = refreshInFlight.get(user.id);
+  if (!inflight) {
+    inflight = refreshAccessToken(refreshToken);
+    refreshInFlight.set(user.id, inflight);
+    const owned = inflight;
+    owned.finally(() => {
+      if (refreshInFlight.get(user.id) === owned) refreshInFlight.delete(user.id);
+    });
+  }
+  const refreshed = await inflight;
   if (!refreshed.access_token) {
     return { token: accessToken };
   }

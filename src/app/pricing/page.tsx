@@ -6,7 +6,7 @@ import { PricingSection } from '@/components/home/pricing';
 export const metadata: Metadata = pageMeta('/pricing', {
   title: 'Тарифы',
   description:
-    'Тарифы EZOffer: Старт, Про и Эксперт. Пробный период 24 часа без карты, отмена в один клик.',
+    'Тарифы EZOffer: Старт, Про и Эксперт. Пробный период 24 часа без карты, продлевать не нужно — закончится сам.',
 });
 
 export default function PricingPage() {
@@ -21,7 +21,7 @@ export default function PricingPage() {
               Подходящий тариф <span className="text-accent">найдётся для каждого</span>
             </>
           }
-          sub="Попробуйте весь функционал бесплатно и выберите наиболее подходящий период"
+          sub="Попробуйте бесплатно 24 часа и выберите наиболее подходящий период"
         />
       </Section>
       <PricingSection compact />

@@ -3,6 +3,7 @@ import { requireUser, unauthorized } from '@/lib/api';
 import { getValidHhToken } from '@/lib/hh-oauth';
 import { listHhResumes } from '@/lib/hh-resumes';
 import { NO_STORE_HEADERS } from '@/lib/http';
+import { rateLimit } from '@/lib/rate-limit';
 
 /**
  * Список резюме пользователя на hh.ru — для выбора при импорте.
@@ -15,6 +16,18 @@ import { NO_STORE_HEADERS } from '@/lib/http';
 export async function GET() {
   const user = await requireUser();
   if (!user) return unauthorized();
+
+  /*
+   * Список тянется с hh.ru каждый раз: без лимита цикл обновлений страницы
+   * (или скрипт) долбил бы площадку с токеном пользователя без ограничений.
+   */
+  const limiter = rateLimit(`resumes-import:${user.id}`, { windowMs: 60 * 1000, max: 20 });
+  if (!limiter.allowed) {
+    return NextResponse.json(
+      { error: 'Слишком частые запросы. Подождите минуту.' },
+      { status: 429, headers: { 'Retry-After': String(limiter.retryAfterSeconds) } },
+    );
+  }
 
   const token = (await getValidHhToken(user))?.token;
   if (!token) {

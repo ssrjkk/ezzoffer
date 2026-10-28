@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireUser, unauthorized } from '@/lib/api';
-import { catalogItem } from '@/lib/payments/catalog';
+import { resolvePeriodPlan } from '@/lib/payments/catalog';
 import { registry } from '@/lib/payments/registry';
 import { NO_STORE_HEADERS } from '@/lib/http';
 
@@ -21,9 +21,17 @@ export async function POST(request: Request) {
   const url = new URL(request.url);
   const planId = url.searchParams.get('planId') ?? '';
   const methodId = url.searchParams.get('method') ?? '';
-
-  const item = catalogItem(planId);
-  if (!item) return NextResponse.json({ error: 'Тариф неизвестен' }, { status: 400 });
+  /*
+   * Период витрины — часть позиции каталога, а не комментарий к счёту.
+   *
+   * Раньше период игнорировался вовсе: витрина продавала 7/14 дней, а выдача
+   * прав всегда читала 30 дней из базовой позиции — 7-дневная оплата дарила
+   * 30 дней. Неизвестный период или комбинация — 400, а не ближайший срок:
+   * за деньги не угадывают.
+   */
+  const period = Number(url.searchParams.get('period') ?? 30);
+  const item = resolvePeriodPlan(planId, period);
+  if (!item) return NextResponse.json({ error: 'Тариф или период неизвестны' }, { status: 400 });
 
   // Бесплатный тариф оплатой не проходит: это activate, а не checkout.
   if (item.priceRub <= 0) {
@@ -50,7 +58,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const intent = method.createIntent({ userId: user.id, planId });
+    // В интент уходит разрешённая позиция каталога (с периодом), а не сырой
+    // planId из запроса: провайдер должен вернуть этот же id в вебхуке.
+    const intent = method.createIntent({ userId: user.id, planId: item.id });
     return Response.json(
       { invoiceId: intent.invoiceId, address: intent.address, payUrl: intent.payUrl },
       { headers: NO_STORE_HEADERS },

@@ -1,5 +1,6 @@
 import { logError, logInfo } from './logger';
 import { envNum } from './env';
+import { encryptionEnabled } from './secrets';
 import { purgeExpiredAuthRows } from './auth';
 
 /**
@@ -34,6 +35,19 @@ export async function startNodeRuntime(): Promise<void> {
     purgeExpiredAuthRows();
   } catch (err) {
     logError('bootstrap:purge', err);
+  }
+
+  /*
+   * Токены hh без ключа лежат в БД открытым текстом — и в бэкапах тоже.
+   * Падать из-за этого нельзя (рабочие базы без ключа должны стартовать),
+   * а молчать — значит делать вид, что шифрование включено. Громкий лог
+   * на каждом старте продакшена.
+   */
+  if (process.env.NODE_ENV === 'production' && !encryptionEnabled()) {
+    logError(
+      'bootstrap:secrets',
+      new Error('EZOFFER_TOKEN_KEY не задан: hh-токены хранятся открытым текстом'),
+    );
   }
 
   // envNum, а не Number(process.env.X ?? default): Number("") === 0, и пустая

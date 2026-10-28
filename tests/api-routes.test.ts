@@ -95,6 +95,86 @@ test('POST /api/resumes/[id]/improve с тарифом работает', async 
   assert.equal(res.status, 200, `улучшение с тарифом: ${res.status}`);
 });
 
+/*
+ * Периоды в оплате: витрина продаёт 7/14/30 дней, и выдача обязана читать
+ * дни из позиции каталога, а не всегда выдавать 30. Раньше период
+ * игнорировался: 7-дневная оплата дарила 30 дней.
+ */
+test('POST /api/plans/checkout понимает периоды, мусор отклоняет', async () => {  loginAs({ id: 42 });
+  const { POST } = await import('../src/app/api/plans/checkout/route');
+  const call = (q: string) =>
+    POST(
+      new Request(`http://localhost:3000/api/plans/checkout${q}`, { method: 'POST' }),
+    );
+  // Позиции существуют: дальше упираемся в неподключённый эквайринг (503),
+  // а не в «тариф неизвестен» (400). Разрешение периода проверено именно этим.
+  assert.equal((await call('?planId=start&period=7&method=card')).status, 503);
+  assert.equal((await call('?planId=pro&period=14&method=card')).status, 503);
+  assert.equal((await call('?planId=expert&method=card')).status, 503);
+  // Неизвестный период и тариф — 400, а не ближайший срок.
+  assert.equal((await call('?planId=start&period=5&method=card')).status, 400);
+  assert.equal((await call('?planId=nope&period=7&method=card')).status, 400);
+});
+
+test('POST /api/applications упирается в потолок компании', async () => {
+  makeUser(45, 'cap@example.test');
+  db.prepare(
+    "UPDATE users SET hh_token = ?, hh_token_expires_at = ?, hh_resume_id = ?, mode = 'live' WHERE id = 45",
+  ).run('tok', Date.now() + 3600_000, 'res123');
+  for (let i = 0; i < 5; i++) {
+    db.prepare(
+      `INSERT INTO vacancies (slug, source, source_id, title, company, salary, salary_min, salary_max,
+         level, format, city, posted, published_at, category, about, requirements, bonus,
+         contact_email, contact_phone, fetched_at)
+       VALUES (?, 'hh', ?, ?, 'Авито', '200000', 200000, 300000, 'Middle', 'Удалённо', 'Москва',
+         'сегодня', ?, 'Разработка', 'Требуются: React', '["React"]', '[]', NULL, NULL, ?)`,
+    ).run(`hh-cap-${i}`, `hh-cap-${i}`, `React-разработчик ${i}`, Date.now(), Date.now());
+  }
+  const { resetCatalogCache } = await import('../src/lib/vacancies');
+  resetCatalogCache();
+  // Четыре сегодняшних отклика в ту же компанию — потолок по умолчанию (4).
+  const ins = db.prepare(
+    'INSERT INTO applications (user_id, job_slug, status, sent_at) VALUES (45, ?, ?, ?)',
+  );
+  for (let i = 0; i < 4; i++) ins.run(`hh-cap-${i}`, 'sent', Date.now());
+  loginAs({ id: 45, plan: 'pro' });
+
+  const { POST } = await import('../src/app/api/applications/route');
+  const res = await POST(post({ jobSlug: 'hh-cap-4' }));
+  assert.equal(res.status, 429, `пятый отклик в компанию ушёл мимо потолка: ${res.status}`);
+  const body = await readJson<{ error?: string }>(res);
+  assert.match(body.error ?? '', /эту компанию/, `не та причина: ${body.error}`);
+  assert.ok(res.headers.get('Retry-After'), 'нет Retry-After у 429 потолка компании');
+});
+
+test('POST improve ai-first без топ-тарифа → 402', async () => {
+  makeUser(43, 'nofirst@example.test');
+  const rid = makeResume(43);
+  loginAs({ id: 43, plan: 'pro' });
+
+  const { POST } = await import('../src/app/api/resumes/[id]/improve/route');
+  const res = await POST(post({ mode: 'ai-first' }), {
+    params: Promise.resolve({ id: String(rid) }),
+  });
+  assert.equal(res.status, 402, `ai-first без Эксперта обязан требовать тариф: ${res.status}`);
+});
+
+test('POST improve ai-first на Эксперте работает и честно пишет движок', async () => {
+  makeUser(44, 'expert@example.test');
+  db.prepare("UPDATE users SET plan = 'expert' WHERE id = 44").run();
+  const rid = makeResume(44);
+  loginAs({ id: 44, plan: 'expert' });
+
+  const { POST } = await import('../src/app/api/resumes/[id]/improve/route');
+  const res = await POST(post({ mode: 'ai-first' }), {
+    params: Promise.resolve({ id: String(rid) }),
+  });
+  assert.equal(res.status, 200, `ai-first на Эксперте: ${res.status}`);
+  const body = await readJson<{ engine?: string }>(res);
+  // Без AI_API_KEY провайдер недоступен: честный откат на правила, а не враньё про ai-first.
+  assert.equal(body.engine, 'rules', `движок соврал: ${body.engine}`);
+});
+
 test('GET /api/letters без сессии → 401', async () => {
   logout();
   const { GET } = await import('../src/app/api/letters/route');

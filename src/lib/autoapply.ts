@@ -3,9 +3,15 @@ import { mskDayStartMs, MSK_OFFSET_MS, DAY_MS } from './moscow-day';
 import { isPlanActive, planDailyLimit } from './plans';
 import { matchesSearch, skillsByVacancy, type SearchRow } from './matcher';
 import { getCatalog } from './vacancies';
-import { hhProvider } from './vacancies/hh';
+import { hhProvider, ALREADY_APPLIED_ERROR } from './vacancies/hh';
 import { getValidHhToken } from './hh-oauth';
-import { createPacing, type FailureKind, type Pacing, type PacingConfig } from './anti-ban';
+import {
+  createPacing,
+  type FailureKind,
+  type Pacing,
+  type PacingConfig,
+  type PacingSnapshot,
+} from './anti-ban';
 import { effectivePacing, autoapplyEnabled, autoapplyDryRun, weekendFactor, warmupDays } from './config';
 import { notifyAccountBlocked, notifyHhTokenExpiredForUser, clearHhTokenWarning } from './telegram-digest';
 import { renderLetterTemplate } from './cover-letter';
@@ -143,10 +149,31 @@ function sleepMs(ms: number): Promise<void> {
  * Значение задаётся переменной окружения, потому что у разных поисков разная
  * специфика: в крупной компании несколько вакансий одного профиля обычны.
  */
-function companyDailyCap(): number {
+export function companyDailyCap(): number {
   const raw = process.env.AUTOAPPLY_PER_COMPANY;
   const n = raw === undefined || raw.trim() === '' ? 4 : Number(raw);
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 4;
+}
+
+/**
+ * Сколько откликов уже ушло в компанию сегодня.
+ *
+ * Единая проверка потолка для всех трёх путей отправки (план, кабинет,
+ * бот): раньше её знал только плановый прогон, и ручные отклики шли мимо —
+ * пачка в одну компанию из кабинета выглядела для площадки так же аномально,
+ * как и пачка из автоотклика.
+ */
+export function companySendsToday(userId: number, company: string): number {
+  const needle = normalizeCompany(company);
+  if (!needle) return 0;
+  const rows = db
+    .prepare(
+      `SELECT COALESCE(v.company, '') AS company FROM applications a
+       LEFT JOIN vacancies v ON v.slug = a.job_slug
+       WHERE a.user_id = ? AND a.sent_at >= ?`,
+    )
+    .all(userId, mskDayStartMs()) as { company: string }[];
+  return rows.filter((r) => normalizeCompany(r.company) === needle).length;
 }
 
 /**
@@ -326,6 +353,11 @@ export function getUserResumes(userId: number): ResumeTarget[] {
  */
 const pacingByUser = new Map<number, Pacing>();
 
+/** Ключ снимка паузера в meta. */
+function pacingSnapshotKey(userId: number): string {
+  return `pacing:${userId}`;
+}
+
 /** Паузер пользователя (экспортируется для тестов гидратации). */
 export function pacingFor(userId: number, cfg: Partial<PacingConfig>, nowFn: () => number): Pacing {
   const existing = pacingByUser.get(userId);
@@ -355,8 +387,95 @@ export function pacingFor(userId: number, cfg: Partial<PacingConfig>, nowFn: () 
   } catch {
     // Гидратация — best-effort: без неё поведение как раньше (пустое окно).
   }
-  pacingByUser.set(userId, created);
-  return created;
+  /*
+   * Восстановление cooldown/backoff из снимка.
+   *
+   * Гидратация выше поднимает только счётчики отправок, а паузы
+   * (cooldown после отправки, backoff после 429/503, Retry-After, блокировка)
+   * жили только в замыкании и сгорали при рестарте: первый же тик после
+   * деплоя слал burst в площадку. Снимок пишется на каждую живую запись
+   * (см. persistentPacing ниже) и читается один раз на жизнь процесса.
+   */
+  try {
+    const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(pacingSnapshotKey(userId)) as
+      | { value: string }
+      | undefined;
+    if (row?.value) {
+      const parsed = JSON.parse(row.value) as Partial<
+        Record<'cooldownMs' | 'failAt' | 'failStreak' | 'retryAfterUntil' | 'blockUntil', unknown>
+      > &
+        Partial<Pick<PacingSnapshot, 'failKind' | 'retryDetail'>>;
+      created.restore({
+        lastSentAt: 0,
+        cooldownMs: 0,
+        failAt: 0,
+        failKind: 'network',
+        failStreak: 0,
+        retryAfterUntil: 0,
+        retryDetail: '',
+        blockUntil: 0,
+        ...(parsed as object),
+      });
+    }
+  } catch {
+    // Битый снимок — как его отсутствие: начинаем с чистого паузера.
+  }
+  const wrapped = persistentPacing(userId, created);
+  pacingByUser.set(userId, wrapped);
+  return wrapped;
+}
+
+/**
+ * Обёртка паузера с записью снимка на каждое живое событие.
+ *
+ * recordSent/recordFailure/respectRetryAfter с явным временем — это
+ * гидратация прошлого, её сохранять не надо (источник правды — БД).
+ * Вызовы без аргументов — живые события текущего прогона: снимок обновляется
+ * сразу, чтобы kill -9 между отправкой и концом тика ничего не терял.
+ * Запись — один UPSERT на событие, той же частоты, что и остальные записи
+ * прогона; best-effort, как и вся гидратация.
+ */
+export function persistentPacing(userId: number, inner: Pacing): Pacing {
+  const save = (): void => {
+    try {
+      db.prepare(
+        'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+      ).run(pacingSnapshotKey(userId), JSON.stringify(inner.snapshot()));
+    } catch {
+      // Снимок — оптимизация, а не условие: без него поведение как раньше.
+    }
+  };
+  return {
+    decide: (now) => inner.decide(now),
+    recordSent: (now?: number) => {
+      if (now === undefined) {
+        inner.recordSent();
+        save();
+      } else {
+        inner.recordSent(now);
+      }
+    },
+    recordFailure: (kind, now?: number) => {
+      if (now === undefined) {
+        inner.recordFailure(kind);
+        save();
+      } else {
+        inner.recordFailure(kind, now);
+      }
+    },
+    respectRetryAfter: (ms, now?: number) => {
+      if (now === undefined) {
+        inner.respectRetryAfter(ms);
+        save();
+      } else {
+        inner.respectRetryAfter(ms, now);
+      }
+    },
+    blockedUntil: (now) => inner.blockedUntil(now),
+    configure: (patch) => inner.configure(patch),
+    snapshot: () => inner.snapshot(),
+    restore: (s) => inner.restore(s),
+  };
 }
 
 /** Сброс паузеров (используется в тестах). */
@@ -1065,6 +1184,41 @@ export async function runAutoApply(opts?: {
             // висящий pending блокировал бы повторную попытку до чистки.
             completeSend(claim.id);
             if (kind === 'closed') {
+              if (result.error === ALREADY_APPLIED_ERROR) {
+                /*
+                 * Переписка есть на hh, а строки в истории нет: наш ответ
+                 * потерялся после создания переписки, или человек откликнулся
+                 * сам на сайте. Без записи sync её никогда не увидит (он
+                 * обновляет только существующие строки) — отклик навсегда
+                 * невидим в статистике.
+                 *
+                 * Пишем как отправленный, но с пустым письмом: текст мы не
+                 * отправляли, а факт переписки — есть. Гонка параллельной
+                 * вставки гасится как обычно: строка уже есть — значит, всё
+                 * уже записано.
+                 */
+                try {
+                  db.prepare(
+                    `INSERT INTO applications (user_id, job_slug, search_id, resume_id, letter_id, message, status, origin, sent_at)
+                     VALUES (?, ?, ?, ?, ?, '', 'sent', 'real', ?)`,
+                  ).run(user.id, vacancy.slug, search.id, sendableId, null, Date.now());
+                } catch (err) {
+                  if (!isUniqueViolation(err)) throw err;
+                  skipped++;
+                  logApplyEvent(user.id, vacancy.slug, 'already', 'гонка вставки: строка уже есть');
+                  continue;
+                }
+                appliedSet.add(vacancy.slug);
+                applied++;
+                withoutLetter++;
+                logApplyEvent(
+                  user.id,
+                  vacancy.slug,
+                  'already',
+                  'переписка уже есть на hh — записано в историю',
+                );
+                continue;
+              }
               skipped++;
               logApplyEvent(user.id, vacancy.slug, 'skipped_closed', result.error ?? '');
               continue;
@@ -1361,6 +1515,25 @@ export async function applyToVacancy(
       kind: 'no_resume',
       error: 'Нет резюме для отправки — импортируйте его с hh в кабинете',
     };
+  }
+
+  /*
+   * Потолок на компанию — и здесь, а не только в плановом прогоне.
+   *
+   * Ручной отклик из чата шёл мимо companyDailyCap: пачка в одну компанию
+   * из кнопки выглядела для площадки так же аномально, как пачка из
+   * автоотклика. Ночь и часы здесь не трогаем (человек сам нажал ночью —
+   * его право), а вот «двадцать в одну компанию» останавливаем везде.
+   */
+  if (vacancy.company?.trim()) {
+    const cap = companyDailyCap();
+    if (cap > 0 && companySendsToday(user.id, vacancy.company) >= cap) {
+      return {
+        ok: false,
+        kind: 'paused',
+        error: `В компанию «${vacancy.company.trim()}» сегодня уже отправлено ${cap} — продолжим завтра`,
+      };
+    }
   }
 
   const valid = await getValidHhToken(user);

@@ -89,9 +89,6 @@ const INBOX_MAX_ATTEMPTS = 5;
  */
 const INBOX_CLAIM_TTL_MS = 5 * 60 * 1000;
 
-/** Счётчик вызовов processInbox — часть токена заявки (см. ниже). */
-let processInboxSeq = 0;
-
 /**
  * Разбор очереди входящих апдейтов Telegram.
  *
@@ -108,21 +105,20 @@ let processInboxSeq = 0;
  */
 export async function processInbox(limit = 20): Promise<{ processed: number; failed: number }> {
   /*
-   * Токен заявки уникален на вызов, а не равен Date.now().
+   * Токен заявки — время плюс случайный хвост, а не счётчик процесса.
    *
-   * Раньше заявка метилась `claimed_at = now`, и выборка шла по тому же now:
-   * два processInbox в одну миллисекунду (wakeInbox из вебхука + тик
-   * планировщика) ставили одинаковую метку, и второй SELECT забирал строки
-   * первого вместе со своими — один апдейт разбирался дважды. Для /отклик
-   * это почти безвредно (outbox отклонит дубль в 409), а для /подбор —
-   * двойное сообщение человеку. Счётчик на процесс гарантирует уникальность
-   * даже в одну мс: чужие строки второму SELECT невидимы.
+   * Раньше заявка метилась `now*1000 + seq%1000`, где seq жил в памяти
+   * процесса: два процесса в одну миллисекунду с одинаковым seq ставили
+   * одинаковую метку, и второй SELECT забирал строки первого — один апдейт
+   * разбирался дважды. Случайные 6 цифр дают коллизию ~1e-6 на пару вызовов
+   * в одну мс; миллисекунды доминируют, поэтому монотонность и отсечение
+   * протухших claim'ов сравнением токенов сохраняются.
    */
   const now = Date.now();
-  const token = now * 1000 + (processInboxSeq = (processInboxSeq + 1) % 1000);
+  const token = now * 1_000_000 + Math.floor(Math.random() * 1_000_000);
   // Токен монотонный со временем (миллисекунды доминируют), поэтому протухший
   // claim отсекается сравнением токенов: заявка старше TTL считается свободной.
-  const staleBefore = (now - INBOX_CLAIM_TTL_MS) * 1000;
+  const staleBefore = (now - INBOX_CLAIM_TTL_MS) * 1_000_000;
   const size = Math.min(Math.max(1, Math.floor(limit)), 100);
   db.prepare(
     `UPDATE tg_inbox SET claimed_at = ? WHERE update_id IN (
@@ -1069,7 +1065,9 @@ async function handleCallback(update: TelegramUpdate): Promise<boolean | null> {
     const reply = replyFor(command, '', user);
     if (cb.id) await answerCallbackQuery(cb.id);
 
-    const text = reply.text || HELP;
+    // Пометка демо-режима — как в текстовых командах (см. handleUpdate):
+    // кнопки шли мимо withModeNotice, и демо-аккаунт получал голые цифры.
+    const text = withModeNotice(reply.text, user?.mode) || HELP;
     const changed =
       cb.message_id !== undefined
         ? await editTelegramMessage(chat, cb.message_id, text, {

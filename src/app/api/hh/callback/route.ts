@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { db, type User } from '@/lib/db';
-import { exchangeCode, fetchHhResumeId, saveHhConnection, clearHhConnection } from '@/lib/hh-oauth';
+import { exchangeCode, fetchHhResumeId, saveHhConnection } from '@/lib/hh-oauth';
 import { logError } from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
@@ -40,8 +40,14 @@ export async function GET(request: Request) {
     }
     const resumeId = await fetchHhResumeId(token.access_token);
     if (!resumeId) {
-      clearHhConnection(user.id);
-      return NextResponse.redirect(new URL('/dashboard/settings?hh=no-resume', request.url));
+      /*
+       * Соединение НЕ затираем: null означает и «у пользователя нет резюме»,
+       * и «сеть чихнула». Стирание рабочего подключения по транзиентной
+       * ошибке сбрасывало человека в demo посреди живых откликов — и чинить
+       * было нечего, кроме повторного OAuth-круга. Старые значения остаются,
+       * человек видит «не удалось» и пробует снова.
+       */
+      return NextResponse.redirect(new URL('/dashboard/settings?hh=failed', request.url));
     }
     saveHhConnection(
       user,

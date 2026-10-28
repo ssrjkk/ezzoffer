@@ -1,6 +1,7 @@
 import { db } from '../db';
 import { logError } from '../logger';
 import { catalogItem } from './catalog';
+import { basePlanOf } from '../plans';
 import type { VerifiedEvent } from './types';
 
 /**
@@ -87,8 +88,16 @@ export function grant(event: VerifiedEvent): boolean {
         .get(event.userId) as
         | { plan: string; plan_expires_at: number | null }
         | undefined;
+      /*
+       * Остаток продлевается в пределах базового тарифа, а не planId:
+       * 'start-7' поверх живого 'start' — то же продление, что и 'start'
+       * поверх 'start'. Строгое сравнение id сжигало бы остаток при смене
+       * периода (было 20 дней start-30, купил start-7 — стало 7 вместо 27).
+       */
       const liveRemainder =
-        current && current.plan === event.planId && (current.plan_expires_at ?? 0) > paidAt
+        current &&
+        basePlanOf(current.plan) === basePlanOf(event.planId) &&
+        (current.plan_expires_at ?? 0) > paidAt
           ? (current.plan_expires_at as number)
           : paidAt;
       const expiresAt = item.permanent ? null : liveRemainder + item.days * 86_400_000;

@@ -15,6 +15,7 @@ import { logApplyEvent } from '@/lib/apply-events';
 import { NO_STORE_HEADERS, isUniqueViolation } from '@/lib/http';
 import { claimSend, completeSend } from '@/lib/apply-outbox';
 import { rateLimit } from '@/lib/rate-limit';
+import { companyDailyCap, companySendsToday } from '@/lib/autoapply';
 import { rankLettersForVacancy } from '@/lib/ai-matching';
 
 export async function GET(request: Request) {
@@ -113,9 +114,15 @@ export async function POST(request: Request) {
       .get(user.id, mskDayStartMs()) as { c: number }
   ).c;
   if (limit > 0 && todayCount >= limit) {
+    // Срок — до полуночи МСК: клиент показывает «попробуйте завтра в 00:00»,
+    // а не голый 429 без горизонта.
+    const retryAfter = Math.max(
+      1,
+      Math.ceil((mskDayStartMs() + 86_400_000 - Date.now()) / 1000),
+    );
     return NextResponse.json(
       { error: `Достигнут дневной лимит откликов (${limit}). Обновите тариф.` },
-      { status: 429 },
+      { status: 429, headers: { 'Retry-After': String(retryAfter) } },
     );
   }
 
@@ -261,6 +268,29 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+    /*
+     * Потолок на компанию — как в плановом прогоне и в боте.
+     *
+     * Ручной отклик из кабинета шёл мимо companyDailyCap: пачка в одну
+     * компанию по кнопке выглядела для площадки так же аномально, как пачка
+     * из автоотклика. Срок — до полуночи МСК, как у дневного лимита.
+     */
+    if (vacancy.company?.trim()) {
+      const companyCap = companyDailyCap();
+      if (companyCap > 0 && companySendsToday(user.id, vacancy.company) >= companyCap) {
+        return NextResponse.json(
+          { error: `В эту компанию сегодня уже отправлено ${companyCap}. Продолжим завтра.` },
+          {
+            status: 429,
+            headers: {
+              'Retry-After': String(
+                Math.max(1, Math.ceil((mskDayStartMs() + 86_400_000 - Date.now()) / 1000)),
+              ),
+            },
+          },
+        );
+      }
+    }
     const valid = await getValidHhToken(fresh);
     if (!valid) {
       return NextResponse.json(
@@ -298,7 +328,7 @@ export async function POST(request: Request) {
       }
       return NextResponse.json(
         { error: 'Отправка уже выполняется — проверьте отклики через минуту' },
-        { status: 429 },
+        { status: 429, headers: { 'Retry-After': '60' } },
       );
     }
     let sent: Awaited<ReturnType<NonNullable<typeof hhProvider.apply>>>;

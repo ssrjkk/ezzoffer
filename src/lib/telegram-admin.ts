@@ -6,6 +6,7 @@ import { isHhConnected } from './hh-oauth';
 import {
   answerCallbackQuery,
   editTelegramMessage,
+  escapeHtml,
   sendTelegramMessage,
   type InlineKeyboard,
 } from './telegram';
@@ -107,7 +108,9 @@ export function adminCatalogText(): string {
     `Длительность: ${Math.round(report.durationMs / 1000)} с`,
   ];
   for (const s of failed.slice(0, 5)) {
-    lines.push(`— ${s.source}: ${(s.error ?? 'ошибка').slice(0, 80)}`);
+    // Текст ошибки — снаружи (сеть, RSS-фид): без экранирования кривая
+    // разметка роняла бы всё сообщение с html:true.
+    lines.push(`— ${s.source}: ${escapeHtml((s.error ?? 'ошибка').slice(0, 80))}`);
   }
   return lines.join('\n');
 }

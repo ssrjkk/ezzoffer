@@ -28,6 +28,19 @@ function seedUser(): number {
   );
 }
 
+/** Пользователь с протухшим токеном и живым refresh_token. */
+function seedExpiredUser(): number {
+  return Number(
+    db
+      .prepare(
+        `INSERT INTO users (email, password_hash, plan, plan_expires_at, created_at, hh_token,
+          hh_token_expires_at, hh_refresh_token, hh_resume_id, mode)
+         VALUES ('e@example.com', 'h', 'pro', ?, ?, 'tok', ?, 'ref', 'res1', 'live')`,
+      )
+      .run(Date.now() + 100_000, Date.now(), Date.now() - 1000).lastInsertRowid,
+  );
+}
+
 /** Мок переговоров: 401 на первой странице — мёртвый токен. */
 function mock401(): () => void {
   const saved = globalThis.fetch;
@@ -81,6 +94,74 @@ test('syncAllHhUsers возвращает пользователей с мёрт
   } finally {
     restore();
   }
+});
+
+test('403 тоже помечается authFailed', async () => {
+  const uid = seedUser();
+  const { syncHhStatuses } = await import('../src/lib/hh-sync');
+  const saved = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL) => {
+    if (String(url).includes('/negotiations')) {
+      return { ok: false, status: 403, text: async () => 'Forbidden' } as unknown as Response;
+    }
+    return saved(url);
+  }) as typeof fetch;
+  try {
+    const res = await syncHhStatuses(uid);
+    assert.equal(res.authFailed, true, '403 не помечен смертью доступа');
+  } finally {
+    globalThis.fetch = saved;
+  }
+});
+
+test('обрыв на второй странице обрабатывает частичное и возвращает ошибку', async () => {
+  const uid = seedUser();
+  db.prepare('INSERT INTO applications (user_id, job_slug, status, sent_at) VALUES (?, ?, ?, ?)').run(
+    uid,
+    'hh-1',
+    'sent',
+    Date.now() - 1000,
+  );
+  const { syncHhStatuses } = await import('../src/lib/hh-sync');
+  const saved = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL) => {
+    const u = String(url);
+    if (u.includes('/negotiations')) {
+      if (u.includes('page=0')) {
+        // Полная страница (100 = PAGE_LIMIT), иначе цикл встанет до ошибки.
+        const items = Array.from({ length: 100 }, () => ({
+          state: { id: 'response', name: 'Ответ' },
+          vacancy: { id: '1' },
+          reviewed: true,
+          updated_at: new Date().toISOString(),
+        }));
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ items, found: 150 }),
+        } as unknown as Response;
+      }
+      return { ok: false, status: 500, text: async () => 'error' } as unknown as Response;
+    }
+    return saved(url);
+  }) as typeof fetch;
+  try {
+    const res = await syncHhStatuses(uid);
+    assert.equal(res.updated, 1, 'частичная выдача не обработана');
+    assert.ok(res.error, 'обрыв глубокой страницы промолчал');
+  } finally {
+    globalThis.fetch = saved;
+  }
+});
+
+test('sameVacancyId сравнивает как числа', async () => {
+  const { sameVacancyId } = await import('../src/lib/hh-sync');
+  assert.equal(sameVacancyId('30251545', '030251545'), true);
+  assert.equal(sameVacancyId('1', '1'), true);
+  assert.equal(sameVacancyId('1', '2'), false);
+  assert.equal(sameVacancyId(null, '1'), false);
+  assert.equal(sameVacancyId('abc', 'abc'), true, 'нечисловые сравниваются строками');
+  assert.equal(sameVacancyId('abc', 'abd'), false);
 });
 
 /** Мок успешных переговоров со счётчиком GET. */
@@ -154,4 +235,41 @@ test('интервал опроса: дефолт 15 минут, пол — ми
   process.env.HH_SYNC_MIN_INTERVAL_MS = 'мусор';
   assert.equal(hhSyncMinIntervalMs(), 15 * 60 * 1000, 'мусор не даёт дефолт');
   delete process.env.HH_SYNC_MIN_INTERVAL_MS;
+});
+
+test('параллельное обновление токена делает один запрос', async () => {
+  const uid = seedExpiredUser();
+  process.env.HH_CLIENT_ID = 'id';
+  process.env.HH_CLIENT_SECRET = 'secret';
+  process.env.HH_REDIRECT_URI = 'https://example.com/api/hh/callback';
+  let tokenCalls = 0;
+  const saved = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL) => {
+    if (String(url).includes('/token')) {
+      tokenCalls++;
+      // Задержка, чтобы оба вызова успели войти в refresh до ответа.
+      await new Promise((r) => setTimeout(r, 30));
+      const body = JSON.stringify({ access_token: 'fresh', expires_in: 3600 });
+      return {
+        ok: true,
+        status: 200,
+        text: async () => body,
+        json: async () => JSON.parse(body),
+      } as unknown as Response;
+    }
+    return saved(url);
+  }) as typeof fetch;
+  try {
+    const { getValidHhToken } = await import('../src/lib/hh-oauth');
+    const row = db.prepare('SELECT * FROM users WHERE id = ?').get(uid) as never;
+    const [a, b] = await Promise.all([getValidHhToken(row), getValidHhToken(row)]);
+    assert.equal(a?.token, 'fresh', 'первый не получил свежий токен');
+    assert.equal(b?.token, 'fresh', 'второй не получил свежий токен');
+    assert.equal(tokenCalls, 1, `второй refresh ушёл в сеть: запросов ${tokenCalls}`);
+  } finally {
+    globalThis.fetch = saved;
+    delete process.env.HH_CLIENT_ID;
+    delete process.env.HH_CLIENT_SECRET;
+    delete process.env.HH_REDIRECT_URI;
+  }
 });

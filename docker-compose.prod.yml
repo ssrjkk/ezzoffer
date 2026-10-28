@@ -36,6 +36,10 @@ services:
       - HH_CLIENT_ID=${HH_CLIENT_ID:-}
       - HH_CLIENT_SECRET=${HH_CLIENT_SECRET:-}
       - HH_REDIRECT_URI=${HH_REDIRECT_URI:-}
+      # Шифрование hh-токенов в БД (32 байта, hex). Без него токены лежат
+      # открытым текстом — и в бэкапах тоже. Сгенерировать:
+      # node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+      - EZOFFER_TOKEN_KEY=${EZOFFER_TOKEN_KEY:-}
       # Telegram-бот.
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET:-}

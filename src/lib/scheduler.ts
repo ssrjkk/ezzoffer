@@ -38,6 +38,7 @@ const LOCK_TTL_MS = 30 * 60 * 1000;
 export const CATALOG_LOCK_KEY = 'scheduler:lock:catalog';
 export const APPLY_LOCK_KEY = 'scheduler:lock:apply';
 export const SYNC_LOCK_KEY = 'scheduler:lock:sync';
+export const TELEGRAM_LOCK_KEY = 'scheduler:lock:telegram';
 
 type MetaStore = Pick<BetterSqlite3.Database, 'prepare'>;
 
@@ -353,31 +354,43 @@ export async function runScheduledJobs(): Promise<void> {
       // Входящие команды бота разбираются здесь же, а не в вебхуке:
       // сетевая работа в HTTP-запросе приводила к ретраям Telegram.
       await processInbox();
-      /*
-       * Уведомления в Telegram.
-       *
-       * Идут после синхронизации: приглашения и ответы приходят оттуда, и
-       * рассылка до неё видела бы пустую таблицу и молчала. Сначала — по одному
-       * ответу на конкретную вакансию, потом — общий дайджест об откликах.
-       *
-       * Ошибки не поднимаются: упавший Telegram не должен ломать планировщик и
-       * останавливать автоотклики.
-       */
-      try {
-        await sendAlerts((slug) => getVacancyBySlug(slug)?.title ?? null);
-        await sendDigests();
-        await sendExpiryWarnings();
-        // Мёртвые подключения hh: срок виден без попытки отправки.
-        await sendHhTokenWarnings();
-        // Застой каталога при живых поисках — владельцу, а не всем чатам.
-        await checkCatalogStall();
-      } catch (err) {
-        logError('scheduler:telegram', err);
-      }
     } catch (err) {
       logError('scheduler:sync', err);
     } finally {
       sync.release();
+    }
+  }
+
+  /*
+   * Уведомления в Telegram — отдельная фаза с собственным локом, а не хвост
+   * sync-фазы.
+   *
+   * Рассылка идёт после синхронизации: приглашения и ответы приходят оттуда,
+   * и рассылка до неё видела бы пустую таблицу и молчала. Но держать её под
+   * sync-локом значило делить check-then-set метки (digest, expiry, token)
+   * с чужим прогоном: при перехвате лока по TTL (длинная синхронизация на
+   * большой базе) два тика слали одинаковые дайджесты и предупреждения всем
+   * чатам. Свой лок — пропуск тика вместо дубля; следующий тик доберёт.
+   *
+   * Ошибки не поднимаются: упавший Telegram не должен ломать планировщик и
+   * останавливать автоотклики.
+   */
+  const telegram = tryLockSession(db, TELEGRAM_LOCK_KEY, now);
+  if (telegram) {
+    try {
+      // Сначала — по одному ответу на конкретную вакансию, потом — общий
+      // дайджест об откликах.
+      await sendAlerts((slug) => getVacancyBySlug(slug)?.title ?? null);
+      await sendDigests();
+      await sendExpiryWarnings();
+      // Мёртвые подключения hh: срок виден без попытки отправки.
+      await sendHhTokenWarnings();
+      // Застой каталога при живых поисках — владельцу, а не всем чатам.
+      await checkCatalogStall();
+    } catch (err) {
+      logError('scheduler:telegram', err);
+    } finally {
+      telegram.release();
     }
   }
 }

@@ -326,8 +326,17 @@ export async function refreshProviders(query: VacancyQuery = {}): Promise<Source
       return;
     }
     const result = await p.fetchVacancies({ ...query, limit });
-    if (result.ok && result.vacancies.length > 0) {
-      upsertMany(result.vacancies);
+    /*
+     * Чистка — при любом успехе, а не только при непустой выдаче.
+     *
+     * Раньше условие требовало vacancies.length > 0: легитимно пустая выдача
+     * (ноль вакансий по запросу) оставляла протухшие строки навсегда, и
+     * автоотклик ходил в мёртвые вакансии. Ошибка — другое дело: чистить
+     * каталог из-за лежащего провайдера значило бы стирать данные, которые
+     * нечем заменить.
+     */
+    if (result.ok) {
+      if (result.vacancies.length > 0) upsertMany(result.vacancies);
       db.prepare('DELETE FROM vacancies WHERE source = ? AND fetched_at < ?').run(
         p.source,
         staleBefore,

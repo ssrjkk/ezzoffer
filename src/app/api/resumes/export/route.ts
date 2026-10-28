@@ -2,11 +2,27 @@ import { NextResponse } from 'next/server';
 import { requireUser, unauthorized } from '@/lib/api';
 import { db } from '@/lib/db';
 import { NO_STORE_HEADERS } from '@/lib/http';
+import { rateLimit } from '@/lib/rate-limit';
 import { renderResumePdf } from '@/lib/resume-pdf';
+
+/**
+ * PDF — CPU-тяжёлый (шрифт, вёрстка 20k символов): без лимита один
+ * залогиненный гоняет экспорт в цикле и кладёт процесс для всех.
+ * GET не покрыт общим proxy-лимитером, поэтому свой бакет здесь.
+ */
+const EXPORT_LIMIT = { windowMs: 60 * 60 * 1000, max: 30 };
 
 export async function GET(request: Request) {
   const user = await requireUser();
   if (!user) return unauthorized();
+
+  const limiter = rateLimit(`resume-export:${user.id}`, EXPORT_LIMIT);
+  if (!limiter.allowed) {
+    return NextResponse.json(
+      { error: 'Слишком много экспортов. Попробуйте через час.' },
+      { status: 429, headers: { 'Retry-After': String(limiter.retryAfterSeconds) } },
+    );
+  }
 
   const { searchParams } = new URL(request.url);
   const parsed = Number(searchParams.get('resumeId') ?? 0);

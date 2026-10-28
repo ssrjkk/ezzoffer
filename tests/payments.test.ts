@@ -222,6 +222,88 @@ test('крипта-способ без адреса честно говорит,
   }
 });
 
+test('периоды резолвятся в позиции каталога, мусор — в null', async () => {
+  const { resolvePeriodPlan } = await catalog();
+  assert.equal(resolvePeriodPlan('start', 30)?.id, 'start');
+  assert.equal(resolvePeriodPlan('start', 7)?.priceRub, 690);
+  assert.equal(resolvePeriodPlan('pro', 14)?.days, 14);
+  assert.equal(resolvePeriodPlan('expert', 7)?.priceRub, 1990);
+  assert.equal(resolvePeriodPlan('start', 1), null, 'неизвестный период принят');
+  assert.equal(resolvePeriodPlan('nope', 30), null, 'неизвестный тариф принят');
+  assert.equal(resolvePeriodPlan('beta_life', 30), null, 'вечный тариф продали днями');
+});
+
+test('витрина продаёт ровно то, что есть в каталоге', async () => {
+  const { CATALOG } = await catalog();
+  const { plans } = await import('../src/lib/data');
+  const want: Record<string, Record<number, number>> = {
+    'Старт': { 7: 690, 14: 1190, 30: 1990 },
+    'Про': { 7: 990, 14: 1790, 30: 2990 },
+    'Эксперт': { 7: 1990, 14: 3490, 30: 5990 },
+  };
+  for (const [name, prices] of Object.entries(want)) {
+    const plan = plans.find((p) => p.name === name);
+    assert.ok(plan, `витрина без тарифа ${name}`);
+    for (const [days, price] of Object.entries(prices)) {
+      const item = CATALOG.find((c) => c.title.startsWith(name) && c.days === Number(days));
+      assert.ok(item, `в каталоге нет позиции ${name} на ${days} дней`);
+      assert.equal(
+        item!.priceRub,
+        price,
+        `цена витрины ${price} не сошлась с каталогом ${item!.priceRub} (${item!.id})`,
+      );
+      assert.equal(plan.prices[Number(days) as 7 | 14 | 30], price);
+    }
+  }
+});
+
+test('7-дневная оплата выдаёт 7 дней, а не 30', async () => {
+  const { POST } = await webhook();
+  db.prepare(
+    `INSERT INTO users (id, email, password_hash, plan, plan_expires_at, created_at, email_verified)
+     VALUES (2, 'week@test', 'h', 'none', NULL, ?, 1)`,
+  ).run(Date.now());
+  const body = JSON.stringify({
+    event: 'paid',
+    planId: 'start-7',
+    paymentId: 'week-1',
+    userId: 2,
+    amountRub: 690,
+  });
+  const res = await POST(hook(body, sign(body)), params('card'));
+  assert.equal(res.status, 200);
+  const user = db.prepare('SELECT plan, plan_expires_at FROM users WHERE id = 2').get() as {
+    plan: string;
+    plan_expires_at: number;
+  };
+  assert.equal(user.plan, 'start-7');
+  const days = Math.round((user.plan_expires_at - Date.now()) / 86_400_000);
+  assert.ok(days >= 6 && days <= 7, `выдано не 7 дней: ${days}`);
+});
+
+test('продление того же тарифа другим периодом не сжигает остаток', async () => {
+  const { POST } = await webhook();
+  const pay = async (planId: string, paymentId: string, amount: number) => {
+    const body = JSON.stringify({ event: 'paid', planId, paymentId, userId: 2, amountRub: amount });
+    const res = await POST(hook(body, sign(body)), params('card'));
+    assert.equal(res.status, 200);
+  };
+  // Сначала 30 дней start, затем 7 дней start-7: остаток обязан сохраниться.
+  await pay('start', 'ext-30', 1990);
+  const mid = (db.prepare('SELECT plan_expires_at FROM users WHERE id = 2').get() as {
+    plan_expires_at: number;
+  }).plan_expires_at;
+  await pay('start-7', 'ext-7', 690);
+  const fin = (db.prepare('SELECT plan, plan_expires_at FROM users WHERE id = 2').get() as {
+    plan: string;
+    plan_expires_at: number;
+  });
+  assert.ok(
+    fin.plan_expires_at >= mid + 6 * 86_400_000,
+    'остаток 30-дневного тарифа сгорел при продлении 7-дневным',
+  );
+});
+
 test('оплаченный beta_life активен: срок не требуется (regression)', async () => {
   const { POST } = await webhook();
   const { hasActiveEntitlement } = await entitlements();

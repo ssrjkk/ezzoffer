@@ -22,7 +22,7 @@ export default async function BookmarksPage() {
     <div>
       <h1 className="font-serif text-2xl leading-snug text-ink">Избранное</h1>
       <p className="mt-1 text-sm text-muted">
-        Вакансии, которые вы отложили. Каталог обновляется каждые полчаса, поэтому хорошую вакансию
+        Вакансии, которые вы отложили. Быстрые источники каталога обновляются каждые полчаса, поэтому хорошую вакансию
         стоит сохранить — иначе она уйдёт из подбора.
       </p>
       <div className="mt-6">

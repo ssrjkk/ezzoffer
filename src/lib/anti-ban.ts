@@ -116,6 +116,30 @@ export type Pacing = {
   blockedUntil(now?: number): number;
   /** Обновляет лимиты на ходу: остаток дневного лимита меняется каждый тик. */
   configure(patch: Partial<PacingConfig>): void;
+  /**
+   * Снимок состояния для переживания рестарта.
+   *
+   * Без него перезапуск/деплой сразу после 429/503 сбрасывал backoff —
+   * и первый же тик слал burst в площадку. Снимок — абсолютные метки эпохи,
+   * поэтому не зависит от часов nowFn.
+   */
+  snapshot(): PacingSnapshot;
+  /** Восстановление снимка после рестарта. */
+  restore(s: PacingSnapshot): void;
+};
+
+/**
+ * Снимок состояния паузера для персистентности (мета-таблица).
+ */
+export type PacingSnapshot = {
+  lastSentAt: number;
+  cooldownMs: number;
+  failAt: number;
+  failKind: FailureKind;
+  failStreak: number;
+  retryAfterUntil: number;
+  retryDetail: string;
+  blockUntil: number;
 };
 
 /**
@@ -183,6 +207,33 @@ export function createPacing(
   return {
     configure(patch: Partial<PacingConfig>): void {
       Object.assign(cfg, patch);
+    },
+
+    snapshot(): PacingSnapshot {
+      const sent = sentTimestamps.length > 0 ? Math.max(...sentTimestamps) : 0;
+      return {
+        lastSentAt: sent,
+        cooldownMs: cooldownUntil,
+        failAt: lastFailureAt,
+        failKind: failureKind,
+        failStreak: failureStreak,
+        retryAfterUntil,
+        retryDetail: retryAfterDetail,
+        blockUntil,
+      };
+    },
+
+    restore(s: PacingSnapshot): void {
+      const n = (v: unknown): number => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+      cooldownUntil = Math.max(0, n(s.cooldownMs));
+      lastFailureAt = Math.max(0, n(s.failAt));
+      if (s.failKind === 'network' || s.failKind === 'rate_limit' || s.failKind === 'blocked') {
+        failureKind = s.failKind;
+      }
+      failureStreak = Math.max(0, Math.floor(n(s.failStreak)));
+      retryAfterUntil = Math.max(0, n(s.retryAfterUntil));
+      retryAfterDetail = typeof s.retryDetail === 'string' ? s.retryDetail : '';
+      blockUntil = Math.max(0, n(s.blockUntil));
     },
 
     decide(now = nowFn()): PaceDecision {
@@ -332,6 +383,16 @@ export const FAILURE_LABEL: Record<FailureKind, string> = {
 
 /** Тестовый хелпер: мгновенная пауза, без лимитов и задержек. */
 export function zeroPacing(): Pacing {
+  const empty: PacingSnapshot = {
+    lastSentAt: 0,
+    cooldownMs: 0,
+    failAt: 0,
+    failKind: 'network',
+    failStreak: 0,
+    retryAfterUntil: 0,
+    retryDetail: '',
+    blockUntil: 0,
+  };
   return {
     decide: () => ({ allowed: true, delayMs: 0 }),
     recordSent: () => undefined,
@@ -339,5 +400,7 @@ export function zeroPacing(): Pacing {
     respectRetryAfter: () => undefined,
     blockedUntil: () => 0,
     configure: () => undefined,
+    snapshot: () => ({ ...empty }),
+    restore: () => undefined,
   };
 }

@@ -116,13 +116,66 @@ test('без активных поисков обновление не ходи�
     assert.equal(report.ran, false, 'каталог обновлялся без единого активного поиска');
     assert.match(report.skipped ?? '', /нет активных поисков/);
     assert.equal(networkCalled, false, 'сеть дёрнулась впустую');
+    // Пустой отчёт тоже пишется: иначе панель показывала бы вчерашний успех.
+    const stored = lastRefreshReport();
+    assert.ok(stored, 'пустой отчёт не сохранён');
+    assert.equal(stored!.ran, false);
   } finally {
     globalThis.fetch = saved;
   }
 });
 
-test('после обновления пишется отчёт: сколько запросов и вакансий', async () => {
-  addSearch('React', 'Москва', 1);
+test('пустая выдача провайдера чистит его протухшие записи, а не копит их', async () => {
+  // hh-поиск без ключей недоступен — провайдер пропускается без чистки.
+  process.env.HH_CLIENT_ID = 'app-id';
+  process.env.HH_CLIENT_SECRET = 'app-secret';
+  addSearch('React', 'Москва');
+  const oldTs = Date.now() - 8 * 86_400_000;  db.prepare(
+    `INSERT INTO vacancies (slug, source, source_id, title, company, salary, salary_min, salary_max,
+       level, format, city, posted, published_at, category, about, requirements, bonus,
+       contact_email, contact_phone, fetched_at)
+     VALUES ('hh-stale-1', 'hh', '1', 'Старая', 'ООО', '', NULL, NULL, '', '', 'Москва',
+       'давно', ?, 'Разработка', '', '[]', '[]', NULL, NULL, ?)`,
+  ).run(oldTs, oldTs);
+
+  const saved = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL) => {
+    const u = String(url);
+    if (u.includes('/token')) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ access_token: 't', expires_in: 3600 }),
+      } as unknown as Response;
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ items: [] }) };
+  }) as unknown as typeof globalThis.fetch;
+
+  try {
+    const report = await refreshCatalogForSearches();
+    assert.equal(report.ran, true);
+    const gone = db
+      .prepare('SELECT COUNT(*) AS c FROM vacancies WHERE slug = ?')
+      .get('hh-stale-1') as { c: number };
+    assert.equal(gone.c, 0, 'протухшая запись пережила легитимно пустую выдачу');
+  } finally {
+    delete process.env.HH_CLIENT_ID;
+    delete process.env.HH_CLIENT_SECRET;
+    globalThis.fetch = saved;
+  }
+});
+
+test('дедуп запросов нечувствителен к пробелам вокруг города', () => {
+  // Уникальное слово: в файле нет beforeEach, и поиски копятся между тестами.
+  addSearch('Слесарьгидрант', 'Казань');
+  addSearch('Слесарьгидрант', '  Казань  ');
+  const queries = distinctQueries();
+  const mine = queries.filter((q) => q.text.toLowerCase() === 'слесарьгидрант');
+  assert.equal(mine.length, 1, `один город — два запроса: ${mine.length}`);
+  assert.equal(mine[0]?.city, 'Казань');
+});
+
+test('после обновления пишется отчёт: сколько запросов и вакансий', async () => {  addSearch('React', 'Москва', 1);
 
   const saved = globalThis.fetch;
   globalThis.fetch = (async (url: string | URL) => {
