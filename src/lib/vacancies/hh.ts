@@ -237,6 +237,39 @@ export function classifyApplyFailure(
   };
 }
 
+/**
+ * Состояние вакансии перед откликом: 'open' | 'closed' | 'unknown'.
+ *
+ * Официальные клиенты hh сначала открывают карточку вакансии и только потом
+ * жмут «Откликнуться»: POST без предшествующего GET карточки — отличительный
+ * признак скрипта. Предпросмотр заодно отсекает заведомо дохлые POST:
+ * закрытая за неделю вакансия раньше уходила в сеть и только там получала
+ * отказ, а каждый такой отказ — лишний след в логах площадки.
+ *
+ * Fail-open принципиально: пассивный GET не вправе отменять отклик. Сеть
+ * легла, тело не JSON, площадка ответила чем-то кроме 404 — идём на POST
+ * вслепую, как раньше. Точно закрыто — только 404 и явный archived.
+ */
+export async function fetchVacancyState(
+  vacancyId: string,
+  token: string,
+): Promise<'open' | 'closed' | 'unknown'> {
+  const res = await httpFetch(`${BASE}/${encodeURIComponent(vacancyId)}`, {
+    timeoutMs: FETCH_TIMEOUT,
+    attempts: 1,
+    shouldRetry: () => false,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'User-Agent': 'EZOffer/1.0 (ezoffer.ru)',
+      Accept: 'application/json',
+    },
+  });
+  if (!res.ok) return res.status === 404 ? 'closed' : 'unknown';
+  const data = parseJson<{ archived?: boolean }>(res.body);
+  if (!data) return 'unknown';
+  return data.archived === true ? 'closed' : 'open';
+}
+
 export const hhProvider: VacancyProvider = {
   source: 'hh',
   label: 'hh.ru',
@@ -277,6 +310,16 @@ export const hhProvider: VacancyProvider = {
     }
 
     const vacancyId = /^hh-/.test(vacancy.slug) ? vacancy.slug.slice(3) : vacancy.source_id;
+    /*
+     * Карточка перед откликом — как у живого человека и официального
+     * приложения. Закрытая вакансия отсекается здесь пассивным GET, а не
+     * активным POST: отказ после отправки дороже — это и след, и потраченный
+     * слот паузера. Сомнительный результат предпросмотра отклик не отменяет
+     * (fail-open, см. fetchVacancyState).
+     */
+    if ((await fetchVacancyState(vacancyId, token)) === 'closed') {
+      return { ok: false, kind: 'closed', error: 'Вакансия закрыта на hh.ru' };
+    }
     const payload: Record<string, unknown> = { vacancy_id: vacancyId, resume_id: ctx.resumeId };
     if (ctx.message?.trim()) payload.message = ctx.message.trim().slice(0, 500);
 

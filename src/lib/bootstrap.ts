@@ -66,8 +66,20 @@ export async function startNodeRuntime(): Promise<void> {
    * наложения со следующим тиком.
    */
   void tick();
-  const id = setInterval(() => {
-    void tick();
-  }, intervalMs);
-  id.unref?.();
+  /*
+   * Джиттер интервала вместо метронома: точные 300 секунд между тиками годами
+   * напролёт — машинная подпись на уровне расписания. Каждый следующий тик
+   * планируется заново со сдвигом ±15%: средний темп тот же, а ровной сетки
+   * больше нет. Наложения не добавляет: следующий тик, как и раньше,
+   * планируется от старта текущего, фазовые блокировки держат перекрытие.
+   */
+  const scheduleNext = (): void => {
+    const jittered = Math.max(60_000, Math.round(intervalMs * (0.85 + Math.random() * 0.3)));
+    const id = setTimeout(() => {
+      void tick();
+      scheduleNext();
+    }, jittered);
+    id.unref?.();
+  };
+  scheduleNext();
 }
