@@ -6,6 +6,8 @@
 
 Сервис автооткликов на вакансии: подбор по резюме, персонализированные письма, контроль этапов и разбор того, что делать дальше. Полноценное приложение на **Next.js 16 + Tailwind CSS v4 + SQLite (better-sqlite3)**.
 
+**Сайт:** [ssrjkk.github.io/ezzoffer](https://ssrjkk.github.io/ezzoffer/)
+
 ## Скриншоты
 
 Сняты с работающей сборки автоматически, в реальном браузере.
@@ -295,3 +297,7 @@ npm install
 ```bash
 npm run dev
 ```
+
+---
+
+**SSRJKK** — [GitHub](https://github.com/ssrjkk) · [Telegram](https://t.me/ssrjkk) · [Projects hub](https://ssrjkk.github.io/) · [Bot catalogue](https://t.me/ssrjkk_bot)
