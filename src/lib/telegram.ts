@@ -192,7 +192,7 @@ export async function sendTelegramMessage(
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), SEND_TIMEOUT_MS);
     try {
-      const bodyText = plain ? text.replace(/<[^>]*>/g, '') : text;
+      const bodyText = plain ? text.replace(/[<>]/g, '') : text;
       const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

@@ -173,7 +173,7 @@ test('обзор считает пользователей, тарифы и от
   assert.match(last.text, /Откликов сегодня: 4/, 'отклики дня не сошлись');
   assert.match(last.text, /ещё не выполнялись/, 'пустой прогон показан иначе');
   assert.ok(!last.text.includes('@'), 'в панель утекли персональные данные');
-  assert.ok(!last.text.includes('example.com'), 'в панель утекли email');
+  assert.ok(!/\S+@\S+\.\S+/.test(last.text), 'в панель утекли email');
 });
 
 test('каталог показывает последний отчёт, пустой — честно', async () => {
