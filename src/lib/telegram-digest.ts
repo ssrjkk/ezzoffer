@@ -506,8 +506,17 @@ export async function sendHhTokenWarnings(now: number = Date.now()): Promise<num
     .all(now) as { id: number; hh_refresh_token: string | null }[];
   let sent = 0;
   for (const u of users) {
-    // Путь обновления есть — исход решит живая попытка, а не этот обход.
-    if (u.hh_refresh_token && hhConfigured()) continue;
+    /*
+     * Пропускаем, если HH настроен — туда пойдёт live-попытка обновления,
+     * и она же уведомит при неудаче (notifyHhTokenExpiredForUser).
+     *
+     * Раньше здесь стояло `u.hh_refresh_token && hhConfigured()`, но
+     * hh_refresh_token хранится зашифрованным и потому всегда truthy при
+     * наличии. Первое условие не работало никогда. Полностью убираем
+     * проверку токена: без HH OAuth (hhConfigured=false) уведомление
+     *必须но — восстановить токен нельзя никак.
+     */
+    if (hhConfigured()) continue;
     if (await notifyHhTokenExpiredForUser(u.id, now)) sent++;
   }
   return sent;
