@@ -315,17 +315,25 @@ export function getRecommendations(
 ): string[] {
   const recommendations: string[] = [];
 
-  const allMissing = new Set<string>();
+  /*
+   * Частоты, а не набор: надпись «Чаще всего не хватает» — это количественное
+   * утверждение, и она обязана быть отсортирована по числу вакансий, в которых
+   * навыка нет. Раньше стоял Set, обрезанный по длине названия: топом становился
+   * «TypeScript/Аналитика», а реально чаще встречавшийся навык уходил вниз —
+   * текст обещал частоту, код считал длину строки.
+   */
+  const missingCounts = new Map<string, number>();
   for (const sv of topVacancies.slice(0, 10)) {
     for (const skill of sv.missingSkills) {
-      // Навык, которого нет в половине вакансий, действительно стоит изучить.
-      // Отдельное упоминание — если он требуется почти везде.
-      allMissing.add(skill);
+      missingCounts.set(skill, (missingCounts.get(skill) ?? 0) + 1);
     }
   }
 
-  if (allMissing.size > 0) {
-    const ranked = [...allMissing].sort((a, b) => b.length - a.length).slice(0, 5);
+  if (missingCounts.size > 0) {
+    const ranked = [...missingCounts.entries()]
+      .sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)
+      .slice(0, 5)
+      .map(([skill]) => skill);
     recommendations.push(`Чаще всего не хватает: ${ranked.join(', ')}`);
   }
 

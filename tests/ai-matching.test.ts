@@ -5,6 +5,7 @@ import {
   rankLettersForVacancy,
   scoreVacancyForResume,
   getRecommendations,
+  type ScoredVacancy,
 } from '../src/lib/ai-matching';
 import type { Vacancy } from '../src/lib/vacancies/types';
 
@@ -285,4 +286,21 @@ test('рекомендации выводятся из разбора вакан
     tips.some((t) => t.toLowerCase().includes('цифр') || t.toLowerCase().includes('достижен')),
     `нет совета про достижения с цифрами: ${tips.join(' | ')}`,
   );
+});
+
+test('«чаще всего не хватает» — сортировка по частоте, а не по длине названия', () => {
+  // SQL требовался в трёх из трёх вакансий, длинный DataStackBigName — в одной.
+  // Раньше топ строился по длине строки: длинный шёл первым, хотя частотное
+  // обещание текста прямо противоположно.
+  const missing: ScoredVacancy[] = [
+    { vacancy: makeVacancy(), score: 0, matchedSkills: [], missingSkills: ['SQL', 'DataStackBigName'], factors: [] },
+    { vacancy: makeVacancy(), score: 0, matchedSkills: [], missingSkills: ['SQL'], factors: [] },
+    { vacancy: makeVacancy(), score: 0, matchedSkills: [], missingSkills: ['SQL'], factors: [] },
+  ];
+  const tips = getRecommendations('Опыт резюме с github и английском b2', 'Junior', missing);
+  const found = tips.find((t) => t.startsWith('Чаще всего не хватает'));
+  assert.ok(found, 'фраза о нехватке отсутствует');
+  const first = found.indexOf('SQL');
+  const second = found.indexOf('DataStackBigName');
+  assert.ok(first >= 0 && second > first, `порядок не по частоте: ${found}`);
 });
