@@ -2,7 +2,7 @@ import { db } from './db';
 import { mskDayStartMs } from './moscow-day';
 import { lastRefreshReport } from './catalog-refresh';
 import { loadLastRun } from './autoapply-store';
-import { isHhConnected } from './hh-oauth';
+import { isHhConnected, hhConfigured } from './hh-oauth';
 import {
   answerCallbackQuery,
   editTelegramMessage,
@@ -118,9 +118,13 @@ export function adminCatalogText(): string {
 /**
  * Токены hh: сколько подключено и сколько заведомо мёртвых.
  *
- * Условие мёртвых — то же, что в плановом обходе sendHhTokenWarnings
- * (срок прошёл, пути обновления нет): две копии одного WHERE расходятся
- * со временем, поэтому при правке условия править оба места.
+ * «Мёртвых» здесь считаем иначе, чем в плановом обходе sendHhTokenWarnings:
+ * обе проверки дублирования не просят. Обход предупреждений смотрит, настроен
+ * ли OAuth: при настроенном обновление попробуется вживую, и предупреждение
+ * уйдёт от события (401), а не заранее. Панель же показывает БЕЗНАДЁЖНЫЕ
+ * строки — без refresh_token им не поможет никакой прогон: уведомление придёт
+ * с первой неудачной попытки обновления, но подключение само не оживёт.
+ * Смысл у счётчиков разный, поэтому условие отдельное, а не «то же».
  */
 export function adminTokensText(): string {
   const rows = db
@@ -155,7 +159,11 @@ export function adminTokensText(): string {
     '',
     `Подключено аккаунтов: ${connected} из ${rows.length}`,
     `Заведомо мёртвых (срок прошёл, обновления нет): ${dead}`,
-    dead > 0 ? 'Им уже ушло предупреждение в Telegram.' : 'Предупреждать некого.',
+    dead > 0
+      ? hhConfigured()
+        ? 'Уведомление придёт с первой неудачной попыткой обновления (401 на живом запросе).'
+        : 'Им уже ушло предупреждение в Telegram.'
+      : 'Предупреждать некого.',
   ].join('\n');
 }
 

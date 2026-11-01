@@ -14,9 +14,25 @@ import { KEYWORDS } from './resume-enhance-keys';
  * Теперь алиас матчится только как отдельное слово (\\b), с поддержкой
  * кириллицы и дефисов вроде «ci/cd».
  */
+/**
+ * Отрендеренный регексп под каждый алиас и владелец каждого алиаса —
+ * считаются один раз при загрузке.
+ *
+ * Раньше hasWord компилировал RegExp на каждый вызов, а ownerOf на каждый
+ * совпавший алиас заново обходил весь словарь. `detectKeywords` вызывается
+ * минимум дважды за улучшение (до и после), и на каждый проход собирает регексы
+ * заново — те же наносекунды, что в skills.ts, где приём уже применён.
+ */
+const COMPILED_ALIASES = new Map<string, RegExp>();
+
 function hasWord(text: string, alias: string): boolean {
-  const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(^|[^a-zA-Zа-яА-ЯёЁ0-9])${escaped}($|[^a-zA-Zа-яА-ЯёЁ0-9])`, 'iu').test(text);
+  let re = COMPILED_ALIASES.get(alias);
+  if (!re) {
+    const escaped = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    re = new RegExp(`(^|[^a-zA-Zа-яА-ЯёЁ0-9])${escaped}($|[^a-zA-Zа-яА-ЯёЁ0-9])`, 'iu');
+    COMPILED_ALIASES.set(alias, re);
+  }
+  return re.test(text);
 }
 
 export function detectKeywords(content: string): string[] {
@@ -34,15 +50,24 @@ export function detectKeywords(content: string): string[] {
    * длиннее общего. «postgresql» и «postgres» уходят в PostgreSQL; «sql» и
    * «mysql» остаются у SQL, потому что других владельцев у них нет.
    */
-  const ownerOf = (alias: string): string | null => {
-    const key = alias.toLowerCase();
-    let best: string | null = null;
+  /*
+   * Владелец каждого алиаса — предвычислен при загрузке модуля: свойство
+   * словаря, а не наблюдения на живом запросе.
+   */
+  const OWNER_BY_ALIAS = (() => {
+    const map = new Map<string, string>();
     for (const kw of KEYWORDS) {
-      if (!kw.aliases.some((a) => a.toLowerCase() === key)) continue;
-      if (best === null || kw.label.length > best.length) best = kw.label;
+      for (const a of kw.aliases) {
+        const key = a.toLowerCase();
+        const current = map.get(key);
+        // Правило то же, что раньше: самый длинный label — самый специфичный.
+        if (current === undefined || kw.label.length > current.length) map.set(key, kw.label);
+      }
     }
-    return best;
-  };
+    return map;
+  })();
+  const ownerOf = (alias: string): string | null =>
+    OWNER_BY_ALIAS.get(alias.toLowerCase()) ?? null;
   const claimed = new Map<string, string>();
   for (const kw of KEYWORDS) {
     for (const a of kw.aliases) {

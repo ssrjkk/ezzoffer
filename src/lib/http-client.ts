@@ -150,16 +150,18 @@ export async function httpFetch(url: string, opts: HttpOptions = {}): Promise<Ht
         };
       }
 
-      // 429 часто приходит с Retry-After — уважаем его, но с потолком,
-      // иначе один капризный апстрим может остановить обновление каталога.
-      // Заголовки — через ту же опциональную цепочку, что выше: заглушка без
-      // headers на 429 роняла бы чтение в catch и теряла и срок, и статус.
-      const retryAfterHeader = Number(
-        typeof res.headers?.get === 'function' ? res.headers.get('retry-after') : NaN,
-      );
+      /*
+       * 429 часто приходит с Retry-After — уважаем его, но с потолком,
+       * иначе один капризный апстрим может остановить обновление каталога.
+       *
+       * Берём уже разобранный lastRetryAfterMs, а не сырой заголовок. Вторичное
+       * чтение через Number() умело только форму секунд, а дата-форма давала
+       * NaN — половина заголовков молча превращалась в экспоненциальный
+       * backoff вместо названного площадкой срока.
+       */
       const waitMs =
-        Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
-          ? Math.min(retryAfterHeader * 1000, retryMaxMs * 4)
+        lastRetryAfterMs > 0
+          ? Math.min(lastRetryAfterMs, retryMaxMs * 4)
           : Math.min(retryBaseMs * 2 ** (attempt - 1), retryMaxMs);
       logInfo('http', `повтор после ${res.status}`, { url, attempt, waitMs });
       await sleep(waitMs);

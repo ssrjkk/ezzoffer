@@ -125,6 +125,25 @@ export function computeSkillGaps(userId: number, limit = 8): SkillGapsReport {
   const catalog = new Map<string, Vacancy>();
   for (const v of getCatalog()) catalog.set(v.slug, v);
 
+  /*
+   * Навыки вакансии считаются один раз за прогон, а не на каждую пару
+   * «поиск × вакансия».
+   *
+   * extractSkills — прогон сотни скомпилированных регексов по тексту. Раньше
+   * он вызывался заново для каждой активной поиски по каждой вакансии каталога:
+   * три поиска на трёх тысячах вакансий — девять тысяч прогонов ради одного
+   * и того же набора. Кеш живёт только внутри одного вызова computeSkillGaps,
+   * поэтому рассинхронизироваться с каталогом за это время он не может.
+   */
+  const skillsBySlug = new Map<string, string[]>();
+  const skillsOf = (v: Vacancy): string[] => {
+    const cached = skillsBySlug.get(v.slug);
+    if (cached) return cached;
+    const computed = requiredSkills(v);
+    skillsBySlug.set(v.slug, computed);
+    return computed;
+  };
+
   /** Навык → сколько раз требовался и сколько раз на него был отказ. */
   const demanded = new Map<string, number>();
   const declined = new Map<string, number>();
@@ -133,7 +152,7 @@ export function computeSkillGaps(userId: number, limit = 8): SkillGapsReport {
   for (const app of apps) {
     const vacancy = catalog.get(app.job_slug);
     if (!vacancy) continue;
-    const skills = requiredSkills(vacancy);
+    const skills = skillsOf(vacancy);
     const isDecline = app.response === 'decline';
 
     for (const skill of skills) {
@@ -169,7 +188,7 @@ export function computeSkillGaps(userId: number, limit = 8): SkillGapsReport {
     for (const v of catalog.values()) {
       if (!matchesSearch(v, search)) continue;
       targetedSlugs.add(v.slug);
-      for (const skill of requiredSkills(v)) {
+      for (const skill of skillsOf(v)) {
         if (mine.has(skill)) continue;
         inTarget.set(skill, (inTarget.get(skill) ?? 0) + 1);
       }

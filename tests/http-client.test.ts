@@ -12,7 +12,9 @@ import { httpFetch, parseJson } from '../src/lib/http-client';
  * но НЕ на клиентских 4xx, и клиент никогда не бросает исключений.
  */
 
-function stubFetch(responses: Array<{ status: number; body?: string; throws?: boolean }>) {
+function stubFetch(
+  responses: Array<{ status: number; body?: string; throws?: boolean; headers?: Record<string, string> }>,
+) {
   const original = globalThis.fetch;
   let call = 0;
   const urls: string[] = [];
@@ -21,7 +23,7 @@ function stubFetch(responses: Array<{ status: number; body?: string; throws?: bo
     const spec = responses[Math.min(call, responses.length - 1)];
     call++;
     if (spec.throws) throw new TypeError('fetch failed');
-    return new Response(spec.body ?? '', { status: spec.status });
+    return new Response(spec.body ?? '', { status: spec.status, headers: spec.headers });
   }) as typeof fetch;
   return {
     urls,
@@ -168,6 +170,31 @@ test('429 без headers не превращается в сетевую оши�
     assert.equal(res.body, 'slow down');
   } finally {
     globalThis.fetch = saved;
+  }
+});
+
+test('429 с Retry-After в форме даты доезжает до паузера', async () => {
+  // Дата-форма больше не теряется на полпути: расчёт паузы раньше читал
+  // заголовок вторично через Number(), и дата-форма там давала NaN —
+  // срок существовал для parseRetryAfter, но не для ожидания.
+  // Контракт поля — финальный НЕуспех (потребители смотрят туда же):
+  // успех поля не несёт, просить ждать после удачного запроса нечем.
+  const at = new Date(Date.now() + 10_000);
+  const stub = stubFetch([
+    { status: 429, headers: { 'retry-after': at.toUTCString() } },
+    { status: 429, headers: { 'retry-after': at.toUTCString() } },
+    { status: 429, headers: { 'retry-after': at.toUTCString() } },
+  ]);
+  try {
+    const res = await httpFetch('https://example.com/a', { ...fast, attempts: 3 });
+    assert.equal(res.ok, false);
+    assert.equal(res.status, 429);
+    assert.ok(
+      res.retryAfterMs > 5_000 && res.retryAfterMs <= 11_000,
+      `retryAfterMs=${res.retryAfterMs}, ожидалось около 10000 (дата минус момент разбора)`,
+    );
+  } finally {
+    stub.restore();
   }
 });
 
