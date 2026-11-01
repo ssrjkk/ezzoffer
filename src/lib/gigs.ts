@@ -196,20 +196,26 @@ export function findGigs(filter: GigFilter = {}): Gig[] {
     out.push(g);
   }
 
-  out.sort((a, b) => {
-    const pa = getVacancyDate(a.slug);
-    const pb = getVacancyDate(b.slug);
-    return pb - pa;
-  });
+  /*
+   * Даты одним запросом, а не в компараторе.
+   *
+   * Раньше getVacancyDate вызывался на каждое сравнение: O(n log n) двух
+   * синхронных SELECT на рендер раздела — тысячи запросов ради свойства,
+   * которое не меняется за время сортировки. Карта строится один запросом
+   * до сортировки; отсутствующая строка остаётся нулём, как и было.
+   */
+  const dates = new Map<string, number>();
+  for (const row of db.prepare('SELECT slug, published_at FROM vacancies').all() as {
+    slug: string;
+    published_at: number | null;
+  }[]) {
+    dates.set(row.slug, row.published_at ?? 0);
+  }
+  out.sort((a, b) => (dates.get(b.slug) ?? 0) - (dates.get(a.slug) ?? 0));
 
   return out.slice(0, limit);
 }
 
-function getVacancyDate(slug: string): number {
-  const row = db.prepare('SELECT published_at FROM vacancies WHERE slug = ?').get(slug) as
-    { published_at: number | null } | undefined;
-  return row?.published_at ?? 0;
-}
 
 /**
  * Сколько вообще нашлось — нужно для честной надписи «нашлось 4».
