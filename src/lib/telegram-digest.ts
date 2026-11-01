@@ -2,6 +2,7 @@ import { db } from './db';
 import { notifyUser, sendTelegramMessage, escapeHtml } from './telegram';
 import { mainKeyboard } from './telegram-keyboard';
 import { hhConfigured } from './hh-oauth';
+import { planLabel } from './plans';
 import type { ApplicationRow } from './applications';
 
 /**
@@ -186,7 +187,12 @@ export async function sendExpiryWarnings(now: number = Date.now()): Promise<numb
     const days = Math.max(1, Math.ceil(left / 86_400_000));
     const ok = await notifyUser(
       u.id,
-      `Тариф «${u.plan}» заканчивается через ${days} ${plural(days, 'день', 'дня', 'дней')}. ` +
+      /*
+       * Имя тарифа — человекочитаемое («Старт (7 дн.)»), а не сырой id
+       * («start-7»): это сообщение читают в Telegram, а не в БД.
+       * planLabel при незнакомом значении вернёт его как есть.
+       */
+      `Тариф «${planLabel({ plan: u.plan })}» заканчивается через ${days} ${plural(days, 'день', 'дня', 'дней')}. ` +
         'Продлите его в кабинете, чтобы автоотклики не встали: /dashboard/settings',
     );
     if (ok) {

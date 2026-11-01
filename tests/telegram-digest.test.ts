@@ -518,14 +518,18 @@ test('упавшая отправка не помечает отклиск ка�
 test('предупреждение об истечении тарифа уходит один раз на срок', async () => {
   const { sendExpiryWarnings } = await import('../src/lib/telegram-digest');
   const uid = seedUser();
+  // Периодический тариф: id 'start-7' и метка «Старт (7 дн.)» расходятся,
+  // поэтому проверка ловит показ сырого id пользователю.
   db.prepare('UPDATE users SET plan_expires_at = ?, plan = ? WHERE id = ?').run(
     Date.now() + 2 * 86_400_000,
-    'pro',
+    'start-7',
     uid,
   );
 
   assert.equal(await sendExpiryWarnings(), 1, 'предупреждение не ушло');
   assert.match(lastText, /заканчивается через 2 дн/i, `текст без срока: «${lastText}»`);
+  assert.match(lastText, /Старт \(7 дн\.\)/i, `метка тарифа не в тексте: «${lastText}»`);
+  assert.doesNotMatch(lastText, /start-7/, `сырой id тарифа в тексте: «${lastText}»`);
   assert.match(lastText, /dashboard\/settings/i, 'не сказано, где продлить');
 
   assert.equal(await sendExpiryWarnings(), 0, 'предупреждение ушло повторно');

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireUser, unauthorized, readJson } from '@/lib/api';
 import { db } from '@/lib/db';
-import { isPlanActive, planResumeLimit } from '@/lib/plans';
+import { isPlanActive, planLabel, planResumeLimit } from '@/lib/plans';
 import { getValidHhToken } from '@/lib/hh-oauth';
 import { fetchHhResumeContent } from '@/lib/hh-resumes';
 import { NO_STORE_HEADERS } from '@/lib/http';
@@ -33,7 +33,9 @@ export async function POST(request: Request) {
     if (c >= resumeLimit) {
       return NextResponse.json(
         {
-          error: `На тарифе «${user.plan === 'start' ? 'Старт' : user.plan}» доступно ${resumeLimit} резюме. Обновите тариф для большего количества.`,
+          // Метка тарифа вместо сырого id: у периодических тарифов
+          // (start-7 и т.п.) id в сообщении для человека бессмысленен.
+          error: `На тарифе «${planLabel(user)}» доступно ${resumeLimit} резюме. Обновите тариф для большего количества.`,
         },
         { status: 403 },
       );
