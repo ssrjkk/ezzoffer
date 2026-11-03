@@ -35,39 +35,35 @@ function hasWord(text: string, alias: string): boolean {
   return re.test(text);
 }
 
+/**
+ * Владелец каждого алиаса — предвычислен при загрузке модуля.
+ *
+ * Спорный алиас отдаётся самому специфичному владельцу: «postgresql» и
+ * «postgres» входят в наборы SQL и PostgreSQL, и текст «Опыт: PostgreSQL»
+ * раньше давал оба навыка. Правило — самый длинный label среди владельцев
+ * алиаса: специфичное имя длиннее общего.
+ *
+ * Раньше этот словарь собирался внутри detectKeywords на каждый вызов, хотя
+ * комментарий уже тогда обещал предвычисление: функция вызывается минимум
+ * дважды за улучшение, и каждый раз обходила весь словарь навыков.
+ */
+const OWNER_BY_ALIAS: Map<string, string> = (() => {
+  const map = new Map<string, string>();
+  for (const kw of KEYWORDS) {
+    for (const a of kw.aliases) {
+      const key = a.toLowerCase();
+      const current = map.get(key);
+      if (current === undefined || kw.label.length > current.length) map.set(key, kw.label);
+    }
+  }
+  return map;
+})();
+
+const ownerOf = (alias: string): string | null => OWNER_BY_ALIAS.get(alias.toLowerCase()) ?? null;
+
 export function detectKeywords(content: string): string[] {
   const text = ` ${content.toLowerCase()} `;
   const found = new Map<string, number>();
-  /*
-   * Спорный алиас отдаётся самому специфичному владельцу.
-   *
-   * Алиасы «postgresql» и «postgres» входят в наборы сразу двух навыков — SQL
-   * и PostgreSQL. Раньше текст «Опыт: PostgreSQL» давал оба навыка, и список
-   * ключевых слов (всего 9 слотов) забивался дублями: «PostgreSQL, SQL»
-   * вместо одного «PostgreSQL».
-   *
-   * Правило — самый длинный label среди владельцев алиаса: специфичное имя
-   * длиннее общего. «postgresql» и «postgres» уходят в PostgreSQL; «sql» и
-   * «mysql» остаются у SQL, потому что других владельцев у них нет.
-   */
-  /*
-   * Владелец каждого алиаса — предвычислен при загрузке модуля: свойство
-   * словаря, а не наблюдения на живом запросе.
-   */
-  const OWNER_BY_ALIAS = (() => {
-    const map = new Map<string, string>();
-    for (const kw of KEYWORDS) {
-      for (const a of kw.aliases) {
-        const key = a.toLowerCase();
-        const current = map.get(key);
-        // Правило то же, что раньше: самый длинный label — самый специфичный.
-        if (current === undefined || kw.label.length > current.length) map.set(key, kw.label);
-      }
-    }
-    return map;
-  })();
-  const ownerOf = (alias: string): string | null =>
-    OWNER_BY_ALIAS.get(alias.toLowerCase()) ?? null;
   const claimed = new Map<string, string>();
   for (const kw of KEYWORDS) {
     for (const a of kw.aliases) {
@@ -111,12 +107,20 @@ export function enhanceResume(content: string) {
   let out = content;
 
   if (!hasOpros) {
-    notes.push('Добавлен раздел «Опыт работы» с акцентом на результаты');
-    tips.push('Описывайте опыт через достижения с цифрами, а не обязанности');
+    /*
+     * Раньше здесь стояла запись «Добавлен раздел „Опыт работы“», хотя раздел
+     * не добавлялся: в итоговый текст попадали только навыки. Человек читал
+     * «что сделано» и искал в резюме несуществующее изменение. Совет вместо
+     * отчёта — единственное честное поведение: придумать чужой опыт нельзя.
+     */
+    tips.push(
+      'В резюме нет раздела «Опыт работы» — добавьте его и описывайте опыт через достижения с цифрами, а не обязанности',
+    );
   }
   if (!hasEducation) {
-    notes.push('Добавлен раздел «Образование»');
-    tips.push('Покажите профильные курсы и сертификаты, не только вуз');
+    tips.push(
+      'В резюме нет раздела «Образование» — покажите профильные курсы и сертификаты, не только вуз',
+    );
   }
 
   const keywords = detectKeywords(content);
@@ -154,16 +158,6 @@ export function enhanceResume(content: string) {
     sections.push(`Ключевые навыки\n${keywords.map((k) => `- ${k}`).join('\n')}`);
   }
   sections.push(out);
-  if (!hasNumbers) {
-    sections.push(
-      [
-        'Ключевые результаты (замените шаблоны своими цифрами)',
-        '- Ускорил [процесс] на [N]%, сэкономив команде [N] часов в неделю',
-        '- Увеличил [метрику] с [X] до [Y] за [N] месяцев',
-        '- Привёл [проект] к [результат], при бюджете [N]',
-      ].join('\n'),
-    );
-  }
   out = sections.join('\n\n');
 
   const beforeScore = scoreResume(content, keywords);
@@ -177,8 +171,8 @@ export function enhanceResume(content: string) {
   // качество текста, а просто сообщал, что «улучшение сработало».
   //
   // Теперь после — это scoreResume итогового текста по той же функции, что и
-  // «до». Рост обеспечивают реальные добавления (раздел навыков, буллеты,
-  // шаблон метрик), и он может быть нулевым, если улучшать нечего.
+  // «до». Рост обеспечивают только реальные добавления (раздел навыков и
+  // буллеты), и он может быть нулевым, если улучшать нечего.
   const afterKeywords = detectKeywords(out);
   const afterScore = scoreResume(out, afterKeywords);
 

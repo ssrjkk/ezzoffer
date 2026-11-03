@@ -144,6 +144,14 @@ test('ключевые слова без запятых тоже разбира�
   assert.ok(parsed.skills.includes('Django'), 'Django не распознан');
 });
 
+test('ML не выдаёт два навыка сразу', () => {
+  // 'ml' принадлежит Machine Learning; AI/ML дублировал этот алиас, и человек
+  // видел в пробелах две «разные» темы из одного слова.
+  const skills = extractSkills('Опыт: ML и машинное обучение');
+  assert.ok(skills.includes('Machine Learning'), `ML не распознан: ${skills.join(', ')}`);
+  assert.ok(!skills.includes('AI/ML'), `ML задвоен как AI/ML: ${skills.join(', ')}`);
+});
+
 test('разбор ключевых слов устойчив к пустому вводу', () => {
   assert.deepEqual(parseKeywords(''), { skills: [], words: [] });
   assert.deepEqual(parseKeywords('   '), { skills: [], words: [] });

@@ -180,18 +180,26 @@ export function computeSkillGaps(userId: number, limit = 8): SkillGapsReport {
    * вакансий с десятью навыками давали «целевых вакансий: 50», и человек
    * читал это как размер своего подбора. Теперь множество slug — отдельно,
    * счётчики навыков — отдельно.
+   *
+   * Навыки считаются по УНИКАЛЬНЫМ вакансиям, а не по парам «поиск ×
+   * вакансия». Одна вакансия часто подходит под два поиска («React» и
+   * «JavaScript»), и раньше её требования засчитывались дважды — человек
+   * читал «требуется в 12 вакансиях», хотя вакансий 6.
    */
   const targetedSlugs = new Set<string>();
   for (const search of db
     .prepare('SELECT * FROM searches WHERE user_id = ? AND active = 1')
     .all(userId) as SearchRow[]) {
     for (const v of catalog.values()) {
-      if (!matchesSearch(v, search)) continue;
-      targetedSlugs.add(v.slug);
-      for (const skill of skillsOf(v)) {
-        if (mine.has(skill)) continue;
-        inTarget.set(skill, (inTarget.get(skill) ?? 0) + 1);
-      }
+      if (matchesSearch(v, search)) targetedSlugs.add(v.slug);
+    }
+  }
+  for (const slug of targetedSlugs) {
+    const v = catalog.get(slug);
+    if (!v) continue;
+    for (const skill of skillsOf(v)) {
+      if (mine.has(skill)) continue;
+      inTarget.set(skill, (inTarget.get(skill) ?? 0) + 1);
     }
   }
 

@@ -72,6 +72,14 @@ export type VacancyQuery = {
   text?: string;
   city?: string;
   limit?: number;
+  /**
+   * Ограничить обновление этими источниками.
+   *
+   * Нужен быстрому кругу каталога: hh обновляется каждые полчаса, а
+   * агрегаторы — раз в несколько часов. Без фильтра «быстрый» проход дёргал
+   * все 13 площадок с той же частотой и обходил их собственный TTL.
+   */
+  sources?: readonly VacancySource[];
 };
 
 export type VacancyFetchResult = {

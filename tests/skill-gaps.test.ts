@@ -169,6 +169,38 @@ test('подбор отсекает и чужие вакансии, и навы�
   );
 });
 
+test('перекрывающиеся поиски не задваивают требования одной вакансии', () => {
+  seedUser(1, 'a@example.test');
+  seedResume(1, 'JavaScript, React');
+  /*
+   * Уникальный маркер обязателен: getCatalog подсеивает локальные вакансии, и
+   * поиск по одному «react» поймал бы ещё и их. Обе поиски находят ровно
+   * одну вакансию — «React/JavaScript разработчик».
+   */
+  seedSearch(1, 'React', 'уникальныймаркер; react');
+  seedSearch(1, 'Frontend', 'уникальныймаркер; javascript');
+  seedVacancy(
+    'hh-both',
+    'React/JavaScript разработчик',
+    'Компания',
+    'Уникальныймаркер. Требуется: Docker, Kubernetes',
+  );
+
+  const report = gaps.computeSkillGaps(1);
+  const docker = report.gaps.find((g) => g.skill === 'Docker');
+  assert.ok(docker, `Docker не попал в пробелы: ${JSON.stringify(report.gaps)}`);
+  assert.equal(
+    docker.inTarget,
+    1,
+    `требование одной вакансии посчитано дважды: ${JSON.stringify(docker)}`,
+  );
+  assert.equal(
+    report.basis.targetedVacancies,
+    1,
+    `вакансия посчитана дважды: ${JSON.stringify(report.basis)}`,
+  );
+});
+
 test('список принадлежит своему человеку: чужие отклики и резюме не видны', () => {
   seedUser(1, 'a@example.test');
   seedUser(2, 'b@example.test');

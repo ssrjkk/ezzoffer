@@ -24,6 +24,14 @@ export type HhResumeSummary = {
   id: string;
   title: string;
   updatedAt: string | null;
+  /**
+   * Опубликовано ли резюме на hh.
+   *
+   * Только published-резюме можно использовать для отклика; черновик в
+   * списке выглядит как обычное резюме, поэтому статус обязан доехать до
+   * интерфейса, а не остаться в ответе площадки.
+   */
+  published: boolean;
 };
 
 /**
@@ -97,16 +105,25 @@ async function fetchJson<T>(url: string, token: string): Promise<T | null> {
 /** Список резюме пользователя на hh. */
 export async function listHhResumes(token: string): Promise<HhResumeSummary[]> {
   const data = await fetchJson<{
-    items?: { id?: string; title?: string; updated_at?: string }[];
+    items?: {
+      id?: string;
+      title?: string;
+      updated_at?: string;
+      status?: { id?: string };
+    }[];
   }>(RESUMES_URL, token);
 
   const items = data?.items ?? [];
   return items
-    .filter((r): r is { id: string; title?: string; updated_at?: string } => Boolean(r.id))
+    .filter(
+      (r): r is { id: string; title?: string; updated_at?: string; status?: { id?: string } } =>
+        Boolean(r.id),
+    )
     .map((r) => ({
       id: r.id,
       title: r.title ?? 'Без названия',
       updatedAt: r.updated_at ?? null,
+      published: r.status?.id === 'published',
     }));
 }
 

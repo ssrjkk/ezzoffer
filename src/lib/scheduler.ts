@@ -1,7 +1,7 @@
 import type BetterSqlite3 from 'better-sqlite3';
 import { db } from './db';
 import { envNum } from './env';
-import { refreshCatalogForSearches, slowProvidersDue, fastProvidersDue } from './catalog-refresh';
+import { refreshCatalogForSearches, slowProvidersDue, fastProvidersDue, FAST_SOURCES } from './catalog-refresh';
 import { runAutoApply } from './autoapply';
 import { saveLastRun } from './autoapply-store';
 import { sendAlerts, sendDigests, sendExpiryWarnings, sendHhTokenWarnings, notifyHhTokenExpiredForUser } from './telegram-digest';
@@ -197,7 +197,7 @@ async function refreshFastCatalog(now: number): Promise<void> {
   const last = Number(getMeta(db, CATALOG_FAST_REFRESH_KEY) ?? 0);
   if (!fastProvidersDue(now, last)) return;
   try {
-    await refreshCatalogForSearches({ now: () => now });
+    await refreshCatalogForSearches({ now: () => now, sources: [...FAST_SOURCES] });
     setMeta(db, CATALOG_FAST_REFRESH_KEY, String(now));
   } catch (err) {
     logError('scheduler:refresh-fast', err);

@@ -103,13 +103,29 @@ export async function fetchHhResumeId(accessToken: string): Promise<string | nul
     return null;
   }
   if (!res.ok) return null;
-  let data: { items?: { id?: string; title?: string }[] };
+  let data: {
+    items?: { id?: string; title?: string; status?: { id?: string } }[];
+  };
   try {
-    data = (await res.json()) as { items?: { id?: string; title?: string }[] };
+    data = (await res.json()) as {
+      items?: { id?: string; title?: string; status?: { id?: string } }[];
+    };
   } catch {
     return null;
   }
-  const item = data.items?.find((r) => r.id);
+  /*
+   * Первое резюме из списка — не обязательно пригодное для отклика.
+   *
+   * hh разрешает откликаться только резюме в статусе published; черновик
+   * (not_published), заблокированное или находящееся на модерации резюме
+   * площадка отклонит. Раньше здесь брался первый элемент с id, и человек с
+   * черновиком в начале списка получал «аккаунт привязан», а каждый отклик
+   * падал с ошибкой. Предпочитаем published; если опубликованных нет,
+   * возвращаем первое — соединение всё равно полезно, а понятное сообщение
+   * об ошибке придёт от площадки.
+   */
+  const items = (data.items ?? []).filter((r) => r.id);
+  const item = items.find((r) => r.status?.id === 'published') ?? items[0];
   return item?.id ?? null;
 }
 

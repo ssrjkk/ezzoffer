@@ -48,7 +48,7 @@ const SKILLS: (SkillDef & { category: SkillCategory })[] = [
   {
     label: 'JavaScript',
     category: 'lang',
-    aliases: ['javascript', 'js', 'ecmascript', 'е javascript', 'джаваскрипт'],
+    aliases: ['javascript', 'js', 'ecmascript', 'джаваскрипт'],
   },
   { label: 'TypeScript', category: 'lang', aliases: ['typescript', 'ts', 'тайпскрипт'] },
   { label: 'Python', category: 'lang', aliases: ['python', 'питон', 'пайтон'] },
@@ -146,7 +146,7 @@ const SKILLS: (SkillDef & { category: SkillCategory })[] = [
   },
   { label: 'Git', category: 'devops', aliases: ['git', 'гит'] },
   { label: 'Linux', category: 'devops', aliases: ['linux', 'линукс', 'ubuntu', 'debian'] },
-  { label: 'Nginx', category: 'devops', aliases: ['nginx', 'nginx'] },
+  { label: 'Nginx', category: 'devops', aliases: ['nginx'] },
   {
     label: 'Observability',
     category: 'devops',
@@ -306,7 +306,13 @@ const SKILLS: (SkillDef & { category: SkillCategory })[] = [
   {
     label: 'AI/ML',
     category: 'data',
-    aliases: ['ai', 'ии', 'искусственный интеллект', 'ml', 'машинное обучение'],
+    /*
+     * 'ml' и 'машинное обучение' намеренно не повторяются здесь: они уже
+     * принадлежат Machine Learning. Дублирование давало два навыка из одного
+     * слова, и человек видел в списке пробелов «Machine Learning» и «AI/ML»
+     * как две разные темы.
+     */
+    aliases: ['ai', 'ии', 'искусственный интеллект', 'artificial intelligence'],
   },
 ];
 

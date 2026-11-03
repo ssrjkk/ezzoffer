@@ -41,7 +41,9 @@ export function HhImportButton({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [items, setItems] = useState<{ id: string; title: string; updatedAt: string | null }[]>([]);
+  const [items, setItems] = useState<
+    { id: string; title: string; updatedAt: string | null; published: boolean }[]
+  >([]);
   const [note, setNote] = useState<string | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -160,6 +162,11 @@ export function HhImportButton({
                         обновлено {formatDate(r.updatedAt)}
                       </span>
                     ) : null}
+                    {r.published ? null : (
+                      <span className="mt-0.5 block font-mono text-[11px] text-accent-2">
+                        не опубликовано — на hh отклики недоступны
+                      </span>
+                    )}
                   </button>
                 </li>
               ))}

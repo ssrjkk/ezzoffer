@@ -2,7 +2,7 @@ import { db } from './db';
 import { envNum } from './env';
 import { parseKeywords } from './skills';
 import { refreshProviders } from './vacancies';
-import type { SourceStatus } from './vacancies';
+import type { SourceStatus, VacancySource } from './vacancies';
 import { logError, logInfo } from './logger';
 
 /**
@@ -38,7 +38,7 @@ type SearchRow = {
 };
 
 /** Провайдеры, чья выдача меняется быстро: обновляем их чаще. */
-const FAST_SOURCES = new Set(['hh']);
+const FAST_SOURCES: ReadonlySet<VacancySource> = new Set<VacancySource>(['hh']);
 
 /** Сколько вакансий забирать с одного провайдера за один запрос. */
 const PER_QUERY_LIMIT = 100;
@@ -133,6 +133,14 @@ export function lastRefreshReport(): RefreshReport | null {
 export async function refreshCatalogForSearches(opts?: {
   now?: () => number;
   force?: boolean;
+  /**
+   * Ограничить обновление этими источниками.
+   *
+   * Без этого параметра обновляются все провайдеры. Планировщик передаёт
+   * FAST_SOURCES для получасового круга: иначе медленные агрегаторы
+   * опрашивались бы каждые полчаса, вопреки slowProvidersDue и их лимитам.
+   */
+  sources?: readonly VacancySource[];
 }): Promise<RefreshReport> {
   const started = opts?.now?.() ?? Date.now();
 
@@ -172,6 +180,7 @@ export async function refreshCatalogForSearches(opts?: {
         text: q.text,
         ...(q.city ? { city: q.city } : {}),
         limit: PER_QUERY_LIMIT,
+        ...(opts?.sources ? { sources: opts.sources } : {}),
       });
       statuses.push(...result);
     } catch (err) {

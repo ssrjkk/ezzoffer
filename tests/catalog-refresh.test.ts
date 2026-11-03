@@ -175,6 +175,37 @@ test('дедуп запросов нечувствителен к пробела
   assert.equal(mine[0]?.city, 'Казань');
 });
 
+test('быстрый круг обновляет только переданные источники', async () => {
+  /*
+   * Планировщик зовёт быстрый круг каждые 30 минут, а медленные агрегаторы
+   * должны опрашиваться раз в несколько часов. Раньше фильтра не было:
+   * FAST_SOURCES был объявлен, но ни на что не влиял, и «быстрый» проход
+   * дёргал все 13 площадок. Проверяем, что в отчёте только hh и локальные
+   * записи, а не весь список провайдеров.
+   */
+  db.prepare('UPDATE searches SET active = 0').run();
+  addSearch('React', 'Москва', 1);
+
+  const saved = globalThis.fetch;
+  globalThis.fetch = (async () => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ items: [] }),
+  })) as unknown as typeof globalThis.fetch;
+
+  try {
+    const report = await refreshCatalogForSearches({ sources: ['hh'] });
+    const sources = report.statuses.map((s) => s.source).sort();
+    assert.deepEqual(
+      sources,
+      ['hh', 'local'],
+      `быстрый проход опросил лишние источники: ${sources.join(', ')}`,
+    );
+  } finally {
+    globalThis.fetch = saved;
+  }
+});
+
 test('после обновления пишется отчёт: сколько запросов и вакансий', async () => {  addSearch('React', 'Москва', 1);
 
   const saved = globalThis.fetch;

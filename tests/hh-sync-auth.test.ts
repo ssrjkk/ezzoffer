@@ -273,3 +273,55 @@ test('параллельное обновление токена делает о
     delete process.env.HH_REDIRECT_URI;
   }
 });
+
+test('привязка предпочитает опубликованное резюме, а не первое в списке', async () => {
+  /*
+   * hh разрешает откликаться только резюме в статусе published. Раньше
+   * fetchHhResumeId брал первый элемент с id: человек с черновиком первым
+   * получал «аккаунт привязан», а каждая отправка падала. Проверяем выбор
+   * по статусу, а не по порядку.
+   */
+  const saved = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL) => {
+    assert.match(String(url), /\/resumes\/mine/);
+    const body = JSON.stringify({
+      items: [
+        { id: 'draft', title: 'Черновик', status: { id: 'not_published' } },
+        { id: 'live', title: 'Опубликовано', status: { id: 'published' } },
+      ],
+    });
+    return {
+      ok: true,
+      status: 200,
+      text: async () => body,
+      json: async () => JSON.parse(body),
+    } as unknown as Response;
+  }) as typeof fetch;
+  try {
+    const { fetchHhResumeId } = await import('../src/lib/hh-oauth');
+    assert.equal(await fetchHhResumeId('token'), 'live');
+  } finally {
+    globalThis.fetch = saved;
+  }
+});
+
+test('без опубликованных резюме привязка не теряет первое', async () => {
+  const saved = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    const body = JSON.stringify({
+      items: [{ id: 'draft', title: 'Черновик', status: { id: 'not_published' } }],
+    });
+    return {
+      ok: true,
+      status: 200,
+      text: async () => body,
+      json: async () => JSON.parse(body),
+    } as unknown as Response;
+  }) as typeof fetch;
+  try {
+    const { fetchHhResumeId } = await import('../src/lib/hh-oauth');
+    assert.equal(await fetchHhResumeId('token'), 'draft');
+  } finally {
+    globalThis.fetch = saved;
+  }
+});

@@ -74,12 +74,17 @@ const RESUME_RESPONSE = {
   ],
 };
 
-test('список резюме отдаёт id и названия', async () => {
+test('список резюме отдаёт id, названия и статус публикации', async () => {
   mock(() =>
     respond({
       items: [
-        { id: '1', title: 'Frontend Developer', updated_at: '2026-01-02T10:00:00+03:00' },
-        { id: '2', title: 'Backend Developer' },
+        {
+          id: '1',
+          title: 'Frontend Developer',
+          updated_at: '2026-01-02T10:00:00+03:00',
+          status: { id: 'published' },
+        },
+        { id: '2', title: 'Backend Developer', status: { id: 'not_published' } },
       ],
     }),
   );
@@ -90,6 +95,8 @@ test('список резюме отдаёт id и названия', async () =
   assert.equal(list[0]!.id, '1');
   assert.equal(list[1]!.title, 'Backend Developer');
   assert.equal(list[1]!.updatedAt, null, 'отсутствующая дата не должна превращаться в текущую');
+  assert.equal(list[0]!.published, true, 'published-резюме помечено как черновик');
+  assert.equal(list[1]!.published, false, 'черновик помечен как опубликованный');
 });
 
 test('список пустой при ошибке — не выдумывается', async () => {

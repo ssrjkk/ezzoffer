@@ -307,7 +307,9 @@ export async function refreshProviders(query: VacancyQuery = {}): Promise<Source
     count: allLocalCount(),
     ok: true,
   });
-  const external = providers.filter((p) => p.source !== 'local');
+  const external = providers.filter(
+    (p) => p.source !== 'local' && (!query.sources || query.sources.includes(p.source)),
+  );
   // Сколько запросов можно успеть: каждый с таймаутом 25с — успеваем все параллельно,
   // но ограничиваем конкурентность, чтобы не бить по всем доменам разом.
   const CONCURRENCY = Math.min(4, external.length);
