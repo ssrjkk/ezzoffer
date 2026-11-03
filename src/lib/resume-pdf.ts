@@ -108,7 +108,6 @@ export type ResumePdf = {
 
 export type PdfResult = { ok: true; buffer: Buffer; font: string } | { ok: false; error: string };
 
-/** Собирает PDF резюме. Никогда не бросает: ошибки возвращаются в виде ok:false. */
 /**
  * Режет неразрывные токены на части.
  *
@@ -146,6 +145,7 @@ export function splitLongTokens(line: string, limit = 80): string[] {
   return out.length > 0 ? out : [line];
 }
 
+/** Собирает PDF резюме. Никогда не бросает: ошибки возвращаются в виде ok:false. */
 export async function renderResumePdf(resume: ResumePdf): Promise<PdfResult> {
   const font = fontPath();
   if (!font) {

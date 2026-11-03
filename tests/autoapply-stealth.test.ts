@@ -184,33 +184,58 @@ function dayPacing(noon: number): {
   return { pacing: { minDelayMs: 0, maxDelayMs: 0, jitterMinutes: 0 }, now: () => noon };
 }
 
-test('выходные режут объём: остаток 10 → 5', async () => {
+test('выходные режут суточный потолок вдвое: 10 → 5', async () => {
   seedUser('start');
-  seedSentToday(40);
   for (let i = 0; i < 12; i++) seedVacancy(i);
+  // Абсолютный суточный потолок 10 (глобальный лимит оператора): срезка
+  // выходных должна дать 5 независимо от того, сколько уже отправлено.
+  process.env.AUTOAPPLY_DAILY_CAP = '10';
   process.env.AUTOAPPLY_WEEKEND_FACTOR = '0.5';
   let result: Awaited<ReturnType<typeof autoapply.runAutoApply>> | null = null;
   try {
     result = await autoapply.runAutoApply(dayPacing(SAT_NOON));
   } finally {
+    delete process.env.AUTOAPPLY_DAILY_CAP;
     delete process.env.AUTOAPPLY_WEEKEND_FACTOR;
   }
-  // Остаток дня: 50 − 40 = 10, выходные режут вдвое.
-  assert.equal(sentCount(), 45, 'выходные не срезали объём');
+  assert.equal(sentCount(), 5, 'выходные не срезали объём');
   assert.equal(result?.weekendLimitedUsers, 1, 'срезка выходными не посчитана');
 });
 
-test('в будни тот же остаток уходит полностью', async () => {
+test('в будни тот же потолок уходит полностью', async () => {
   seedUser('start');
-  seedSentToday(40);
   for (let i = 0; i < 12; i++) seedVacancy(i);
+  process.env.AUTOAPPLY_DAILY_CAP = '10';
   process.env.AUTOAPPLY_WEEKEND_FACTOR = '0.5';
   let result: Awaited<ReturnType<typeof autoapply.runAutoApply>> | null = null;
   try {
     result = await autoapply.runAutoApply(dayPacing(MON_NOON));
   } finally {
+    delete process.env.AUTOAPPLY_DAILY_CAP;
     delete process.env.AUTOAPPLY_WEEKEND_FACTOR;
   }
-  assert.equal(sentCount(), 50, 'будни урезаны выходным коэффициентом');
+  assert.equal(sentCount(), 10, 'будни урезаны выходным коэффициентом');
   assert.equal(result?.weekendLimitedUsers ?? 0, 0, 'будни посчитаны как выходные');
+});
+
+test('гидратированный паузер не удваивает суточный лимит', async () => {
+  /*
+   * Production-путь: без opts.pacing паузер гидрирует сегодняшние отправки из
+   * applications. Суточный кап обязан быть абсолютным (50), а не остатком (1),
+   * иначе 49 уже отправленных дают вечный reason=daily и человек не получает
+   * последний оплаченный отклик. Тесты с opts.pacing шли мимо этой ветки:
+   * свежий паузер не гидрировал счётчик, и двойной учёт не проявлялся.
+   */
+  seedUser('start');
+  seedSentToday(49);
+  for (let i = 0; i < 3; i++) seedVacancy(i);
+  // Гидратированные метки лежат в текущем часе: без поднятия часового капа
+  // паузер упрётся в него раньше, чем в суточный лимит.
+  process.env.AUTOAPPLY_HOURLY_CAP = '1000';
+  try {
+    await autoapply.runAutoApply();
+  } finally {
+    delete process.env.AUTOAPPLY_HOURLY_CAP;
+  }
+  assert.equal(sentCount(), 50, 'последний слот тарифа не ушёл из-за двойного учёта');
 });

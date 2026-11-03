@@ -817,8 +817,8 @@ export async function runAutoApply(opts?: {
       const remaining = Math.max(0, limit - used);
       if (remaining <= 0) continue;
 
-      // Анти-бан: суточный лимит = остаток от тарифа (с учётом глобального
-      // потолка), часовой лимит и паузы — из конфигурации.
+      // Анти-бан: суточный лимит = тариф с учётом глобального потолка,
+      // часовой лимит и паузы — из конфигурации.
       const eff = effectivePacing(limit);
       /*
        * Человеческий профиль объёма: прогрев нового отправителя и смягчение
@@ -826,10 +826,18 @@ export async function runAutoApply(opts?: {
        * деплоем; подробности — у хелперов выше. Дежурный минимум — 1: полный
        * ноль прятал бы причину остановки за generic-паузой.
        *
+       * Множители применяются к СУТОЧНОМУ ПОТОЛКУ, а не к остатку. Раньше здесь
+       * стояло min(remaining, cap): паузер и слоты считают абсолютное число
+       * отправок за сутки, и кап по остатку вычитал уже отправленное дважды —
+       * при 40 из 50 отправленных следующий тик получал кап 10, сравнивал с 40
+       * и останавливался навсегда. Абсолютный потолок: 50 на тарифе, 25 в
+       * выходные, 7 в первый день прогрева — независимо от того, сколько ушло
+       * раньше в этих же сутках.
+       *
        * Срезка считается для отчёта: молчаливое снижение объёма неотличимо
        * от поломки, и человек чинит несуществующую проблему.
        */
-      const baseDaily = Math.min(remaining, eff.dailyCap);
+      const baseDaily = eff.dailyCap;
       const afterWeekend = weekendScaledCap(baseDaily, nowFn());
       if (afterWeekend < baseDaily) weekendLimitedUsers++;
       const afterWarmup = warmupScaledCap(
@@ -841,6 +849,12 @@ export async function runAutoApply(opts?: {
       if (afterWarmup < afterWeekend) warmupLimitedUsers++;
       const effectiveDaily = afterWarmup;
       if (effectiveDaily <= 0) continue;
+      /*
+       * Сколько ещё можно отправить в этом прогоне: остаток тарифа и остаток
+       * абсолютного суточного потолка — меньшее из двух.
+       */
+      const allowance = Math.min(remaining, effectiveDaily - used);
+      if (allowance <= 0) continue;
       // effectivePacing отдаёт hourlyCap, а PacingConfig ждёт hourlyLimit:
       // имена разные, и прямое spread-кладение effectivePacing в configure
       // оставляло часовой лимит дефолтным (12) при любом AUTOAPPLY_HOURLY_CAP.
@@ -928,7 +942,7 @@ export async function runAutoApply(opts?: {
       const dayStartMs = mskDayStartMs();
 
       for (const search of activeSearches) {
-        if (appliedSet.size >= remaining) break;
+        if (appliedSet.size >= allowance) break;
         searches++;
 
         const candidates = catalog.filter(
@@ -978,7 +992,7 @@ export async function runAutoApply(opts?: {
         const ranked = rankVacancies(fresh, resumes.length > 0 ? resumes : [], skillsCache);
 
         for (const { vacancy, resume: picked } of ranked) {
-          if (appliedSet.size >= remaining) break;
+          if (appliedSet.size >= allowance) break;
           if (appliedSet.has(vacancy.slug)) continue;
 
           /*
@@ -1623,7 +1637,6 @@ export async function applyToVacancy(
   if (!hhProvider.apply) return { ok: false, kind: 'other', error: 'Отправка недоступна' };
 
   const base = effectivePacing(limit);
-  const remaining = Math.max(0, limit - todayCount(user.id));
   const effBase = {
     hourlyLimit: base.hourlyCap,
     minDelayMs: base.minDelayMs,
@@ -1631,11 +1644,26 @@ export async function applyToVacancy(
     workStartHour: base.workStartHour,
     workEndHour: base.workEndHour,
   };
+  /*
+   * dailyLimit — абсолютный суточный потолок тарифа, а не остаток.
+   *
+   * Паузер считает отправки за сутки с начала дня (и гидратирует их из
+   * applications), поэтому «остаток» в качестве капа вычитал уже отправленное
+   * второй раз. Ручной отклик при 40 из 50 отправленных вставал с «лимит
+   * исчерпан» на 40-м, хотя оставалось ещё 10.
+   */
   const pacing = pacingFor(
     user.id,
-    { ...effBase, dailyLimit: Math.min(remaining, base.dailyCap) },
+    { ...effBase, dailyLimit: limit },
     opts.now ?? (() => Date.now()),
   );
+  /*
+   * pacingFor отдаёт закэшированный паузер и переданную конфигурацию игнорирует.
+   * Без configure ручной отклик гейтился бы по дневному потолку прошлого
+   * прогона планировщика (а тот мог быть меньше из-за прогрева/выходных).
+   * Плановый прогон делает то же самое сразу после pacingFor.
+   */
+  pacing.configure({ ...effBase, dailyLimit: limit });
   const decision = pacing.decide();
   if (!decision.allowed) {
     return {
@@ -1671,10 +1699,15 @@ export async function applyToVacancy(
    */
   const singleDayKey = mskDayStartMs();
   const singleDailySlot = slotKeyDaily(user.id, singleDayKey);
-  // Пересчёт перед списанием, а не значение сверху: между проверкой и сетью
-  // параллельный прогон мог уже отправить.
-  const singleLeft = Math.max(0, limit - todayCount(user.id));
-  if (singleLeft <= 0 || !tryConsumeSlot(singleDailySlot, singleLeft, singleDayKey)) {
+  /*
+   * Слот считает абсолютное число отправок за сутки, поэтому кап — суточный
+   * лимит тарифа, а не остаток. Пересчёт сегодняшних откликов перед списанием
+   * закрывает гонку с планировщиком: пока шла подготовка, он мог отправить.
+   */
+  if (
+    todayCount(user.id) >= limit ||
+    !tryConsumeSlot(singleDailySlot, limit, singleDayKey)
+  ) {
     completeSend(claim.id);
     return { ok: false, kind: 'rate_limit', error: `Дневной лимит тарифа исчерпан (${limit})` };
   }
@@ -1766,6 +1799,10 @@ export async function applyToVacancy(
   }
   completeSend(claim.id);
   logApplyEvent(user.id, vacancy.slug, 'sent', message ? 'с письмом (бот/кабинет)' : 'без письма');
+  // Успешная отправка доказывает живой токен — как и в плановом прогоне.
+  // Без этого дедуп-метка «токен истёк» пережила бы успех, и повторная
+  // поломка в те же сутки прошла бы без предупреждения.
+  clearHhTokenWarning(user.id);
 
   return { ok: true, resumeId: sendableId, withLetter: Boolean(message) };
 }

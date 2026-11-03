@@ -156,8 +156,10 @@ export function listApplicationsPage(
  * открытие кабинета с 200 откликами делало 200 запросов подряд. Здесь один
  * IN-запрос на страницу, дальше — Map в памяти.
  *
- * Читаем только скалярные поля для карточки: JSON-колонки (requirements и
- * т.п.) здесь не разбираются, чтобы не тащить парсинг ради списка.
+ * SELECT ограничен скалярными полями карточки. Здесь стоял `SELECT *`, а это
+ * тянуло колонки about/requirements/bonus — килобайты JSON на каждую строку
+ * списка, которые для карточки не читаются вовсе. Плюс этот текст всё равно
+ * не разбирается — пришлось бы платить и за передачу, и за парсинг впустую.
  */
 type VacancyCard = {
   slug: string;
@@ -176,7 +178,10 @@ function serializeWithVacancies(rows: ApplicationRow[]) {
   const slugs = [...new Set(rows.map((r) => r.job_slug))];
   const placeholders = slugs.map(() => '?').join(',');
   const found = db
-    .prepare(`SELECT * FROM vacancies WHERE slug IN (${placeholders})`)
+    .prepare(
+      `SELECT slug, title, company, salary, level, format, city, source, source_url
+         FROM vacancies WHERE slug IN (${placeholders})`,
+    )
     .all(...slugs) as VacancyCard[];
   const bySlug = new Map(found.map((v) => [v.slug, v]));
   return rows.map((row) => serializeApplicationWith(row, bySlug.get(row.job_slug) ?? null));

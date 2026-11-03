@@ -48,7 +48,8 @@ export function clearAuthFailures(key: string): void {
 
 /** Уборка протухших окон — чтобы таблица не росла монотонно. */
 export function purgeAuthAttempts(now = Date.now()): number {
-  // Окна длиннее суток не бывает: чистим всё старше часа с запасом.
+  // Самое длинное окно блокировки — сутки, поэтому всё старше суток уже
+  // ни на что не влияет; запас не нужен, окно отсчитывается от window_start.
   const res = db
     .prepare('DELETE FROM auth_attempts WHERE window_start <= ?')
     .run(now - 24 * 60 * 60 * 1000);

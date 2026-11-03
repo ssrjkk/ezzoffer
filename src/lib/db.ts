@@ -299,9 +299,9 @@ CREATE INDEX IF NOT EXISTS idx_vacancies_source_fetched ON vacancies(source, fet
 CREATE INDEX IF NOT EXISTS idx_searches_active ON searches(active);
 
 -- Дополнительные индексы для выборок, которые идут по составному ключу.
--- Без них purgeExpiredAuthRows и todayCount сканировали таблицу целиком.
-CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);
-CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+-- idx_sessions_expires и idx_sessions_user объявлены выше, вместе с таблицей
+-- sessions; повторять их здесь незачем (IF NOT EXISTS делал повтор пустым,
+-- но два места для одного индекса только запутывают чтение схемы).
 CREATE INDEX IF NOT EXISTS idx_oauth_states_expires ON oauth_states(expires_at);
 CREATE INDEX IF NOT EXISTS idx_telegram_codes_expires ON telegram_codes(expires_at);
 CREATE INDEX IF NOT EXISTS idx_telegram_codes_user ON telegram_codes(user_id);
