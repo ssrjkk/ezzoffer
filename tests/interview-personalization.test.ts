@@ -22,6 +22,7 @@ const VACANCY = {
   level: 'Senior' as const,
   about: 'Требуются: React, TypeScript, Next.js, Webpack',
   requirements: ['React', 'TypeScript', 'Next.js', 'Webpack'],
+  source: 'hh' as const,
 };
 
 const FRONT_RESUME = [
@@ -81,6 +82,17 @@ test('телефон не попадает в достижения', () => {
   const a = extractAchievements(resume);
   assert.equal(a.length, 1, `извлечено ${a.length}: ${JSON.stringify(a)}`);
   assert.ok(!a[0]!.includes('999'), `телефон попал в достижения: ${a[0]}`);
+});
+
+test('тысячи с пробелом — не телефон', () => {
+  /*
+   * Фильтр телефона шёл по префиксу («8» + три цифры): строка «с 8 000 до
+   * 12 000» выбрасывалась как телефон, хотя это настоящее достижение.
+   * Теперь требуется номер целиком.
+   */
+  const resume = 'Выросло с 8 000 до 12 000 пользователей за квартал работы.';
+  const a = extractAchievements(resume);
+  assert.equal(a.length, 1, `достижение с тысячами выброшено: ${JSON.stringify(a)}`);
 });
 
 test('слишком длинная строка не считается достижением', () => {

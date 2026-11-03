@@ -146,6 +146,23 @@ test('имя из чужого сервиса ограничено по длин
   assert.equal(out.name.length, 100);
 });
 
+test('обрезка имени не рвёт эмодзи пополам', () => {
+  /*
+   * Эмодзи — суррогатная пара: slice(0, 100) по единицам UTF-16 резал её
+   * между половинами, и в БД ложился висячий суррогат вместо имени.
+   */
+  const out = normalizeIdentity({
+    provider: 'github',
+    providerId: '1',
+    email: 'a@b.ru',
+    name: `${'я'.repeat(99)}😀${'я'.repeat(300)}`,
+  });
+  assert.ok(out);
+  assert.equal([...out.name].length, 100, `длина в символах не 100: ${out.name.length}`);
+  // Эмодзи целиком, а не старшая половина пары: 99 букв + целый символ.
+  assert.equal(out.name, `${'я'.repeat(99)}😀`);
+});
+
 test('аватар принимается только с https и известного хоста', () => {
   const good = normalizeIdentity({
     provider: 'github',

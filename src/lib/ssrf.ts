@@ -188,7 +188,15 @@ export function assertOutboundUrlAllowed(raw: string): string | null {
     return `схема ${url.protocol} запрещена (нужна http или https)`;
   }
 
-  const host = url.hostname.toLowerCase();
+  const rawHost = url.hostname.toLowerCase();
+  /*
+   * FQDN с точкой в конце (`localhost.`, `127.0.0.1.`) — то же имя для DNS,
+   * но другая строка для проверок: 'localhost.' нет в чёрном списке, а
+   * '127.0.0.1.' не парсится как IPv4. Без нормализации обе формы обходили
+   * все проверки ниже и уходили в сеть. Точка в конце имени ничего не значит,
+   * поэтому срезаем её до любых сравнений.
+   */
+  const host = rawHost.replace(/\.+$/, '');
   if (!host) return 'пустой хост';
   if (BLOCKED_HOSTNAMES.has(host)) return `хост ${host} запрещён`;
   // Служебные домены внутренней сети и одноточечные имена.

@@ -185,6 +185,10 @@ export async function sendExpiryWarnings(now: number = Date.now()): Promise<numb
       | undefined;
     if (marked) continue;
     const days = Math.max(1, Math.ceil(left / 86_400_000));
+    // Осталось меньше суток — «через 1 день» было бы враньём на ровном месте:
+    // ceil(3ч/сутки) = 1, а тариф сгорит сегодня.
+    const leftText =
+      left < 86_400_000 ? 'сегодня' : `через ${days} ${plural(days, 'день', 'дня', 'дней')}`;
     const ok = await notifyUser(
       u.id,
       /*
@@ -192,7 +196,7 @@ export async function sendExpiryWarnings(now: number = Date.now()): Promise<numb
        * («start-7»): это сообщение читают в Telegram, а не в БД.
        * planLabel при незнакомом значении вернёт его как есть.
        */
-      `Тариф «${planLabel({ plan: u.plan })}» заканчивается через ${days} ${plural(days, 'день', 'дня', 'дней')}. ` +
+      `Тариф «${planLabel({ plan: u.plan })}» заканчивается ${leftText}. ` +
         'Продлите его в кабинете, чтобы автоотклики не встали: /dashboard/settings',
     );
     if (ok) {
@@ -295,7 +299,6 @@ function headingFor(row: ApplicationRow): string | null {
 }
 
 const STATUS_TEXT = {
-  invited: '🎉 Приглашение на собеседование',
   interviewed: '🎉 Приглашение на собеседование',
   declined: 'Отказ',
 } as const;
@@ -317,7 +320,6 @@ export async function sendAlerts(
   if (rows.length === 0) return 0;
 
   const mark = db.prepare('UPDATE applications SET notified_at = ? WHERE id = ?');
-  const unmark = db.prepare('UPDATE applications SET notified_at = NULL WHERE id = ?');
   let sent = 0;
 
   for (const row of rows) {
@@ -363,7 +365,8 @@ export async function sendAlerts(
       db.prepare('UPDATE applications SET notified_claim_at = NULL WHERE id = ?').run(row.id);
       sent++;
     } else {
-      unmark.run(row.id);
+      // Заявка сбрасывается — приглашение попробуется следующим тиком.
+      // notified_at здесь и так NULL: сбрасывать его нечего, только claim.
       db.prepare('UPDATE applications SET notified_claim_at = NULL WHERE id = ?').run(row.id);
     }
   }
@@ -389,7 +392,10 @@ export async function notifyAccountBlocked(
 ): Promise<boolean> {
   if (!chatId) return false;
 
+  // Сервер живёт в UTC, человек — в Москве: без timeZone «попробуем снова»
+  // показало бы время по Гринвичу, и человек пришёл бы на три часа раньше.
   const when = new Date(until).toLocaleString('ru-RU', {
+    timeZone: 'Europe/Moscow',
     day: '2-digit',
     month: '2-digit',
     hour: '2-digit',
@@ -520,7 +526,7 @@ export async function sendHhTokenWarnings(now: number = Date.now()): Promise<num
      * hh_refresh_token хранится зашифрованным и потому всегда truthy при
      * наличии. Первое условие не работало никогда. Полностью убираем
      * проверку токена: без HH OAuth (hhConfigured=false) уведомление
-     *必须но — восстановить токен нельзя никак.
+     * нужно — восстановить токен нельзя никак.
      */
     if (hhConfigured()) continue;
     if (await notifyHhTokenExpiredForUser(u.id, now)) sent++;

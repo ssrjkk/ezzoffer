@@ -265,7 +265,7 @@ export function ApplicationsView({
                   <h2 className="font-serif leading-snug text-ink">{a.job?.title ?? a.job_slug}</h2>
                   <Badge tone={toneFor(a)}>{a.withdrawn ? 'Отозван' : a.status_label}</Badge>
                   {a.job?.source && a.job.source !== 'local' ? (
-                    <Badge tone="cyan">{SOURCE_LABELS[a.job.source] ?? a.job.source}</Badge>
+                    <Badge tone="cyan">{SOURCE_LABELS[a.job.source as keyof typeof SOURCE_LABELS] ?? a.job.source}</Badge>
                   ) : null}
                 </div>
                 <p className="mt-0.5 text-sm text-muted">

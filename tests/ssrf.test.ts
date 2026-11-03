@@ -51,6 +51,26 @@ test('loopback и служебные имена запрещены', () => {
   }
 });
 
+test('точка в конце имени не обходит проверки', () => {
+  /*
+   * `localhost.` и `127.0.0.1.` — те же имена для резолвера, но другие строки
+   * для проверок: первое не совпадало с чёрным списком, второе не парсилось
+   * как IPv4. Без нормализации обе формы уходили в сеть.
+   */
+  for (const url of [
+    'http://localhost./feed',
+    'http://LOCALHOST./feed',
+    'http://127.0.0.1./feed',
+    'http://10.0.0.5./feed',
+    'http://metadata.google.internal./',
+    'http://redis./feed',
+  ]) {
+    assert.equal(isOutboundUrlAllowed(url), false, `${url} должен быть отклонён`);
+  }
+  // Легитимный FQDN с точкой в конце остаётся разрешён.
+  assert.equal(isOutboundUrlAllowed('https://careers.example.com./jobs.rss'), true);
+});
+
 test('приватные диапазоны IPv4 запрещены', () => {
   for (const url of [
     'http://10.0.0.5/feed',

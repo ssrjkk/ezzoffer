@@ -46,14 +46,14 @@ export type InterviewPrep = {
  * нет (об этом почти всегда спрашивают), и в конце — о компании и зарплате.
  */
 export function prepareInterview(
-  vacancy: Pick<Vacancy, 'title' | 'company' | 'about' | 'requirements' | 'level'>,
+  vacancy: Pick<Vacancy, 'title' | 'company' | 'about' | 'requirements' | 'level' | 'source'>,
   resumeContent: string,
   resumeTitle = '',
 ): InterviewPrep {
   const scored = scoreVacancyForResume(
     {
       slug: '',
-      source: 'local',
+      source: vacancy.source,
       source_id: '',
       title: vacancy.title,
       company: vacancy.company,
@@ -75,7 +75,15 @@ export function prepareInterview(
       contact_phone: null,
     },
     resumeContent,
-    resumeTitle || vacancy.title,
+    /*
+     * Пустой заголовок — это «неизвестно», а не «как у вакансии».
+     *
+     * Раньше здесь стояло `resumeTitle || vacancy.title`: безымянное резюме
+     * получало уровень вакансии, разрыв исчезал, и оценка уровня всегда была
+     * полной — подготовка хвалила соответствие, которого никто не проверял.
+     * Пустая строка в extractLevel даёт нейтральный Middle.
+     */
+    resumeTitle,
   );
 
   const riskyGaps = scored.missingSkills;
@@ -210,8 +218,15 @@ export function extractAchievements(resumeContent: string, limit = 3): string[] 
       // цифра встречается случайно и вопрос «как это получилось» бессмыслен.
       .filter((l) => l.length >= 20 && l.length <= 220)
       .filter((l) => /\d/.test(l))
-      // Телефон содержит цифры и проходит по длине, но достижением не является.
-      .filter((l) => !/(^|\D)(\+7|8)[\s(-]*\d{3}/.test(l))
+      /*
+       * Телефон — только целиком, а не по префиксу.
+       *
+       * Раньше отсев шёл по началу номера (`+7`/`8` + три цифры): строка
+       * «Выросло с 8 000 до 12 000 пользователей» contains «8 000» и
+       * выбрасывалась как телефон, хотя это настоящее достижение с цифрами.
+       * Теперь требуется весь номер: код, три, три, две и две цифры.
+       */
+      .filter((l) => !/(^|\D)(\+7|8)[\s(-]*\d{3}[\s)-]*\d{3}[\s-]*\d{2}[\s-]*\d{2}(\D|$)/.test(l))
       // Стаж — исходные данные, а не результат: «Опыт: 8 лет разработки»
       // нечего «рассказывать, как это получилось».
       .filter((l) => !/опыт[а-я]*[:\s]*(около\s*)?\d+\s*(год|лет|года)/i.test(l))
@@ -219,15 +234,24 @@ export function extractAchievements(resumeContent: string, limit = 3): string[] 
   );
 }
 
-/** Что взять с собой и что иметь под рукой. */
-function buildChecklist(vacancy: Pick<Vacancy, 'title' | 'company'>): string[] {
-  return [
-    'Свежая версия резюме — на телефоне и на бумаге',
-    'Ссылка на это резюме в hh: объясните, что отклик оттуда',
+/**
+ * Что взять с собой и что иметь под рукой.
+ *
+ * Пункт про ссылку на резюме в hh — только для hh-вакансий: подготовка
+ * строится и по откликам с других площадок, а совет «объясните, что отклик
+ * из hh» там — неверный.
+ */
+function buildChecklist(vacancy: Pick<Vacancy, 'title' | 'company' | 'source'>): string[] {
+  const list = ['Свежая версия резюме — на телефоне и на бумаге'];
+  if (vacancy.source === 'hh') {
+    list.push('Ссылка на это резюме в hh: объясните, что отклик оттуда');
+  }
+  list.push(
     `Заметка о ${vacancy.company}: чем занимается, что смотрели до собеседования`,
     'Два-три вопроса к компании — их отсутствие читается как неинтерес',
     'Зарплатные ожидания: вилка и то, чем готовы пожертвовать',
-  ];
+  );
+  return list;
 }
 
 /**

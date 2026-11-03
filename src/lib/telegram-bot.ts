@@ -388,14 +388,25 @@ function interviewReply(user: User, page: number): Reply {
  * ноль — вакансия убрана из избранного, несколько (коллизия хеша) — отказ
  * вместо угадайки.
  */
-function resolveBookmark(userId: number, hash: string): Vacancy | null {
-  if (!/^[0-9a-f]{8}$/.test(hash)) return null;
+function resolveBookmark(
+  userId: number,
+  hash: string,
+): { found: true; vacancy: Vacancy } | { found: false; inBookmarks: boolean } {
+  if (!/^[0-9a-f]{8}$/.test(hash)) return { found: false, inBookmarks: false };
   const rows = db
     .prepare('SELECT job_slug FROM bookmarks WHERE user_id = ? ORDER BY created_at DESC')
     .all(userId) as { job_slug: string }[];
   const hits = rows.filter((r) => slugHash(r.job_slug) === hash);
-  if (hits.length !== 1) return null;
-  return getVacancyBySlug(hits[0]!.job_slug);
+  if (hits.length !== 1) return { found: false, inBookmarks: false };
+  /*
+   * Запись в избранном — не гарантия, что вакансия есть в каталоге: внешние
+   * вакансии чистятся через 7 дней без обновления. Раньше обе ветки сливались
+   * в «нет в избранном», хотя запись на месте — пропали данные каталога.
+   * Различаем, чтобы не врать человеку про его же список.
+   */
+  const vacancy = getVacancyBySlug(hits[0]!.job_slug);
+  if (!vacancy) return { found: false, inBookmarks: true };
+  return { found: true, vacancy };
 }
 
 /** Избранное: что человек отложил, чтобы вернуться. */
@@ -411,7 +422,7 @@ function bookmarksReply(user: User, page: number): Reply {
       text: [
         'В избранном пусто.',
         '',
-        'Откладывайте вакансии, к которым хотите вернуться, — они не исчезнут из каталога за неделю. Список отложенного: /dashboard/bookmarks.',
+        'Откладывайте вакансии, к которым хотите вернуться: список хранится отдельно от каталога и никуда не денется. Полный список отложенного: /dashboard/bookmarks.',
       ].join('\n'),
       keyboard: mainKeyboard(),
     };
@@ -429,7 +440,9 @@ function bookmarksReply(user: User, page: number): Reply {
     const vacancy = getVacancyBySlug(row.job_slug);
     const number = from + i + 1;
     if (!vacancy) {
-      lines.push(`${number}. Вакансия убрана с площадки`);
+      // Пропала из каталога (чистка через 7 дней без обновления), а не
+      // обязательно с площадки: запись в избранном при этом цела.
+      lines.push(`${number}. Вакансия пропала из каталога — возможно, её уже сняли с площадки`);
       continue;
     }
     lines.push(`${number}. ${escapeHtml(vacancy.title)} — ${escapeHtml(vacancy.company)}`);
@@ -460,11 +473,26 @@ function bookmarksReply(user: User, page: number): Reply {
 function tipsReply(user: User): Reply {
   const actions = nextActions(user.id);
   if (actions.length === 0) {
+    /*
+     * «Активные поиски есть» — проверяем, а не предполагаем.
+     *
+     * Поиски могли удалить или остановить, а старые отклики — разрешиться:
+     * тогда действий ноль, поисков ноль, а текст утверждал обратное.
+     * Человек читал «поиски есть», новых откликов не видел — и не знал, что
+     * отправлять их нечему.
+     */
+    const activeSearches = (
+      db
+        .prepare('SELECT COUNT(*) AS c FROM searches WHERE user_id = ? AND active = 1')
+        .get(user.id) as { c: number }
+    ).c;
     return {
       text: [
-        'Сейчас ничего срочного: активные поиски есть, отклики идут.',
+        activeSearches > 0
+          ? 'Сейчас ничего срочного: активные поиски есть, отклики идут.'
+          : 'Сейчас ничего срочного, но активных поисков нет — новые отклики не отправляются.',
         '',
-        'Посмотреть, что происходит: /статистика',
+        activeSearches > 0 ? 'Посмотреть, что происходит: /статистика' : 'Создать поиск: /dashboard/jobs',
       ].join('\n'),
       keyboard: mainKeyboard(),
     };
@@ -570,10 +598,11 @@ function gigsReply(user: User, mode: 'подработка' | 'фриланс' |
     const meta = [g.company, g.city, g.directionLabel, g.sourceLabel].filter(Boolean);
     if (meta.length) lines.push(`   ${escapeHtml(meta.join(' · '))}`);
   }
-  lines.push(
-    '',
-    `Ещё ${Math.max(0, findGigs({ mode }).length - gigs.length)} в разделе: /dashboard/gigs`,
-  );
+  // Остаток — отдельным запросом без лимита: показанное уже посчитано.
+  const rest = Math.max(0, findGigs({ mode }).length - gigs.length);
+  // «Ещё 0 в разделе» — мусорная строка: если показано всё, так и говорим.
+  if (rest > 0) lines.push('', `Ещё ${rest} в разделе: /dashboard/gigs`);
+  else lines.push('', 'Показаны все: полный список с фильтрами — /dashboard/gigs');
   lines.push('Заказы отправляются на самой площадке — автоматической отправки нет.');
 
   return { text: lines.join('\n'), keyboard: mainKeyboard() };
@@ -629,7 +658,10 @@ function statsReply(user: User): string {
     `Тариф: ${planLabel(user)} · сегодня ${fmt(stats.today)}/${fmt(stats.todayLimit)}`,
     `Активных поисков: ${fmt(stats.activeSearches)}${user.autoapply_paused ? ' · на паузе ⏸' : ''}`,
     '',
-    'За 7 дней:',
+    // Подпись — «Всего», а не «За 7 дней»: getStats считает sent/viewed/responded
+    // за всё время. Раньше здесь стояло «За 7 дней», и человек читал накопленные
+    // за месяцы цифры как недельные — воронка выглядела в разы лучше, чем есть.
+    'Всего:',
     `Отправлено ${fmt(stats.sent)} · Просмотрено ${fmt(stats.viewed)} · Ответов ${fmt(stats.responded)}`,
     '',
     `Просмотры: ${fmt(stats.viewRate)}% · Ответы: ${fmt(stats.respondRate)}% · Приглашения: ${fmt(stats.inviteRate)}%`,
@@ -664,19 +696,14 @@ function statsReply(user: User): string {
  */
 function applyReply(user: User, args: string): Reply {
   /*
-   * Демо-режим отсекает раньше тарифа.
+   * Гейты (демо, тариф, пауза) стоят на ОТПРАВКЕ, а не на просмотре.
    *
-   * Порядок не формальный: человеку без тарифа помогает «активируйте тариф»,
-   * а человеку в демо-режиме с активным тарифом такой совет вводит в
-   * заблуждение — он выполнит его и всё равно не отправит отклик. Поэтому
-   * сначала режим, потом остальные препятствия.
+   * Раньше они отсекали в начале функции: человек на паузе нажимал
+   * «Подбор вакансий» и получал «Снимите паузу» — хотя смотреть список
+   * ему ничего не мешало, а кабинете просмотр вакансий вообще без тарифа.
+   * Пауза останавливает отправку, а не чтение: проверка — там, где номер
+   * превращается в действие, ниже.
    */
-  if (!isLiveMode(user)) return { text: DEMO_MODE_BRIEF };
-  if (!isPlanActive(user)) return { text: 'Сначала активируйте тариф или пробный период.' };
-  if (user.autoapply_paused) {
-    return { text: 'Автоотклики на паузе ⏸ Снимите паузу: /старт' };
-  }
-
   const searches = db
     .prepare(
       'SELECT * FROM searches WHERE user_id = ? AND active = 1 ORDER BY created_at DESC LIMIT 5',
@@ -735,6 +762,19 @@ function applyReply(user: User, args: string): Reply {
   const [indexRaw, indexHash] = args.trim().split(':');
   const index = Number(indexRaw);
   if (Number.isFinite(index) && Number.isInteger(index) && index >= 1) {
+    /*
+     * Отправка — и только она — требует живого режима, тарифа и снятой паузы.
+     *
+     * Порядок не формальный: человеку без тарифа помогает «активируйте
+     * тариф», а человеку в демо-режиме с активным тарифом такой совет вводит
+     * в заблуждение — он выполнит его и всё равно не отправит отклик.
+     * Поэтому сначала режим, потом остальные препятствия.
+     */
+    if (!isLiveMode(user)) return { text: DEMO_MODE_BRIEF };
+    if (!isPlanActive(user)) return { text: 'Сначала активируйте тариф или пробный период.' };
+    if (user.autoapply_paused) {
+      return { text: 'Автоотклики на паузе ⏸ Снимите паузу: /старт' };
+    }
     const target = ranked[index - 1]?.vacancy;
     if (!target) {
       return {
@@ -778,11 +818,25 @@ function applyReply(user: User, args: string): Reply {
    *
    * Команда «/отклик 2» требует помнить номер и угадывать, есть ли он вообще.
    * Кнопка ставит выбор рядом с названием вакансии, и промахнуться нельзя.
+   *
+   * Кнопок отправки нет, когда отправлять нельзя (пауза, тариф, демо).
+   * Пауза останавливает отправку, а не чтение: список виден всегда, а вместо
+   * кнопок честно сказано, что мешает отправке. Кнопки-пустышки, которые
+   * отвечают ошибкой, хуже отсутствия кнопок — человек нажимает и получает
+   * отказ вместо результата.
    */
+  const sendBlockReason = !isLiveMode(user)
+    ? 'Демо-режим: реальные отклики не уходят. Включите живой режим в «Настройках», чтобы откликаться.'
+    : !isPlanActive(user)
+      ? 'Без тарифа только просмотр: активируйте тариф или пробный период, чтобы откликаться.'
+      : user.autoapply_paused
+        ? 'Просмотр без отправки: автоотклики на паузе, снимите её командой /старт.'
+        : null;
+  if (sendBlockReason) lines.push('', sendBlockReason);
   return {
     text: lines.join('\n'),
     keyboard: keyboardFor(
-      shown.map((r) => ({ title: r.vacancy.title, company: r.vacancy.company, slug: r.vacancy.slug })),
+      sendBlockReason ? [] : shown.map((r) => ({ title: r.vacancy.title, company: r.vacancy.company, slug: r.vacancy.slug })),
       [
         [
           { text: 'Статистика', data: 'menu:stats' },
@@ -1137,9 +1191,11 @@ async function handleCallback(update: TelegramUpdate): Promise<boolean | null> {
 
   if (kind === 'bookmarkApply' && value) {
     if (cb.id) await answerCallbackQuery(cb.id, { text: 'Отправляю…' });
-    const vacancy = resolveBookmark(user.id, value);
-    if (!vacancy) {
-      const text = 'Этой вакансии больше нет в избранном или список изменился — откройте «Избранное» ещё раз и выберите заново.';
+    const resolved = resolveBookmark(user.id, value);
+    if (!resolved.found) {
+      const text = resolved.inBookmarks
+        ? 'Вакансия пропала из каталога — её давно не обновляли. Найдите её через «Подбор вакансий» или откликнитесь с самой площадки.'
+        : 'Этой вакансии больше нет в избранном или список изменился — откройте «Избранное» ещё раз и выберите заново.';
       if (cb.message_id !== undefined) {
         await editTelegramMessage(chat, cb.message_id, text, {
           keyboard: mainKeyboard(),
@@ -1148,7 +1204,7 @@ async function handleCallback(update: TelegramUpdate): Promise<boolean | null> {
       }
       return sendTelegramMessage(chat, text, { keyboard: mainKeyboard(), html: true });
     }
-    return runApplyFromChat(chat, vacancy, cb.message_id);
+    return runApplyFromChat(chat, resolved.vacancy, cb.message_id);
   }
 
   if (kind === 'apply' && value) {

@@ -106,7 +106,9 @@ test('команды без привязки объясняют, как прив
 test('статистика показывает реальные цифры и подсказку', () => {
   const reply = replyFor('статистика', '', user());
   assert.match(reply.text, /Тариф: Про/);
-  assert.match(reply.text, /За 7 дней/);
+  // Подпись честная: цифры за всё время, а не «за 7 дней».
+  assert.match(reply.text, /Всего:/);
+  assert.doesNotMatch(reply.text, /За 7 дней/, 'накопленные цифры выдаются за недельные');
   assert.match(reply.text, /Просмотры:/);
 });
 

@@ -14,6 +14,8 @@ import { weworkremotelyProvider } from './weworkremotely';
 import { rabotaProvider } from './rabota';
 import { flruProvider, kworkProvider } from './freelance';
 
+import { SOURCE_LABELS } from '../source-labels';
+
 export type {
   Vacancy,
   VacancyFetchResult,
@@ -22,23 +24,7 @@ export type {
   VacancySource,
 } from './types';
 
-export const SOURCE_LABELS: Record<VacancySource, string> = {
-  local: 'EZOffer',
-  trudvsem: 'Работа России',
-  hh: 'hh.ru',
-  remoteok: 'RemoteOK',
-  greenhouse: 'Сайты компаний (Greenhouse)',
-  ashby: 'Сайты компаний (Ashby)',
-  company: 'Сайты компаний (RSS)',
-  x: 'X / Twitter',
-  tg: 'Telegram-каналы',
-  geekjob: 'GeekJob',
-  jobicy: 'Jobicy (remote)',
-  weworkremotely: 'We Work Remotely',
-  rabota: 'Работа.ру',
-  flru: 'FL.ru (фриланс)',
-  kwork: 'Kwork (фриланс)',
-};
+export { SOURCE_LABELS };
 
 export type SourceStatus = {
   source: string;

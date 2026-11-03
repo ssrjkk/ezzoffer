@@ -535,6 +535,24 @@ test('предупреждение об истечении тарифа уход
   assert.equal(await sendExpiryWarnings(), 0, 'предупреждение ушло повторно');
 });
 
+test('остаток меньше суток называется «сегодня», а не «через 1 день»', async () => {
+  /*
+   * days считался через ceil: при остатке в 3 часа получалось «через 1 день»,
+   * хотя тариф сгорит сегодня. Человек читал бы «завтра» и опаздывал.
+   */
+  const { sendExpiryWarnings } = await import('../src/lib/telegram-digest');
+  const uid = seedUser();
+  db.prepare('UPDATE users SET plan_expires_at = ?, plan = ? WHERE id = ?').run(
+    Date.now() + 3 * 3600_000,
+    'pro',
+    uid,
+  );
+
+  assert.equal(await sendExpiryWarnings(), 1, 'предупреждение не ушло');
+  assert.match(lastText, /заканчивается сегодня/i, `срок назван неверно: «${lastText}»`);
+  assert.doesNotMatch(lastText, /через 1 день/, `остаток в часах назван днём: «${lastText}»`);
+});
+
 test('далёкий срок не спамит', async () => {
   const { sendExpiryWarnings } = await import('../src/lib/telegram-digest');
   const uid = seedUser();

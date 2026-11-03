@@ -1,5 +1,6 @@
 import { db } from './db';
 import { getCatalog } from './vacancies';
+import { SOURCE_LABELS } from './source-labels';
 import type { Vacancy } from './vacancies/types';
 import {
   DIRECTION_LABELS,
@@ -63,23 +64,17 @@ export type Gig = {
   employment: string | null;
 };
 
-const SOURCE_LABELS_LOCAL: Record<string, string> = {
-  local: 'EZOffer',
-  trudvsem: 'Работа России',
-  hh: 'hh.ru',
-  remoteok: 'RemoteOK',
-  greenhouse: 'Greenhouse',
-  ashby: 'Ashby',
-  company: 'RSS компании',
-  x: 'X / Twitter',
-  tg: 'Telegram',
-  geekjob: 'GeekJob',
-  jobicy: 'Jobicy',
-  weworkremotely: 'We Work Remotely',
-  rabota: 'Работа.ру',
-  flru: 'FL.ru',
-  kwork: 'Kwork',
-};
+/*
+ * Подписи источников — из канонического места (source-labels.ts).
+ *
+ * Здесь была своя копия с другими формулировками («Greenhouse» против
+ * «Сайты компаний (Greenhouse)», «RSS компании» против «Сайты компаний
+ * (RSS)»), и одна и та же вакансия называла источник по-разному в разделах
+ * «Вакансии» и «Подработка». Два места для одного факта расходятся всегда.
+ */
+function sourceLabel(source: Vacancy['source']): string {
+  return SOURCE_LABELS[source] ?? source;
+}
 
 const FREELANCE_SOURCES = new Set(['flru', 'kwork']);
 
@@ -130,7 +125,7 @@ function toGig(v: Vacancy): Gig {
     posted: v.posted,
     category: v.category,
     source: v.source,
-    sourceLabel: SOURCE_LABELS_LOCAL[v.source] ?? v.source,
+    sourceLabel: sourceLabel(v.source),
     sourceUrl: v.source_url,
     direction,
     directionLabel: DIRECTION_LABELS[direction],
@@ -257,7 +252,9 @@ export function availableDirections(
   const counts = new Map<Direction, number>();
   for (const g of gigs) counts.set(g.direction, (counts.get(g.direction) ?? 0) + 1);
   return [...counts.entries()]
-    .filter(([key]) => key !== 'other' || (counts.get(key) ?? 0) >= 3)
+    // 'other' сюда не попадает никогда: findGigs его отсекает выше. Ветка
+    // оставлена как страховка, а не как рабочий путь.
+    .filter(([key]) => key !== 'other')
     .map(([key, count]) => ({ key, label: DIRECTION_LABELS[key], count }))
     .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
 }

@@ -277,3 +277,29 @@ test('вариант, не загруженный на hh, показан чес
   assert.equal(b.sent, 0);
   assert.equal(b.rate, null, 'доля посчитана по нулю откликов');
 });
+
+test('отозванные отклики не участвуют в сравнении', async () => {
+  /*
+   * Человек забрал отклик сам — шанса ответить у него не было. Раньше такие
+   * отклики считались отправленными, хотя в общей статистике их нет.
+   */
+  const base = makeResume(1, 'С отзывом');
+  const { POST } = await variantsApi();
+  await POST(post({}), { params: Promise.resolve({ id: String(base) }) });
+  uploadToHh(base, 'hh-a');
+  uploadToHh(variantId('B'), 'hh-b');
+  addApplication(1, 'hh-a', 'hh/vacancy-1', false);
+  const now = Date.now();
+  db.prepare(
+    `INSERT INTO applications (user_id, job_slug, resume_id, status, origin, sent_at, responded_at, withdrawn)
+     VALUES (1, 'hh/vacancy-2', 'hh-b', 'sent', 'real', ?, NULL, 1)`,
+  ).run(now);
+
+  const { compareVariants } = await import('../src/lib/resume-variants');
+  const cmp = compareVariants(1, groupOf(base));
+  const b = cmp.variants.find((v) => v.label === 'B');
+  assert.equal(b?.sent, 0, `отозванный отклик попал в сравнение: ${JSON.stringify(b)}`);
+
+  db.prepare('DELETE FROM resumes WHERE variant_group IS NOT NULL OR id = ?').run(base);
+  db.prepare("DELETE FROM applications WHERE job_slug IN ('hh/vacancy-1','hh/vacancy-2')").run();
+});

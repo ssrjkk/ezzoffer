@@ -153,11 +153,16 @@ export function normalizeIdentity(raw: Partial<ExternalIdentity>): ExternalIdent
     return null;
   }
 
-  const name = String(raw.name ?? '')
-    .replace(/[\u0000-\u001f\u007f]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, MAX_NAME);
+  // По кодовым точкам, а не по единицам UTF-16: slice(0, 100) рвал эмодзи
+  // пополам, оставляя в БД висячий суррогат вместо имени человека.
+  const name = Array.from(
+    String(raw.name ?? '')
+      .replace(/[\u0000-\u001f\u007f]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim(),
+  )
+    .slice(0, MAX_NAME)
+    .join('');
 
   return {
     provider,

@@ -173,10 +173,12 @@ export function compareVariants(userId: number, group: string): VariantCompariso
    */
   const rows = db
     .prepare(
+      // Отозванные не считаются: человек забрал отклик сам — шанса ответить
+      // у него не было, и в общей статистике (stats.ts) их тоже нет.
       `SELECT r.id AS row_id, a.responded_at
        FROM applications a
        JOIN resumes r ON r.hh_id = a.resume_id AND r.user_id = a.user_id
-       WHERE a.user_id = ? AND a.origin IN ('real','user')`,
+       WHERE a.user_id = ? AND a.origin IN ('real','user') AND a.withdrawn = 0`,
     )
     .all(userId) as { row_id: number; responded_at: number | null }[];
 

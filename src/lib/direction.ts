@@ -91,8 +91,12 @@ const CATEGORY_DIRECTION: [RegExp, Direction][] = [
    * пришлось убрать — оно перебивало заголовок и отправляло «Frontend-разработчик»
    * в бэкенд. Теперь общий раздел понижен, а конкретный подраздел разбирается
    * здесь.
+   *
+   * `java` — с исключением для JavaScript: подстрока ловила раздел
+   * «Программирование / JavaScript» и отправляла фронтенд-заголовки в бэкенд.
+   * Та же ошибка класса, что чинилась в skills.ts (java внутри javascript).
    */
-  [/(\bpython|php|golang|\bgo\b|java|c#|\.net|node\.?js|ruby|perl|scala|kotlin)/i, 'backend'],
+  [/(\bpython|php|golang|\bgo\b|java(?!script)|c#|\.net|node\.?js|ruby|perl|scala|kotlin)/i, 'backend'],
   /*
    * Веб-разработка и боты отделены от «программирования».
    *
@@ -316,7 +320,17 @@ export function detectDirection(
   const itTitleSignal = TITLE_DIRECTION.some(([re]) => re.test(head));
   if (nonItProfession && !itTitleSignal) return 'other';
 
-  for (const [re, dir] of CATEGORY_DIRECTION) if (re.test(cat)) return dir;
+  /*
+   * Общий раздел — слабый сигнал: он не перебивает явный заголовок.
+   *
+   * «Программирование» пишут в раздел всё подряд, поэтому явный заголовок
+   * («Frontend-разработчик») сильнее. Пропуск стоит в ПЕРВОМ проходе, а не
+   * где-то ниже: второй проход по тем же правилам после навыков был мёртвым
+   * кодом — первый проход уже всё проверил, и повтор ничего не находил.
+   */
+  if (!GENERIC_CATEGORIES.test(cat)) {
+    for (const [re, dir] of CATEGORY_DIRECTION) if (re.test(cat)) return dir;
+  }
 
   for (const [re, dir] of TITLE_DIRECTION) if (re.test(head)) return dir;
 
@@ -339,10 +353,6 @@ export function detectDirection(
   if (front && back) return 'fullstack';
 
   for (const [skill, dir] of SKILL_DIRECTION) if (set.has(skill)) return dir;
-
-  if (!GENERIC_CATEGORIES.test(cat)) {
-    for (const [re, dir] of CATEGORY_DIRECTION) if (re.test(cat)) return dir;
-  }
 
   /*
    * «Разработчик» без указания стороны — самое частое IT-название, и оно ничего

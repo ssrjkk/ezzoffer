@@ -601,3 +601,38 @@ test('wire-формат клавиатуры: data превращается в c
   });
   assert.ok(!JSON.stringify(wire).includes('"data":'), 'поле data утекло в провод');
 });
+
+test('wire-формат режет callback_data по байтам, а не по символам', async () => {
+  /*
+   * Лимит Telegram — 64 БАЙТА. Обычный slice(0, 64) на кириллице давал 128
+   * байт, и такой запрос API отклонял целиком — сообщение с кнопками не
+   * уходило вообще, а в логе был невнятный 400. Сейчас все data — латиница,
+   * но сериализатор общий и обязан держать лимит сам.
+   */
+  const { toTelegramKeyboard } = await import('../src/lib/telegram');
+  const wire = toTelegramKeyboard({
+    inline_keyboard: [[{ text: 'Кнопка', data: `apply:${'я'.repeat(100)}` }]],
+  });
+  const data = wire.inline_keyboard[0]![0]!.callback_data ?? '';
+  assert.ok(
+    Buffer.byteLength(data, 'utf8') <= 64,
+    `callback_data ${Buffer.byteLength(data, 'utf8')} байт — Telegram отклонит`,
+  );
+  // Обрезок не рвёт символ пополам: иначе в проводе мусор вместо буквы.
+  assert.ok(!data.endsWith('�'), `обрезок разорвал символ: ${data.slice(-8)}`);
+});
+
+test('wire-формат не оставляет висячий суррогат в тексте кнопки', async () => {
+  /*
+   * Эмодзи в названии — суррогатная пара. Срез ровно между половинами даёт
+   * одиночный суррогат, а такой текст Telegram отвергает с 400 вместе со
+   * всем сообщением.
+   */
+  const { toTelegramKeyboard } = await import('../src/lib/telegram');
+  const wire = toTelegramKeyboard({
+    inline_keyboard: [[{ text: `${'a'.repeat(63)}😀b`, data: 'menu:stats' }]],
+  });
+  const text = wire.inline_keyboard[0]![0]!.text;
+  assert.ok(text.length <= 64, `текст кнопки ${text.length} символов`);
+  assert.ok(!/[\ud800-\udfff]$/.test(text), 'висячий суррогат в конце текста');
+});

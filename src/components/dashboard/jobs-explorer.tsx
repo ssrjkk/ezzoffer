@@ -705,7 +705,7 @@ export function JobExplorer() {
                       {applied.has(v.slug) ? 'Отклик отправлен' : v.level}
                     </Badge>
                     <Badge tone={v.source === 'local' ? 'neutral' : 'cyan'}>
-                      {SOURCE_LABELS[v.source] ?? v.source}
+                      {SOURCE_LABELS[v.source as keyof typeof SOURCE_LABELS] ?? v.source}
                     </Badge>
                   </div>
                 </div>

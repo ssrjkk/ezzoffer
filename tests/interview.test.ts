@@ -21,6 +21,7 @@ const VACANCY = {
     'Python для обработки данных',
     'Airflow для оркестрации',
   ],
+  source: 'hh' as const,
 };
 
 const RESUME =
@@ -206,5 +207,51 @@ test('подготовка работает и без требований в в
     prep.questions.filter((q) => q.category === 'experience').length,
     0,
     'вопрос по опыту без требований выдуман',
+  );
+});
+
+test('пустой заголовок резюме не притворяется уровнем вакансии', () => {
+  /*
+   * Раньше пустой заголовок заменялся заголовком вакансии: уровень совпадал
+   * сам с собой, и подготовка хвалила соответствие, которое никто не
+   * проверял. Теперь пусто — это «неизвестно» (нейтральный Middle).
+   */
+  const vacancy = {
+    ...VACANCY,
+    slug: 'x',
+    source_id: '1',
+    salary: '200000',
+    salary_min: 200000,
+    salary_max: null,
+    format: 'Удалённо' as const,
+    city: 'Москва',
+    posted: '',
+    published_at: null,
+    category: '',
+    responsibilities: [],
+    bonus: [],
+    source_url: null,
+    contact_email: null,
+    contact_phone: null,
+  };
+  const named = vacancyBrief(vacancy, RESUME, 'Senior Data Engineer');
+  const unnamed = vacancyBrief(vacancy, RESUME, '');
+  const levelOf = (b: typeof named) => b.factors.find((f) => f.label === 'Уровень')!.earned;
+  assert.ok(
+    levelOf(unnamed) < levelOf(named),
+    `безымянное резюме получило уровень вакансии: ${levelOf(unnamed)} против ${levelOf(named)}`,
+  );
+});
+
+test('чеклист про hh — только для hh-вакансий', () => {
+  const hh = prepareInterview(VACANCY, RESUME, 'Senior Data Engineer');
+  assert.ok(
+    hh.checklist.some((c) => c.includes('hh')),
+    'для hh-вакансии пропала подсказка про ссылку на резюме',
+  );
+  const other = prepareInterview({ ...VACANCY, source: 'trudvsem' as const }, RESUME, 'Специалист');
+  assert.ok(
+    !other.checklist.some((c) => c.includes('hh')),
+    `совет про hh при отклике не из hh: ${other.checklist.join(' | ')}`,
   );
 });

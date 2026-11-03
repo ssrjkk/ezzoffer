@@ -71,14 +71,44 @@ export function toTelegramKeyboard(keyboard: InlineKeyboard): {
     .map((row) =>
       row
         .map((b) => ({
-          text: b.text.slice(0, 64),
-          ...(b.data !== undefined ? { callback_data: b.data.slice(0, 64) } : {}),
+          text: sliceChars(b.text, 64),
+          ...(b.data !== undefined ? { callback_data: sliceBytes(b.data, 64) } : {}),
           ...(b.url !== undefined ? { url: b.url } : {}),
         }))
         .filter((b) => b.callback_data !== undefined || b.url !== undefined),
     )
     .filter((row) => row.length > 0);
   return { inline_keyboard: rows };
+}
+
+/**
+ * Обрезать до N БАЙТ в UTF-8, не разрывая символ пополам.
+ *
+ * Лимит Telegram на callback_data — 64 байта, а не символа: 64 кириллических
+ * символа — это 128 байт, и такой запрос API отклоняет целиком. Обычный
+ * slice(0, 64) этого не видит — у нас все data сейчас латиница, но функция
+ * общая, и первая же кириллица в данных молча роняла бы отправку с 400.
+ */
+function sliceBytes(s: string, maxBytes: number): string {
+  const buf = Buffer.from(s, 'utf8');
+  if (buf.length <= maxBytes) return s;
+  let end = maxBytes;
+  while (end > 0 && (buf[end]! & 0xc0) === 0x80) end--;
+  return buf.subarray(0, end).toString('utf8');
+}
+
+/**
+ * Обрезать до N символов, не оставляя висячий суррогат в конце.
+ *
+ * Эмодзи в названии вакансии — это суррогатная пара: slice ровно между её
+ * половинами даёт одиночный суррогат, а такой текст Telegram отвергает с 400.
+ * Кириллица — базовая плоскость, ей это не грозит, но названия с площадок
+ * бывают всякие.
+ */
+function sliceChars(s: string, max: number): string {
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max);
+  return /[\ud800-\udbff]$/.test(cut) ? cut.slice(0, -1) : cut;
 }
 
 /** Экранирование для HTML-режима Telegram. */
@@ -394,7 +424,7 @@ function checkLinkAttempts(chatId: string, now: number): boolean {
   return count < LINK_ATTEMPTS_MAX;
 }
 
-/** Записать неверную попытку. Успешный ввод счётчик не трогает и не сбрасывает. */
+/** Записать неверную попытку. Удачный ввод счётчик обнуляет (см. linkChatByCode). */
 function recordLinkAttempt(chatId: string, now: number): void {
   try {
     const key = linkAttemptsKey(chatId);
