@@ -270,6 +270,64 @@ test('анализ отказов: при отсутствии общего тр
   assert.match(result!.detail, /не видно|не работают|не туда/i);
 });
 
+test('свежие отклики без просмотров не объявляют поиск мёртвым', () => {
+  /*
+   * У отклика, отправленного час назад, просмотра нет по существу, а не
+   * потому что поиск не работает. Раньше запрос считал все отклики вообще
+   * и объявлял поиск мёртвым в день первых отправок.
+   */
+  const uid = user();
+  const searchId = Number(
+    db
+      .prepare(
+        "INSERT INTO searches (user_id, title, keywords, active, created_at) VALUES (?, 'Новый поиск', 'cobol', 1, ?)",
+      )
+      .run(uid, NOW).lastInsertRowid,
+  );
+
+  for (let i = 0; i < 6; i++) {
+    const slug = vacancy(`hh-fresh-${i}`, 'Программист');
+    application({ uid, slug, sentDaysAgo: 0, searchId });
+  }
+
+  const actions = nextActions(uid, NOW);
+  assert.equal(
+    actions.find((a) => a.kind === 'search'),
+    undefined,
+    'поиск объявлен мёртвым в день отправок',
+  );
+});
+
+test('отозванные отклики не объявляют поиск мёртвым', () => {
+  /*
+   * Отзыв — решение человека, а не молчание работодателя. Раньше запрос
+   * считал и их: пять отозванных без просмотров выглядели как «поиск
+   * шлёт отклики в пустоту».
+   */
+  const uid = user();
+  const searchId = Number(
+    db
+      .prepare(
+        "INSERT INTO searches (user_id, title, keywords, active, created_at) VALUES (?, 'Отозванный поиск', 'cobol', 1, ?)",
+      )
+      .run(uid, NOW).lastInsertRowid,
+  );
+
+  for (let i = 0; i < 6; i++) {
+    db.prepare(
+      `INSERT INTO applications (user_id, job_slug, search_id, status, response, message, sent_at, viewed_at, responded_at, withdrawn)
+       VALUES (?, ?, ?, 'sent', '', '', ?, NULL, NULL, 1)`,
+    ).run(uid, `hh-wd-${i}`, searchId, NOW - 10 * DAY);
+  }
+
+  const actions = nextActions(uid, NOW);
+  assert.equal(
+    actions.find((a) => a.kind === 'search'),
+    undefined,
+    'отозванные отклики посчитаны как молчание работодателя',
+  );
+});
+
 test('поиск без просмотров при многих откликах выделяется', () => {
   const uid = user();
   const searchId = Number(
@@ -399,6 +457,28 @@ test('разбор отказов видит требования, а не то�
   );
 });
 
+test('один древний отклик без письма не держит совет вечно', () => {
+  /*
+   * Совет считается по последним 10 отправкам, а не за всё время. Раньше
+   * хватало одного отклика без письма среди сотни с письмом — человек давно
+   * настроил письма, а совет не гас.
+   */
+  const uid = user();
+  const ancient = vacancy('hh-ancient', 'React-разработчик');
+  application({ uid, slug: ancient, sentDaysAgo: 60, message: '' });
+  for (let i = 0; i < 10; i++) {
+    const slug = vacancy(`hh-letter-${i}`, 'React-разработчик');
+    application({ uid, slug, sentDaysAgo: 5 - i * 0.1, message: 'Здравствуйте! Хочу у вас работать.' });
+  }
+
+  const actions = nextActions(uid, NOW);
+  assert.equal(
+    actions.find((a) => a.kind === 'profile'),
+    undefined,
+    'совет горит по древней истории, хотя письма давно настроены',
+  );
+});
+
 test('склонение чисел не по умолчанию', () => {
   assert.equal(plural(1, 'чат', 'чата', 'чатов'), 'чат');
   assert.equal(plural(2, 'чат', 'чата', 'чатов'), 'чата');
@@ -418,6 +498,24 @@ test('ноль ответов на тридцати откликах — дей�
   assert.ok(nr, 'нет диагностики нулевых ответов');
   assert.equal(nr.urgency, 1);
   assert.equal(nr.href, '/dashboard/resumes');
+});
+
+test('залп в день запуска не даёт диагноз «ноль ответов»', () => {
+  /*
+   * Тридцать отправок за час — ещё не воронка: отвечать никто не успел.
+   * Раньше диагноз срабатывал сразу, и человек в первый же день читал,
+   * что у него «резюме не открывает двери».
+   */
+  const uid = user();
+  for (let i = 0; i < 30; i++) {
+    application({ uid, slug: 'hh-blast-' + i, sentDaysAgo: 0, viewedDaysAgo: null });
+  }
+  const actions = nextActions(uid, NOW);
+  assert.equal(
+    actions.find((a) => a.kind === 'noresponse'),
+    undefined,
+    'диагноз поставлен по откликам, на которые ещё не успели ответить',
+  );
 });
 
 test('единичный ответ снимает диагностику нулевых ответов', () => {

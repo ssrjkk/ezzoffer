@@ -1,5 +1,4 @@
 import { db } from './db';
-import { getStats } from './stats';
 import { extractSkills } from './skills';
 
 /**
@@ -88,7 +87,6 @@ const FOLLOWUP_BEFORE_DAYS = 14;
  */
 export function nextActions(userId: number, now = Date.now()): NextAction[] {
   const actions: NextAction[] = [];
-  const stats = getStats(userId);
 
   const apps = db
     .prepare(
@@ -127,9 +125,15 @@ export function nextActions(userId: number, now = Date.now()): NextAction[] {
    * недозрелой выборке: по чужим наблюдениям ориентир — от 1 ответа на 10
    * откликов, и ноль на тридцати уже не шум. Проверяется раньше частных
    * разборов: чинить формулировки отказов, когда ответов нет вообще, нечего.
+   *
+   * Диагноз ставится только по вызревшим откликам. Раньше хватало тридцати
+   * отправок вообще: залп в день запуска давал «ноль ответов» через час после
+   * старта, хотя отвечать ещё никто не успел. Требуем, чтобы самому старому
+   * было не меньше недели — список идёт по sent_at DESC, старейший последний.
    */
   const respondedTotal = apps.filter((a) => a.responded_at !== null).length;
-  if (apps.length >= 30 && respondedTotal === 0) {
+  const oldestSent = apps.length > 0 ? apps[apps.length - 1]!.sent_at : now;
+  if (apps.length >= 30 && respondedTotal === 0 && now - oldestSent >= 7 * 86_400_000) {
     actions.push({
       kind: 'noresponse',
       title: `Ноль ответов на ${apps.length} откликов — проверьте резюме и выбор вакансий`,
@@ -192,7 +196,7 @@ export function nextActions(userId: number, now = Date.now()): NextAction[] {
     });
   }
 
-  const deadSearch = findDeadSearch(userId);
+  const deadSearch = findDeadSearch(userId, now);
   if (deadSearch) {
     actions.push({
       kind: 'search',
@@ -206,17 +210,26 @@ export function nextActions(userId: number, now = Date.now()): NextAction[] {
     });
   }
 
-  const noLetters = stats.sent - countWithLetter(apps);
-  if (stats.sent >= 3 && noLetters > 0) {
+  /*
+   * Привычка, а не история.
+   *
+   * Раньше считалось за всё время: один древний отклик без письма среди сотни
+   * с письмом держал совет вечно, хотя человек давно всё исправил. Смотрим
+   * последние 10 отправок: совет горит, пока без письма уходит заметная часть
+   * текущих откликов (три и больше), и гаснет сам, когда письма настроены.
+   */
+  const recent = apps.slice(0, 10);
+  const noLettersRecent = recent.filter((a) => a.message.trim().length === 0).length;
+  if (recent.length >= 3 && noLettersRecent >= Math.min(3, recent.length)) {
     actions.push({
       kind: 'profile',
       title: 'Отклики без письма получают меньше ответа',
       detail:
-        `${noLetters} из ${stats.sent} ${plural(stats.sent, 'отклика', 'откликов', 'откликов')} ушли без сопроводительного. ` +
+        `${noLettersRecent} из ${recent.length} последних ушли без сопроводительного. ` +
         'Письмо — единственная часть отклика, которую читают внимательнее резюме.',
       href: '/dashboard/letters',
       urgency: 2,
-      count: noLetters,
+      count: noLettersRecent,
     });
   }
 
@@ -235,10 +248,6 @@ function collectFollowups(apps: ApplicationRow[], now: number): ApplicationRow[]
     out.push(a);
   }
   return out;
-}
-
-function countWithLetter(apps: ApplicationRow[]): number {
-  return apps.filter((a) => a.message.trim().length > 0).length;
 }
 
 /**
@@ -374,21 +383,26 @@ export function analyzeDeclines(apps: ApplicationRow[]): {
  *
  * Порог — не «ноль просмотров вообще», а «много откликов и ни одного просмотра»:
  * у вакансии, отправленной вчера, просмотра может ещё не быть по существу.
+ * Поэтому считаются только вызревшие отклики (старше 3 дней — та же граница,
+ * после которой пишем напоминание) и только неотозванные: отозванные — это
+ * решение человека, а не молчание работодателя, и пять отозванных без
+ * просмотров — не «поиск не работает».
  */
-function findDeadSearch(userId: number): { title: string; count: number } | null {
+function findDeadSearch(userId: number, now: number): { title: string; count: number } | null {
+  const matureBefore = now - FOLLOWUP_AFTER_DAYS * 86_400_000;
   const rows = db
     .prepare(
       `SELECT s.title AS title, COUNT(a.id) AS count,
               SUM(CASE WHEN a.viewed_at IS NOT NULL THEN 1 ELSE 0 END) AS viewed
        FROM searches s
        JOIN applications a ON a.search_id = s.id AND a.user_id = s.user_id
-       WHERE s.user_id = ?
+       WHERE s.user_id = ? AND a.withdrawn = 0 AND a.sent_at <= ?
        GROUP BY s.id
        HAVING COUNT(a.id) >= 5 AND SUM(CASE WHEN a.viewed_at IS NOT NULL THEN 1 ELSE 0 END) = 0
        ORDER BY COUNT(a.id) DESC
        LIMIT 1`,
     )
-    .all(userId) as { title: string; count: number; viewed: number }[];
+    .all(userId, matureBefore) as { title: string; count: number; viewed: number }[];
 
   const row = rows[0];
   return row ? { title: row.title, count: row.count } : null;
