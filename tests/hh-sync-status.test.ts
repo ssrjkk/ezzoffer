@@ -184,6 +184,52 @@ test('ответ без флага reviewed всё равно означает �
   }
 });
 
+test('401 на глубокой странице не теряет признак мёртвого токена', async () => {
+  /*
+   * Первая страница обходится по живому токену, а следующая отвечает 401:
+   * токен отозвали прямо во время синхронизации. Раньше такой ответ
+   * заворачивался в «частичную выдачу», authFailed терялся, и человек не
+   * получал предупреждения — отклики тихо переставали синхронизироваться.
+   */
+  const uid = seedUser('partial@example.com');
+  seedApp(uid, 'hh-777');
+  const { syncHhStatuses } = await import('../src/lib/hh-sync');
+  const saved = globalThis.fetch;
+  const page0 = Array.from({ length: 100 }, (_, i) => ({
+    state: { id: i === 0 ? 'discard' : 'response', name: i === 0 ? 'Отказ' : 'Отклик' },
+    vacancy: { id: String(i === 0 ? 777 : 10_000 + i) },
+    reviewed: i === 0,
+    updated_at: new Date(NOW).toISOString(),
+  }));
+  globalThis.fetch = (async (url: string | URL) => {
+    const u = new URL(String(url));
+    if (u.pathname.endsWith('/negotiations')) {
+      if (u.searchParams.get('page') === '0') {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({ items: page0, found: 250 }),
+        } as unknown as Response;
+      }
+      return { ok: false, status: 401, text: async () => '{}' } as unknown as Response;
+    }
+    return saved(url);
+  }) as typeof fetch;
+  try {
+    const res = await syncHhStatuses(uid);
+    assert.equal(res.authFailed, true, '401 на глубокой странице не признан мёртвым токеном');
+    assert.match(res.error ?? '', /странице 1/);
+    // Первая страница всё равно обработана: терять её из-за обрыва нельзя.
+    assert.equal(res.updated, 1, 'частичная выдача не обработана');
+    const stored = db
+      .prepare('SELECT status FROM applications WHERE user_id = ?')
+      .get(uid) as { status: string };
+    assert.equal(stored.status, 'declined');
+  } finally {
+    globalThis.fetch = saved;
+  }
+});
+
 test('приглашение не затирается последующим отказом', async () => {
   const uid = seedUser();
   seedApp(uid, 'hh-456');

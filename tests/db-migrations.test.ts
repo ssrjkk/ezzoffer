@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
-import { migrateApplicationsResumeId, addNotifiedClaimColumn, backfillViewedAtForResponded } from '../src/lib/db-migrations';
+import {
+  migrateApplicationsResumeId,
+  addNotifiedClaimColumn,
+  backfillViewedAtForResponded,
+  migratePayments,
+} from '../src/lib/db-migrations';
 
 /**
  * Пересборка applications при смене типа resume_id.
@@ -235,6 +240,47 @@ test('claim-колонка добавляется в старую базу и н
   );
   const count = db.prepare('SELECT COUNT(*) AS c FROM applications').get() as { c: number };
   assert.equal(count.c, 1, 'миграция потеряла строки');
+  db.close();
+});
+
+test('корректный UNIQUE(provider, external_id) не пересобирает payments на каждом старте', () => {
+  /*
+   * Табличное UNIQUE-ограничение SQLite реализует автоиндексом, у которого
+   * sql = NULL в sqlite_master. Прежняя проверка искала «provider +
+   * external_id» по тексту SQL индекса, не находила его и пересобирала
+   * таблицу платежей при каждом запуске приложения.
+   */
+  const db = makeDb();
+  db.exec(`
+    CREATE TABLE payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      external_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      plan_id TEXT NOT NULL,
+      amount_rub INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      UNIQUE (provider, external_id)
+    )
+  `);
+  const executed: string[] = [];
+  const spy = new Proxy(db, {
+    get(target, prop, receiver) {
+      if (prop === 'exec') {
+        return (sql: string) => {
+          executed.push(sql);
+          return target.exec(sql);
+        };
+      }
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  migratePayments(spy);
+  assert.ok(
+    !executed.some((sql) => sql.includes('payments_migrated')),
+    'таблица платежей пересобрана при уже правильном UNIQUE',
+  );
   db.close();
 });
 

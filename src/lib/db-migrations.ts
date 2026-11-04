@@ -183,16 +183,27 @@ export function migratePayments(instance: Pick<Database.Database, 'exec' | 'prep
      *
      * Пересборка с переносом данных: id сохраняются, поэтому
      * entitlements.source_payment_id продолжает указывать куда надо.
+     *
+     * Проверка идёт по составу индексов, а не по их SQL. У UNIQUE-ограничения
+     * внутри CREATE TABLE SQLite создаёт автоиндекс с sql = NULL в
+     * sqlite_master, поэтому поиск «provider + external_id» по тексту SQL
+     * никогда не находил уже правильную схему — и таблица пересобиралась при
+     * каждом запуске. pragma_index_list/index_info описывает и автоиндексы.
      */
-    const defs = instance
-      .prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = 'payments'")
-      .all() as { sql: string | null }[];
-    // PRAGMA index_list НЕ возвращает колонку sql (только seq/name/unique/origin/partial),
-    // поэтому старая проверка видела sql === undefined всегда и пересобирала
-    // таблицу на каждом старте. Правильный источник — sqlite_master.
-    const scoped = defs.some(
-      (d) => d.sql && /UNIQUE/i.test(d.sql) && /provider/i.test(d.sql) && /external_id/i.test(d.sql),
-    );
+    const indexes = instance
+      .prepare("SELECT name, \"unique\" AS is_unique FROM pragma_index_list('payments')")
+      .all() as { name: string; is_unique: number }[];
+    const scoped = indexes.some((idx) => {
+      if (!idx.is_unique) return false;
+      const cols = instance
+        .prepare('SELECT name FROM pragma_index_info(?)')
+        .all(idx.name) as { name: string }[];
+      return (
+        cols.length === 2 &&
+        cols.some((c) => c.name === 'provider') &&
+        cols.some((c) => c.name === 'external_id')
+      );
+    });
     if (!scoped) {
       instance.exec('PRAGMA foreign_keys = OFF');
       instance.exec('BEGIN');

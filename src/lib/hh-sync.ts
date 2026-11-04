@@ -238,6 +238,13 @@ export async function syncHhStatuses(
      */
     let items: HhNegotiation[];
     let partialError: string | null = null;
+    /*
+     * 401/403 на глубокой странице — тоже мёртвый токен, а не «сеть».
+     * Раньше такой ответ попадал в частичную выдачу, ошибка возвращалась
+     * обычной строкой, и authFailed терялся: планировщик не будил человека,
+     * хотя первые страницы уже пришли по токену, который площадка отвергла.
+     */
+    let partialAuthFailed = false;
     try {
       items = await fetchNegotiations(token);
     } catch (e) {
@@ -245,6 +252,8 @@ export async function syncHhStatuses(
       if (!partial) throw e;
       items = partial;
       partialError = e instanceof Error ? e.message : 'network error';
+      const status = (e as { hhStatus?: number } | null)?.hhStatus;
+      partialAuthFailed = status === 401 || status === 403;
     }
 
     // По вакансии, а не по флагу разобранного состояния: две переписки по
@@ -429,7 +438,11 @@ export async function syncHhStatuses(
       logInfo('hh:sync', `обновлено статусов: ${touched.size}`, { userId });
     }
     return partialError
-      ? { updated: touched.size, error: partialError }
+      ? {
+          updated: touched.size,
+          error: partialError,
+          ...(partialAuthFailed ? { authFailed: true } : {}),
+        }
       : { updated: touched.size };
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'network error';
