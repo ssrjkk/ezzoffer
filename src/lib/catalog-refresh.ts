@@ -52,6 +52,8 @@ export type RefreshReport = {
   queries: number;
   statuses: SourceStatus[];
   added: number;
+  /** Сколько внешних источников ответило успешно (local не считается). */
+  okSources: number;
   durationMs: number;
 };
 
@@ -73,7 +75,7 @@ export function buildQueryText(keywords: string): string {
 
 function activeSearches(): SearchRow[] {
   return db
-    .prepare('SELECT id, user_id, keywords, city, active FROM searches WHERE active = 1')
+    .prepare('SELECT id, user_id, keywords, city, active FROM searches WHERE active = 1 ORDER BY id')
     .all() as SearchRow[];
 }
 
@@ -102,10 +104,25 @@ export function distinctQueries(limit = MAX_QUERIES_PER_RUN): { text: string; ci
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({ text, city });
-    if (out.length >= limit) break;
   }
 
-  return out;
+  /*
+   * Ограничение применяем после дедупликации и в случайном порядке.
+   *
+   * Раньше цикл обрывался на восьмом уникальном запросе в порядке вставки:
+   * при большем числе поисков всё, что появилось позже, не влияло на каталог
+   * никогда. Перемешивание даёт шанс всем, а канонические text/city берутся
+   * из первого (по id) вхождения — поэтому регистр города не скачет от
+   * запуска к запуску.
+   */
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = out[i]!;
+    out[i] = out[j]!;
+    out[j] = tmp;
+  }
+
+  return out.slice(0, limit);
 }
 
 /** Записи в meta: последний результат обновления, для наблюдаемости. */
@@ -132,7 +149,6 @@ export function lastRefreshReport(): RefreshReport | null {
  */
 export async function refreshCatalogForSearches(opts?: {
   now?: () => number;
-  force?: boolean;
   /**
    * Ограничить обновление этими источниками.
    *
@@ -163,6 +179,7 @@ export async function refreshCatalogForSearches(opts?: {
       queries: 0,
       statuses: [],
       added: 0,
+      okSources: 0,
       durationMs: Date.now() - started,
     };
     db.prepare(
@@ -197,11 +214,21 @@ export async function refreshCatalogForSearches(opts?: {
   }
 
   const added = Math.max(0, countVacancies() - before);
+  /*
+   * okSources считает именно источники, а не строки отчёта: один и тот же
+   * провайдер опрашивается по каждому запросу, и без Set восемь успешных
+   * ответов hh выглядели бы как восемь живых площадок. local не в счёт —
+   * он всегда ok и ничего не говорит о внешней сети.
+   */
+  const okSources = new Set(
+    statuses.filter((s) => s.source !== 'local' && s.ok).map((s) => s.source),
+  ).size;
   const report: RefreshReport = {
     ran: true,
     queries: queries.length,
     statuses,
     added,
+    okSources,
     durationMs: Date.now() - started,
   };
 

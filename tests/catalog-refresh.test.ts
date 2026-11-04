@@ -114,6 +114,7 @@ test('без активных поисков обновление не ходи�
   try {
     const report = await refreshCatalogForSearches();
     assert.equal(report.ran, false, 'каталог обновлялся без единого активного поиска');
+    assert.equal(report.okSources, 0, 'успех источника без единого запроса');
     assert.match(report.skipped ?? '', /нет активных поисков/);
     assert.equal(networkCalled, false, 'сеть дёрнулась впустую');
     // Пустой отчёт тоже пишется: иначе панель показывала бы вчерашний успех.
@@ -154,6 +155,9 @@ test('пустая выдача провайдера чистит его про�
   try {
     const report = await refreshCatalogForSearches();
     assert.equal(report.ran, true);
+    // Легитимно пустая выдача — это успешный ответ источника: сторож застоя
+    // не должен считать её падением.
+    assert.ok(report.okSources >= 1, 'пустая, но успешная выдача не засчитана');
     const gone = db
       .prepare('SELECT COUNT(*) AS c FROM vacancies WHERE slug = ?')
       .get('hh-stale-1') as { c: number };
@@ -202,6 +206,41 @@ test('быстрый круг обновляет только переданны
       `быстрый проход опросил лишние источники: ${sources.join(', ')}`,
     );
   } finally {
+    globalThis.fetch = saved;
+  }
+});
+
+test('okSources считает источники, а не запросы', async () => {
+  /*
+   * Один и тот же hh опрашивается по каждому поиску. Число успешных строк
+   * отчёта росло бы с числом запросов, и «сколько источников живо» врало бы.
+   */
+  db.prepare('UPDATE searches SET active = 0').run();
+  addSearch('React', 'Москва', 1);
+  addSearch('Python', 'Москва', 1);
+  process.env.HH_CLIENT_ID = 'app-id';
+  process.env.HH_CLIENT_SECRET = 'app-secret';
+
+  const saved = globalThis.fetch;
+  globalThis.fetch = (async (url: string | URL) => {
+    const u = String(url);
+    if (u.includes('/token')) {
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ access_token: 't', expires_in: 3600 }),
+      } as unknown as Response;
+    }
+    return { ok: true, status: 200, text: async () => JSON.stringify({ items: [] }) };
+  }) as unknown as typeof globalThis.fetch;
+
+  try {
+    const report = await refreshCatalogForSearches({ sources: ['hh'] });
+    assert.equal(report.queries, 2, 'оба поиска должны были уйти в обновление');
+    assert.equal(report.okSources, 1, `hh посчитан ${report.okSources} раз вместо одного`);
+  } finally {
+    delete process.env.HH_CLIENT_ID;
+    delete process.env.HH_CLIENT_SECRET;
     globalThis.fetch = saved;
   }
 });

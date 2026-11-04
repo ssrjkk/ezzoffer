@@ -2,6 +2,7 @@ import type BetterSqlite3 from 'better-sqlite3';
 import { db } from './db';
 import { envNum } from './env';
 import { refreshCatalogForSearches, slowProvidersDue, fastProvidersDue, FAST_SOURCES } from './catalog-refresh';
+import type { RefreshReport } from './catalog-refresh';
 import { runAutoApply } from './autoapply';
 import { saveLastRun } from './autoapply-store';
 import { sendAlerts, sendDigests, sendExpiryWarnings, sendHhTokenWarnings, notifyHhTokenExpiredForUser } from './telegram-digest';
@@ -20,6 +21,7 @@ import { logError, logInfo } from './logger';
 
 const LOCK_KEY = 'scheduler:lock';
 const CATALOG_REFRESH_KEY = 'scheduler:catalog_refresh';
+const CATALOG_SUCCESS_KEY = 'scheduler:catalog_success';
 const CATALOG_FAST_REFRESH_KEY = 'scheduler:catalog_fast_refresh';
 const LOCK_TTL_MS = 30 * 60 * 1000;
 
@@ -176,7 +178,9 @@ async function refreshCatalogIfStale(now: number): Promise<void> {
   if (!slowProvidersDue(now, last)) return;
   try {
     const report = await refreshCatalogForSearches({ now: () => now });
+    // Попытка двигает TTL в любом случае, успех — только при живом источнике.
     setMeta(db, CATALOG_REFRESH_KEY, String(now));
+    markCatalogSuccess(report, now);
     if (!report.ran) {
       logInfo('scheduler', `каталог не обновлялся: ${report.skipped}`);
     }
@@ -197,11 +201,25 @@ async function refreshFastCatalog(now: number): Promise<void> {
   const last = Number(getMeta(db, CATALOG_FAST_REFRESH_KEY) ?? 0);
   if (!fastProvidersDue(now, last)) return;
   try {
-    await refreshCatalogForSearches({ now: () => now, sources: [...FAST_SOURCES] });
+    const report = await refreshCatalogForSearches({ now: () => now, sources: [...FAST_SOURCES] });
+    markCatalogSuccess(report, now);
     setMeta(db, CATALOG_FAST_REFRESH_KEY, String(now));
   } catch (err) {
     logError('scheduler:refresh-fast', err);
   }
+}
+
+/**
+ * Отметка успеха — отдельно от отметки попытки.
+ *
+ * CATALOG_REFRESH_KEY двигает TTL, поэтому пишется после каждой попытки.
+ * Если бы по нему же судили о застое, упавшие провайдеры выглядели бы как
+ * живой каталог: попытка есть, свежих данных нет. Успех фиксируется только
+ * когда хотя бы один внешний источник ответил ok (легитимно пустая выдача —
+ * тоже ответ).
+ */
+function markCatalogSuccess(report: RefreshReport, now: number): void {
+  if (report.okSources > 0) setMeta(db, CATALOG_SUCCESS_KEY, String(now));
 }
 
 /**
@@ -226,7 +244,24 @@ export async function checkCatalogStall(now: number = Date.now()): Promise<boole
   const stallMs = envNum(process.env, 'CATALOG_STALL_WARN_MS', 12 * 60 * 60 * 1000, {
     min: 60 * 60 * 1000,
   });
-  const last = Number(getMeta(db, CATALOG_REFRESH_KEY) ?? 0);
+  /*
+   * Смотрим на успех, а не на попытку. Раньше обе роли играл
+   * scheduler:catalog_refresh, и каждый прогон с лежащими провайдерами
+   * обновлял метку — сторож молчал ровно тогда, когда был нужен.
+   */
+  let last = Number(getMeta(db, CATALOG_SUCCESS_KEY) ?? 0);
+  if (last === 0) {
+    /*
+     * Одноразовая преемственность: в старых базах ключа успеха нет, а
+     * отметка попытки есть. Принимаем её за успех один раз, чтобы деплой не
+     * прислал ложное предупреждение; дальше ключ двигает только реальный ok.
+     */
+    const legacy = Number(getMeta(db, CATALOG_REFRESH_KEY) ?? 0);
+    if (legacy > 0) {
+      setMeta(db, CATALOG_SUCCESS_KEY, String(legacy));
+      last = legacy;
+    }
+  }
   if (last > 0 && now - last < stallMs) {
     // Каталог шевелится — снимаем старую отметку.
     db.prepare('DELETE FROM meta WHERE key = ?').run(CATALOG_STALL_KEY);

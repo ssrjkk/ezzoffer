@@ -273,6 +273,31 @@ test('длинная подпись обрезается, а не вылезае
   );
 });
 
+test('подпись не рвёт эмодзи пополам', () => {
+  /*
+   * slice по единицам UTF-16 разрезал суррогатную пару: в подписи оставался
+   * одиночный суррогат, и Telegram мог отвергнуть всё сообщение с кнопками.
+   */
+  const kb = bot.keyboardFor([
+    { title: `${'a'.repeat(30)}😀${'b'.repeat(10)}`, company: 'К', slug: 'hh-emoji' },
+  ]);
+  const label = kb!.inline_keyboard[0]![0]!.text;
+  assert.ok(label.includes('😀'), `эмодзи потерян: ${label}`);
+  // Ни одной суррогатной пары, разорванной посередине.
+  let lone = false;
+  for (let i = 0; i < label.length; i++) {
+    const code = label.charCodeAt(i);
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = label.charCodeAt(i + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) i++;
+      else lone = true;
+    } else if (code >= 0xdc00 && code <= 0xdfff) {
+      lone = true;
+    }
+  }
+  assert.ok(!lone, `в подписи одиночный суррогат: ${JSON.stringify(label)}`);
+});
+
 test('подбор ограничен пятью вакансиями и говорит об этом', async () => {
   seedUser();
   for (let i = 0; i < 9; i++) seedVacancy(`hh-m${i}`, `React-разработчик ${i}`);

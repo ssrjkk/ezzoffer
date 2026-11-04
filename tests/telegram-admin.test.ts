@@ -176,6 +176,26 @@ test('обзор считает пользователей, тарифы и от
   assert.ok(!/\S+@\S+\.\S+/.test(last.text), 'в панель утекли email');
 });
 
+test('время последнего прогона показано по Москве, а не по серверу', () => {
+  /*
+   * Сервер в UTC показывал 10:00 вместо 13:00 — в панели, где «отклики
+   * сегодня» уже считаются по московскому дню, это путало два времени.
+   */
+  db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(
+    'autoapply:last_run',
+    JSON.stringify({
+      at: Date.UTC(2026, 0, 15, 10, 0),
+      applied: 2,
+      failed: 0,
+      skipped: 0,
+      stale: 0,
+      withLetter: 0,
+    }),
+  );
+  const text = admin.adminOverviewText();
+  assert.match(text, /15\.01, 13:00/, `время не по Москве: ${text}`);
+});
+
 test('каталог показывает последний отчёт, пустой — честно', async () => {
   await click(OWNER, 'admin:catalog');
   const empty = edited.length > 0 ? edited[edited.length - 1]! : sent[sent.length - 1]!;

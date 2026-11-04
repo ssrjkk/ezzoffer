@@ -23,7 +23,13 @@ import type { InlineKeyboard } from './telegram';
  * («Верстальщик в Авито…»), а не случайной.
  */
 function fit(text: string, max: number): string {
-  return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
+  /*
+   * По кодовым точкам, а не по единицам UTF-16: slice(0, max - 1) мог
+   * разрезать эмодзи пополам и оставить в подписи одиночный суррогат —
+   * Telegram отвергает такое сообщение целиком.
+   */
+  const chars = Array.from(text);
+  return chars.length <= max ? text : `${chars.slice(0, max - 1).join('').trimEnd()}…`;
 }
 
 /** Основное меню: всегда доступно, поэтому человек не остаётся без ходов. */

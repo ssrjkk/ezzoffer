@@ -144,6 +144,16 @@ test('фильтры по уровню, формату и городу рабо�
   assert.equal(matchesSearch(v, baseSearch({ city: 'Москва' })), false);
 });
 
+test('город не совпадает по подстроке: Омск — не Томск', () => {
+  const v = makeVacancy({ city: 'Томск' });
+  assert.equal(
+    matchesSearch(v, baseSearch({ city: 'Омск' })),
+    false,
+    '«Омск» нашёлся внутри «Томск»',
+  );
+  assert.equal(matchesSearch(v, baseSearch({ city: ' Томск ' })), true, 'пробелы сломали фильтр');
+});
+
 test('фильтры по зарплате и чёрному списку работают', () => {
   const v = makeVacancy({
     title: 'Dev',

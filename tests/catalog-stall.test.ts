@@ -75,7 +75,7 @@ test('без активных поисков сторожить нечего', a
 test('свежий каталог — тишина', async () => {
   seedActiveSearch();
   db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(
-    'scheduler:catalog_refresh',
+    'scheduler:catalog_success',
     String(Date.now()),
   );
   assert.equal(await checkCatalogStall(), false);
@@ -85,7 +85,7 @@ test('свежий каталог — тишина', async () => {
 test('застой при живых поисках предупреждает владельца один раз', async () => {
   seedActiveSearch();
   db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(
-    'scheduler:catalog_refresh',
+    'scheduler:catalog_success',
     String(Date.now() - STALL_MS - 1000),
   );
   assert.equal(await checkCatalogStall(), true, 'предупреждение не ушло');
@@ -98,14 +98,14 @@ test('застой при живых поисках предупреждает �
 test('каталог ожил — отметка снята, следующий застой предупредит заново', async () => {
   seedActiveSearch();
   db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(
-    'scheduler:catalog_refresh',
+    'scheduler:catalog_success',
     String(Date.now() - STALL_MS - 1000),
   );
   assert.equal(await checkCatalogStall(), true);
   // Каталог обновился: свежая метка снимает предупреждение о застое.
   db.prepare('UPDATE meta SET value = ? WHERE key = ?').run(
     String(Date.now()),
-    'scheduler:catalog_refresh',
+    'scheduler:catalog_success',
   );
   assert.equal(await checkCatalogStall(), false);
   const marked = db
@@ -115,9 +115,47 @@ test('каталог ожил — отметка снята, следующий 
   // И снова застой — предупреждаем заново.
   db.prepare('UPDATE meta SET value = ? WHERE key = ?').run(
     String(Date.now() - STALL_MS - 1000),
-    'scheduler:catalog_refresh',
+    'scheduler:catalog_success',
   );
   assert.equal(await checkCatalogStall(), true, 'повторный застой промолчал');
+});
+
+test('свежая попытка без успеха не маскирует застой', async () => {
+  /*
+   * Провайдеры лежат: попытка обновления была только что, но ни один
+   * внешний источник не ответил ok. Раньше отметка попытки обновлялась и
+   * сторож молчал — ровно в том сценарии, ради которого он существует.
+   */
+  seedActiveSearch();
+  db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(
+    'scheduler:catalog_success',
+    String(Date.now() - STALL_MS - 1000),
+  );
+  db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(
+    'scheduler:catalog_refresh',
+    String(Date.now()),
+  );
+  assert.equal(await checkCatalogStall(), true, 'неудачная попытка скрыла застой');
+  assert.equal(bodies.length, 1);
+});
+
+test('старая база без ключа успеха принимает последнюю попытку один раз', async () => {
+  /*
+   * До разделения ключей успех и попытка были одним значением. Чтобы
+   * деплой не прислал ложное предупреждение, отсутствующий ключ успеха
+   * один раз заполняется из отметки попытки.
+   */
+  seedActiveSearch();
+  const attemptedAt = Date.now();
+  db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(
+    'scheduler:catalog_refresh',
+    String(attemptedAt),
+  );
+  assert.equal(await checkCatalogStall(), false);
+  const adopted = db
+    .prepare("SELECT value FROM meta WHERE key = 'scheduler:catalog_success'")
+    .get() as { value: string } | undefined;
+  assert.equal(adopted?.value, String(attemptedAt), 'старая отметка не перенесена');
 });
 
 test('без чата владельца — тишина без падения', async () => {
@@ -125,7 +163,7 @@ test('без чата владельца — тишина без падения'
   try {
     seedActiveSearch();
     db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(
-      'scheduler:catalog_refresh',
+      'scheduler:catalog_success',
       String(Date.now() - STALL_MS - 1000),
     );
     assert.equal(await checkCatalogStall(), false, 'без админа должно молчать');

@@ -11,6 +11,7 @@ import {
   type InlineKeyboard,
 } from './telegram';
 import { commandKeyboard } from './telegram-keyboard';
+import { formatShortDateTime } from './format-date';
 
 /**
  * Админ-панель бота: только для владельца.
@@ -46,12 +47,9 @@ export function isOwnerChat(chatId: string | number): boolean {
 
 function fmtTime(at: number): string {
   if (!at) return '—';
-  return new Date(at).toLocaleString('ru-RU', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  // Как и остальные даты интерфейса — по Москве, а не по часовому поясу
+  // сервера: в UTC-контейнере панель показывала время на три часа раньше.
+  return formatShortDateTime(at);
 }
 
 /**

@@ -181,7 +181,14 @@ export function matchesSearch(
 
   if (s.level && s.level !== vacancy.level) return false;
   if (s.format && s.format !== vacancy.format) return false;
-  if (s.city && !vacancy.city.toLowerCase().includes(s.city.toLowerCase())) return false;
+  /*
+   * Город — по границе слова, а не подстрокой: «Омск» находился внутри
+   * «Томск», и человеку показывались вакансии из другого города. Города с
+   * дефисом («Санкт-Петербург») при этом по-прежнему находятся по части
+   * после дефиса, потому что дефис — не буква.
+   */
+  const city = s.city.trim().toLowerCase();
+  if (city && !containsWord(vacancy.city.toLowerCase(), city)) return false;
 
   const salary = vacancy.salary_min ?? vacancy.salary_max ?? 0;
   if (s.salary_min != null && salary > 0 && salary < s.salary_min) return false;
