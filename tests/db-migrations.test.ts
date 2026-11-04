@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
-import { migrateApplicationsResumeId, addNotifiedClaimColumn } from '../src/lib/db-migrations';
+import { migrateApplicationsResumeId, addNotifiedClaimColumn, backfillViewedAtForResponded } from '../src/lib/db-migrations';
 
 /**
  * Пересборка applications при смене типа resume_id.
@@ -235,5 +235,41 @@ test('claim-колонка добавляется в старую базу и н
   );
   const count = db.prepare('SELECT COUNT(*) AS c FROM applications').get() as { c: number };
   assert.equal(count.c, 1, 'миграция потеряла строки');
+  db.close();
+});
+
+test('бэкфилл просмотра выравнивает responded_at > viewed_at и идемпотентен', () => {
+  /*
+   * Ответ HR невозможен без просмотра. hh-sync писал responded_at по отказу
+   * и приглашению всегда, а viewed_at — только когда площадка ставила
+   * reviewed, поэтому накопленные строки давали «Ответы HR» больше 100%.
+   */
+  const db = makeDb();
+  // Старая строка: ответ есть, просмотра нет. И вторая — корректная, её
+  // миграция трогать не должна.
+  db.prepare(
+    `INSERT INTO applications (user_id, job_slug, status, sent_at, responded_at, viewed_at)
+     VALUES (1, 'hh-legacy', 'declined', 100, 300, NULL)`,
+  ).run();
+  db.prepare(
+    `INSERT INTO applications (user_id, job_slug, status, sent_at, responded_at, viewed_at)
+     VALUES (1, 'hh-ok', 'declined', 100, 300, 250)`,
+  ).run();
+
+  backfillViewedAtForResponded(db);
+  const legacy = db
+    .prepare("SELECT viewed_at FROM applications WHERE job_slug = 'hh-legacy'")
+    .get() as { viewed_at: number | null };
+  assert.equal(legacy.viewed_at, 300, 'просмотр не подставлен из ответа');
+  const ok = db
+    .prepare("SELECT viewed_at FROM applications WHERE job_slug = 'hh-ok'")
+    .get() as { viewed_at: number | null };
+  assert.equal(ok.viewed_at, 250, 'существующий просмотр перезаписан');
+
+  // Повторный запуск при старте не должен ничего менять.
+  const before = db.prepare('SELECT viewed_at FROM applications ORDER BY id').all();
+  backfillViewedAtForResponded(db);
+  const after = db.prepare('SELECT viewed_at FROM applications ORDER BY id').all();
+  assert.deepEqual(after, before, 'бэкфилл не идемпотентен');
   db.close();
 });

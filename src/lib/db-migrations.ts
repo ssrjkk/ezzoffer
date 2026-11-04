@@ -412,6 +412,29 @@ export function dedupeApplications(
 }
 
 /**
+ * Просмотр, подразумеваемый ответом.
+ *
+ * Ответ HR (приглашение, отказ) невозможен без того, чтобы отклик увидели.
+ * hh-sync писал responded_at всегда, а viewed_at — только по флагу `reviewed`,
+ * которого в переписке может не быть. На таких строках responded > viewed, и
+ * «Ответы HR» в статистике (responded/viewed) превышали 100%.
+ *
+ * Синхронизация теперь проставляет оба поля, но уже накопленные базы нужно
+ * выровнять один раз при старте. Идемпотентно: после первого прохода строк с
+ * responded_at и пустым viewed_at не остаётся, повторный UPDATE меняет ноль.
+ */
+export function backfillViewedAtForResponded(
+  instance: Pick<Database.Database, 'prepare'>,
+): void {
+  instance
+    .prepare(
+      'UPDATE applications SET viewed_at = responded_at ' +
+        'WHERE responded_at IS NOT NULL AND viewed_at IS NULL',
+    )
+    .run();
+}
+
+/**
  * Перешифровка токенов hh на диске (Фаза 1, риск бэкапа).
  *
  * До этого access- и refresh-токены лежали открытым текстом, и копия файла

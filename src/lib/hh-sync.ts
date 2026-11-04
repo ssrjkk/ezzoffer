@@ -356,7 +356,16 @@ export async function syncHhStatuses(
               ? note
               : `${note}; ${declineLabel}`
             : declineLabel;
-          const needViewed = reviewed && app.viewed_at == null;
+          /*
+           * Отказ — тоже ответ, а ответ невозможен без просмотра. Флаг
+           * reviewed при этом приходит не всегда: если писать viewed_at
+           * только по нему, строка получала responded_at без viewed_at, и
+           * «Ответы HR» в статистике (responded/viewed) превышали 100%.
+           * Поэтому ответ проставляет просмотр сам; старый responded_at
+           * используется для бэкфилла уже накопленных строк.
+           */
+          const seenAt = reviewed ? updatedAt : (app.responded_at ?? updatedAt);
+          const needViewed = app.viewed_at == null;
           const needResponded = app.responded_at == null;
           if (!needViewed && !needResponded && newNote === note) continue;
           db.prepare(
@@ -365,11 +374,11 @@ export async function syncHhStatuses(
                   responded_at = COALESCE(responded_at, ?),
                   response_note = ?
              WHERE id = ?`,
-          ).run(reviewed ? updatedAt : null, updatedAt, newNote, app.id);
+          ).run(seenAt, updatedAt, newNote, app.id);
           touched.add(app.id);
           continue;
         }
-        const needViewed = reviewed && app.viewed_at == null;
+        const needViewed = app.viewed_at == null;
         const needResponded = app.responded_at == null;
         const needNote = !app.response_note;
         const needState = app.status !== 'declined' || app.response !== 'decline';
@@ -382,13 +391,18 @@ export async function syncHhStatuses(
                 response = 'decline',
                 response_note = COALESCE(NULLIF(response_note, ''), ?)
            WHERE id = ?`,
-        ).run(reviewed ? updatedAt : null, updatedAt, label ?? 'отказ', app.id);
+        ).run(
+          reviewed ? updatedAt : (app.responded_at ?? updatedAt),
+          updatedAt,
+          label ?? 'отказ',
+          app.id,
+        );
         touched.add(app.id);
         continue;
       }
 
       if (response === 'interview') {
-        const needViewed = reviewed && app.viewed_at == null;
+        const needViewed = app.viewed_at == null;
         const needResponded = app.responded_at == null;
         const needNote = !app.response_note;
         const needState = app.status !== 'responded' || app.response !== 'interview';
@@ -401,7 +415,12 @@ export async function syncHhStatuses(
                 response = 'interview',
                 response_note = COALESCE(NULLIF(response_note, ''), ?)
            WHERE id = ?`,
-        ).run(reviewed ? updatedAt : null, updatedAt, label ?? 'приглашение', app.id);
+        ).run(
+          reviewed ? updatedAt : (app.responded_at ?? updatedAt),
+          updatedAt,
+          label ?? 'приглашение',
+          app.id,
+        );
         touched.add(app.id);
       }
     }

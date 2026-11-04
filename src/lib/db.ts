@@ -15,6 +15,7 @@ import {
   migrateTelegramInbox,
   migrateSessionsSecurity,
   dedupeApplications,
+  backfillViewedAtForResponded,
 } from './db-migrations';
 import { envStr } from './env';
 
@@ -418,6 +419,7 @@ function migrate(instance: Database.Database): void {
   migrateTelegramInbox(instance);
   migrateSessionsSecurity(instance);
   dedupeApplications(instance);
+  backfillViewedAtForResponded(instance);
   instance.exec(
     'CREATE UNIQUE INDEX IF NOT EXISTS ux_applications_once ' +
       'ON applications(user_id, job_slug) WHERE withdrawn = 0',

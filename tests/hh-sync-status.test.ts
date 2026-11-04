@@ -20,7 +20,7 @@ let db: ReturnType<typeof import('../src/lib/db').createDatabase>;
 
 const NOW = Date.now();
 
-function seedUser(): number {
+function seedUser(email = 's@example.com'): number {
   return Number(
     db
       .prepare(
@@ -28,7 +28,7 @@ function seedUser(): number {
           hh_token_expires_at, hh_resume_id, mode)
          VALUES (?, 'h', 'pro', ?, ?, 'tok', ?, 'res1', 'live')`,
       )
-      .run('s@example.com', NOW + 100_000, NOW, NOW + 3_600_000).lastInsertRowid,
+      .run(email, NOW + 100_000, NOW, NOW + 3_600_000).lastInsertRowid,
   );
 }
 
@@ -118,6 +118,69 @@ test('отказ пишется один раз, повторный прогон
     assert.equal(second.updated, 0, 'повтор переписал стабильную строку');
   } finally {
     restore();
+  }
+});
+
+test('ответ без флага reviewed всё равно означает просмотр (regression)', async () => {
+  /*
+   * hh не всегда присылает reviewed. Отказ и приглашение в этом случае
+   * писали responded_at, но не viewed_at — и в статистике «Ответы HR»
+   * (responded/viewed) могли превысить 100%: ответ без просмотра.
+   */
+  const { syncHhStatuses } = await import('../src/lib/hh-sync');
+  const cases = [
+    {
+      email: 'decline@example.com',
+      slug: 'hh-789',
+      state: 'discard',
+      name: 'Отказ: нет опыта',
+      status: 'declined',
+    },
+    {
+      email: 'invite@example.com',
+      slug: 'hh-790',
+      state: 'invitation',
+      name: 'Приглашение',
+      status: 'responded',
+    },
+  ];
+
+  for (const c of cases) {
+    const uid = seedUser(c.email);
+    seedApp(uid, c.slug);
+    const negotiations = [
+      { vacancyId: c.slug.slice(3), state: c.state, name: c.name, reviewed: false },
+    ];
+
+    let restore = mockNegotiations(negotiations);
+    try {
+      assert.equal((await syncHhStatuses(uid)).updated, 1, `${c.state}: ответ не записан`);
+    } finally {
+      restore();
+    }
+
+    const stored = db
+      .prepare('SELECT status, viewed_at, responded_at FROM applications WHERE user_id = ?')
+      .get(uid) as { status: string; viewed_at: number | null; responded_at: number | null };
+    assert.equal(stored.status, c.status);
+    assert.ok(stored.responded_at, `${c.state}: ответ без responded_at выпадает из конверсии`);
+    assert.equal(
+      stored.viewed_at,
+      stored.responded_at,
+      `${c.state}: ответ записан без просмотра — respondRate превысит 100%`,
+    );
+
+    // Повторный прогон тех же данных не должен считаться обновлением.
+    restore = mockNegotiations(negotiations);
+    try {
+      assert.equal(
+        (await syncHhStatuses(uid, { force: true })).updated,
+        0,
+        `${c.state}: повтор переписал стабильную строку`,
+      );
+    } finally {
+      restore();
+    }
   }
 });
 
