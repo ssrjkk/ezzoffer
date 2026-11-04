@@ -72,7 +72,7 @@ type ApplicationRow = {
  * Через сколько дней просмотренного отклика стоит написать.
  *
  * Три дня — точка, после которой переписка остывает: hr уже закрыл задачу
- * и смотрит на новые отклики. Неделя — верхняя граница, после которой
+ * и смотрит на новые отклики. Две недели — верхняя граница, после которой
  * напоминание выглядит навязчивым и часто вредит.
  */
 const FOLLOWUP_AFTER_DAYS = 3;
@@ -166,7 +166,13 @@ export function nextActions(userId: number, now = Date.now()): NextAction[] {
       href: '/dashboard/applications',
       urgency: 1,
       count: followups.length,
-      draft: followupDraft(oldest.company, oldest.title),
+      /*
+       * title приходит из COALESCE(v.title, a.job_slug): вакансии уже нет в
+       * каталоге → в title лежит сырой slug, и черновик «Отклик (hh-123456)
+       * на вакансию» читается как сбой. Такому названию в письме не место:
+       * остаётся компания, а строка про вакансию опускается.
+       */
+      draft: followupDraft(oldest.company, oldest.title === oldest.job_slug ? '' : oldest.title),
     });
   }
 

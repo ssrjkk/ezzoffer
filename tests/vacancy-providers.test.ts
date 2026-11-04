@@ -211,6 +211,9 @@ test('mapGeekVacancy мапит валидную вакансию GeekJob', () =
   assert.equal(v!.salary_min, 200000);
   assert.equal(v!.salary_max, 230000);
   assert.equal(v!.city, 'Remote');
+  // «28 сентября» без года раньше давало published_at: null — возраст вакансии
+  // был неизвестен, и фильтр свежести не мог её оценить.
+  assert.ok(v!.published_at, 'published_at не разобран из русской даты');
 });
 
 test('mapGeekVacancy с extended-JSON полями не падает', () => {

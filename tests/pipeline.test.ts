@@ -565,3 +565,21 @@ test('старейший для напоминания считается по �
   assert.match(followup.detail, /9 дней/, 'подпись указывает не на самый давний просмотр: ' + followup.detail);
   assert.ok((followup.draft ?? '').includes('Давний просмотр'), 'черновик написан не под самый давний просмотр');
 });
+
+test('вакансии нет в каталоге — в черновике нет сырого slug (regression)', () => {
+  /*
+   * Когда вакансия ушла из выдачи, запрос подставляет в title сам job_slug
+   * (COALESCE). Раньше slug ехал в письмо: «Отклик (hh-999999) на вакансию…» —
+   * человек отправлял это работодателю как есть. Название опускается, остаётся
+   * честное «Отклик на вакансию».
+   */
+  const uid = user();
+  application({ uid, slug: 'hh-999999', sentDaysAgo: 10, viewedDaysAgo: 8 });
+
+  const actions = nextActions(uid, NOW);
+  const followup = actions.find((a) => a.kind === 'followup');
+  assert.ok(followup, 'нет напоминания');
+  const draft = followup.draft ?? '';
+  assert.ok(!draft.includes('hh-999999'), `slug протёк в черновик: ${draft}`);
+  assert.ok(!draft.includes('()'), 'в черновике остались пустые скобки');
+});
