@@ -19,7 +19,8 @@
   },
   "overrides": {
     "source-map-js": "1.2.2",
-    "braces": "3.0.3"
+    "braces": "3.0.3",
+    "minimatch": "^11.0.1"
   },
   "dependencies": {
     "better-sqlite3": "13.0.3",
