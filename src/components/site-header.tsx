@@ -1,5 +1,5 @@
-import { ctaUrl } from "@/lib/cta";
 'use client';
+import { ctaUrl } from "@/lib/cta";
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
