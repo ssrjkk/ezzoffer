@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ctaUrl } from '@/lib/cta';
 import { Logo } from './site-header';
 import { ServiceStatus } from './service-status';
 
@@ -42,7 +43,7 @@ const columns = [
     links: [
       { href: '/faq', label: 'Вопросы и ответы' },
       { href: '/dashboard/consultations', label: 'Записаться на консультацию' },
-      { href: '/signup', label: 'Начать бесплатно' },
+      { href: ctaUrl('/signup'), label: 'Начать бесплатно' },
     ],
   },
 ];
