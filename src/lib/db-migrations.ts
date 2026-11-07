@@ -206,7 +206,8 @@ export function migratePayments(instance: Pick<Database.Database, 'exec' | 'prep
     });
     if (!scoped) {
       instance.exec('PRAGMA foreign_keys = OFF');
-      instance.exec('BEGIN');
+      // SAVEPOINT, не BEGIN: createDatabase зовёт миграцию под внешней транзакцией.
+      instance.exec('SAVEPOINT payments_unique');
       try {
         instance.exec(`
           CREATE TABLE payments_migrated (
@@ -226,13 +227,10 @@ export function migratePayments(instance: Pick<Database.Database, 'exec' | 'prep
         `);
         instance.exec('DROP TABLE payments');
         instance.exec('ALTER TABLE payments_migrated RENAME TO payments');
-        instance.exec('COMMIT');
+        instance.exec('RELEASE SAVEPOINT payments_unique');
       } catch (err) {
-        try {
-          instance.exec('ROLLBACK');
-        } catch {
-          // Откат не удался — база осталась в исходном состоянии BEGIN'а.
-        }
+        instance.exec('ROLLBACK TO SAVEPOINT payments_unique');
+        instance.exec('RELEASE SAVEPOINT payments_unique');
         throw err;
       } finally {
         instance.exec('PRAGMA foreign_keys = ON');
@@ -340,19 +338,17 @@ export function migrateSessionsSecurity(
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { createHash } = require('node:crypto') as typeof import('node:crypto');
   const rows = instance.prepare('SELECT token FROM sessions').all() as { token: string }[];
-  instance.exec('BEGIN');
+  // SAVEPOINT, не BEGIN: createDatabase зовёт миграцию под внешней транзакцией.
+  instance.exec('SAVEPOINT sessions_hash');
   try {
     const upd = instance.prepare('UPDATE sessions SET token = ? WHERE token = ?');
     for (const r of rows) {
       upd.run(createHash('sha256').update(r.token).digest('hex'), r.token);
     }
-    instance.exec('COMMIT');
+    instance.exec('RELEASE SAVEPOINT sessions_hash');
   } catch (err) {
-    try {
-      instance.exec('ROLLBACK');
-    } catch {
-      // ignore
-    }
+    instance.exec('ROLLBACK TO SAVEPOINT sessions_hash');
+    instance.exec('RELEASE SAVEPOINT sessions_hash');
     throw err;
   }
   if (hasMeta) {
@@ -484,7 +480,8 @@ export function migrateSecretColumns(instance: Pick<Database.Database, 'exec' | 
     string | number | null
   >[];
 
-  instance.exec('BEGIN');
+  // SAVEPOINT, не BEGIN: createDatabase зовёт миграцию под внешней транзакцией.
+  instance.exec('SAVEPOINT secrets_encrypt');
   try {
     for (const row of rows) {
       const sets: string[] = [];
@@ -500,9 +497,10 @@ export function migrateSecretColumns(instance: Pick<Database.Database, 'exec' | 
       values.push(row.id);
       instance.prepare(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`).run(...values);
     }
-    instance.exec('COMMIT');
+    instance.exec('RELEASE SAVEPOINT secrets_encrypt');
   } catch (error) {
-    instance.exec('ROLLBACK');
+    instance.exec('ROLLBACK TO SAVEPOINT secrets_encrypt');
+    instance.exec('RELEASE SAVEPOINT secrets_encrypt');
     throw new Error(`Не удалось зашифровать токены: ${(error as Error).message}`);
   }
 }
@@ -565,7 +563,8 @@ export function migrateApplicationsResumeId(
   const claimSelect = hasClaim ? 'notified_claim_at' : 'NULL';
 
   instance.exec('PRAGMA foreign_keys = OFF');
-  instance.exec('BEGIN');
+  // SAVEPOINT, не BEGIN: createDatabase зовёт миграцию под внешней транзакцией.
+  instance.exec('SAVEPOINT applications_resume_id');
   try {
     instance.exec(`
       CREATE TABLE applications_migrated (
@@ -652,9 +651,10 @@ export function migrateApplicationsResumeId(
       'CREATE UNIQUE INDEX IF NOT EXISTS ux_applications_once ' +
         'ON applications(user_id, job_slug) WHERE withdrawn = 0',
     );
-    instance.exec('COMMIT');
+    instance.exec('RELEASE SAVEPOINT applications_resume_id');
   } catch (err) {
-    instance.exec('ROLLBACK');
+    instance.exec('ROLLBACK TO SAVEPOINT applications_resume_id');
+    instance.exec('RELEASE SAVEPOINT applications_resume_id');
     throw err;
   } finally {
     instance.exec('PRAGMA foreign_keys = ON');

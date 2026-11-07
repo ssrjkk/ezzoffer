@@ -357,7 +357,27 @@ export function createDatabase(filePath: string): Database.Database {
   }
   instance.pragma('foreign_keys = ON');
   instance.exec(SCHEMA_SQL);
-  migrate(instance);
+  /*
+   * Вся миграция под BEGIN IMMEDIATE: несколько процессов (воркеры next build,
+   * сервер + бот) открывают одну базу одновременно. Без блокировки «проверил
+   * колонку → ALTER» каждый видит отсутствие и каждый добавляет — второй
+   * падает с duplicate column. IMMEDIATE берёт write-lock до проверок; второй
+   * процесс ждёт в busy timeout и читает уже готовую схему.
+   *
+   * foreign_keys снимается снаружи транзакции: внутри PRAGMA — no-op, а
+   * пересборкам payments/applications нужно дропать таблицы со ссылками.
+   */
+  instance.pragma('foreign_keys = OFF');
+  try {
+    instance.exec('BEGIN IMMEDIATE');
+    migrate(instance);
+    instance.exec('COMMIT');
+  } catch (err) {
+    if (instance.inTransaction) instance.exec('ROLLBACK');
+    throw err;
+  } finally {
+    instance.pragma('foreign_keys = ON');
+  }
   logInfo(
     'db',
     filePath === ':memory:' ? 'открыта in-memory БД' : `открыта БД: ${filePath}`,
