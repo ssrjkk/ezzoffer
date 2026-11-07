@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { isStaticPublicSite } from '@/lib/public-runtime';
 
 /**
  * Живой статус сервиса вместо захардкоженного «работает штатно».
@@ -11,9 +12,12 @@ import { useEffect, useState } from 'react';
  * деградировал, серый — не смогли спросить. Текст честный в каждом случае.
  */
 export function ServiceStatus() {
-  const [state, setState] = useState<'ok' | 'degraded' | 'unknown'>('unknown');
+  const [state, setState] = useState<'ok' | 'degraded' | 'unknown' | 'static'>(
+    isStaticPublicSite ? 'static' : 'unknown',
+  );
 
   useEffect(() => {
+    if (isStaticPublicSite) return;
     let alive = true;
     fetch('/api/health', { cache: 'no-store' })
       .then((r) => r.json())
@@ -35,7 +39,9 @@ export function ServiceStatus() {
       ? 'Сервис работает штатно'
       : state === 'degraded'
         ? 'Сервис деградировал — чиним'
-        : 'Статус неизвестен';
+        : state === 'static'
+          ? 'Публичная витрина · приложение запускается отдельно'
+          : 'Статус неизвестен';
 
   return (
     <p

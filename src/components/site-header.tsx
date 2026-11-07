@@ -1,5 +1,6 @@
 'use client';
 import { ctaUrl } from "@/lib/cta";
+import { isStaticPublicSite } from '@/lib/public-runtime';
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -51,6 +52,7 @@ export function SiteHeader() {
   const pathname = usePathname();
 
   useEffect(() => {
+    if (isStaticPublicSite) return;
     fetch('/api/auth/me', { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => setUser(d?.user ?? null))

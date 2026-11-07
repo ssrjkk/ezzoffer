@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react';
 import { Section, SectionHead, StatusMessage } from '@/components/ui';
 import { Reveal } from '@/components/reveal';
 import { plans, type PlanPeriod } from '@/lib/data';
+import { ctaUrl } from '@/lib/cta';
+import { isStaticPublicSite } from '@/lib/public-runtime';
 
 const PLAN_IDS = ['start', 'pro', 'expert'];
 
@@ -17,7 +19,7 @@ const periods: { days: PlanPeriod; label: string }[] = [
 
 export function PricingSection({ compact = false }: { compact?: boolean }) {
   const [period, setPeriod] = useState<PlanPeriod>(14);
-  const [hasAccount, setHasAccount] = useState<boolean | null>(null);
+  const [hasAccount, setHasAccount] = useState<boolean | null>(isStaticPublicSite ? false : null);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const router = useRouter();
@@ -26,6 +28,7 @@ export function PricingSection({ compact = false }: { compact?: boolean }) {
   // залогиненного гостем: иначе клик по тарифу уводил бы на /signup, а тот —
   // обратно в кабинет. Замкнутый круг без единого слова об ошибке.
   useEffect(() => {
+    if (isStaticPublicSite) return;
     let alive = true;
     fetch('/api/auth/me')
       .then((r) => r.json())
@@ -43,7 +46,11 @@ export function PricingSection({ compact = false }: { compact?: boolean }) {
   const choose = async (planId: string) => {
     setNotice(null);
     if (hasAccount === false) {
-      router.push('/signup');
+      if (isStaticPublicSite) {
+        window.location.assign(ctaUrl('/signup'));
+      } else {
+        router.push('/signup');
+      }
       return;
     }
     if (hasAccount === null) {
