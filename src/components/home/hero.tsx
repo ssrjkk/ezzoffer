@@ -1,5 +1,4 @@
 import { ctaUrl } from "@/lib/cta";
-
 import Link from 'next/link';
 import { PrimaryButton, GhostButton, Eyebrow } from '@/components/ui';
 import { jobs, stats } from '@/lib/data';

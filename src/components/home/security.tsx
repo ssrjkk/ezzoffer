@@ -1,5 +1,4 @@
 import { ctaUrl } from "@/lib/cta";
-
 import Link from 'next/link';
 import { Section, SectionHead, PrimaryButton } from '@/components/ui';
 import { Reveal } from '@/components/reveal';

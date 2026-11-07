@@ -1,5 +1,4 @@
 import { ctaUrl } from "@/lib/cta";
-
 'use client';
 
 import Link from 'next/link';
