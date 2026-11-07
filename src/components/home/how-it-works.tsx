@@ -1,3 +1,5 @@
+import { ctaUrl } from "@/lib/cta";
+
 import { Section, SectionHead, PrimaryButton } from '@/components/ui';
 import { Reveal } from '@/components/reveal';
 import { steps } from '@/lib/data';
@@ -112,7 +114,7 @@ export function HowItWorks() {
 
       <Reveal delay={120}>
         <div className="mt-12">
-          <PrimaryButton href="/signup">Начать бесплатно</PrimaryButton>
+          <PrimaryButton href={ctaUrl("/signup")}>Начать бесплатно</PrimaryButton>
         </div>
       </Reveal>
     </Section>

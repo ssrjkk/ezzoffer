@@ -1,3 +1,5 @@
+import { ctaUrl } from "@/lib/cta";
+
 import type { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
@@ -157,7 +159,7 @@ export default function AboutPage() {
           </p>
           <div className="mt-8">
             <Link
-              href="/signup"
+              href={ctaUrl("/signup")}
               className="inline-flex items-center gap-2 rounded-sm bg-paper px-7 py-3.5 text-sm font-semibold text-ink transition-colors hover:bg-accent hover:text-white"
             >
               Начать бесплатно

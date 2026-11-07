@@ -1,3 +1,5 @@
+import { ctaUrl } from "@/lib/cta";
+
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
@@ -113,7 +115,7 @@ export default async function JobPage({ params }: { params: Promise<{ slug: stri
 
         <div className="mt-8 flex flex-col gap-4 sm:flex-row sm:items-center">
           <Link
-            href="/signup"
+            href={ctaUrl("/signup")}
             className="inline-flex items-center justify-center gap-2 rounded-sm bg-accent px-7 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
           >
             Откликнуться через EZOffer
@@ -161,7 +163,7 @@ export default async function JobPage({ params }: { params: Promise<{ slug: stri
               затеряться в конце очереди.
             </p>
             <Link
-              href="/signup"
+              href={ctaUrl("/signup")}
               className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-sm bg-paper px-6 py-3 text-sm font-semibold text-ink transition-colors hover:bg-accent hover:text-white"
             >
               Найти живые вакансии

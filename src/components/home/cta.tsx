@@ -1,3 +1,5 @@
+import { ctaUrl } from "@/lib/cta";
+
 import Link from 'next/link';
 import { Eyebrow } from '@/components/ui';
 import { Reveal } from '@/components/reveal';
@@ -32,7 +34,7 @@ export function CtaBanner() {
 
           <div className="md:col-span-4 md:text-right">
             <Link
-              href="/signup"
+              href={ctaUrl("/signup")}
               className="inline-flex items-center justify-center gap-2 rounded-sm bg-paper px-7 py-3.5 text-sm font-semibold text-ink transition-colors hover:bg-accent hover:text-white"
             >
               Попробовать бесплатно

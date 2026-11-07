@@ -1,3 +1,5 @@
+import { ctaUrl } from "@/lib/cta";
+
 import type { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
@@ -83,7 +85,7 @@ export default function InternshipsPage() {
                 <div className="col-span-6 flex flex-col items-start gap-4 md:col-span-3 md:items-end md:text-right">
                   <p className="font-mono text-lg tabular-nums text-ink">{int.salary}</p>
                   <Link
-                    href="/signup"
+                    href={ctaUrl("/signup")}
                     className="inline-flex min-h-11 items-center gap-2 border-b border-ink py-1 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"
                   >
                     Найти живую стажировку

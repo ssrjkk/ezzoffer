@@ -1,3 +1,5 @@
+import { ctaUrl } from "@/lib/cta";
+
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
@@ -101,7 +103,7 @@ export default async function ResumeExamplePage({ params }: { params: Promise<{ 
               ваши вакансии.
             </p>
             <Link
-              href="/signup"
+              href={ctaUrl("/signup")}
               className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-sm bg-paper px-5 py-3 text-sm font-semibold text-ink transition-colors hover:bg-accent hover:text-white"
             >
               Начать бесплатно

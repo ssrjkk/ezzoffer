@@ -1,3 +1,5 @@
+import { ctaUrl } from "@/lib/cta";
+
 import type { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
@@ -69,7 +71,7 @@ export default function HowItWorksPage() {
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-6">
             <Link
-              href="/signup"
+              href={ctaUrl("/signup")}
               className="inline-flex items-center gap-2 rounded-sm bg-accent px-7 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
             >
               Попробовать бесплатно

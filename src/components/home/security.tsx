@@ -1,3 +1,5 @@
+import { ctaUrl } from "@/lib/cta";
+
 import Link from 'next/link';
 import { Section, SectionHead, PrimaryButton } from '@/components/ui';
 import { Reveal } from '@/components/reveal';
@@ -78,7 +80,7 @@ export function Security() {
 
       <Reveal delay={100}>
         <div className="mt-12 flex flex-col items-start gap-4">
-          <PrimaryButton href="/signup">Попробовать сейчас</PrimaryButton>
+          <PrimaryButton href={ctaUrl("/signup")}>Попробовать сейчас</PrimaryButton>
           {/*
             Раньше здесь стояло «Мы не храним доступы к твоему аккаунту».
             Формулировка фактически неверна: OAuth-токены hh.ru лежат в

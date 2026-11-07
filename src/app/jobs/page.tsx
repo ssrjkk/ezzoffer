@@ -1,3 +1,5 @@
+import { ctaUrl } from "@/lib/cta";
+
 import type { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
 import { Section, SectionHead, PrimaryButton } from '@/components/ui';
@@ -41,7 +43,7 @@ export default function JobsPage() {
             уже сегодня.
           </p>
           <div className="mt-7">
-            <PrimaryButton href="/signup">Подобрать вакансии под меня</PrimaryButton>
+            <PrimaryButton href={ctaUrl("/signup")}>Подобрать вакансии под меня</PrimaryButton>
           </div>
         </div>
       </Section>

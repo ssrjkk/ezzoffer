@@ -1,3 +1,5 @@
+import { ctaUrl } from "@/lib/cta";
+
 import { Section, SectionHead, PrimaryButton } from '@/components/ui';
 import { Reveal } from '@/components/reveal';
 import { team } from '@/lib/data';
@@ -40,7 +42,7 @@ export function Team() {
               </p>
             </div>
             <div className="mt-6">
-              <PrimaryButton href="/signup">Попробовать и рассказать</PrimaryButton>
+              <PrimaryButton href={ctaUrl("/signup")}>Попробовать и рассказать</PrimaryButton>
             </div>
           </article>
         </Reveal>

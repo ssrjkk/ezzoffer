@@ -1,3 +1,5 @@
+import { ctaUrl } from "@/lib/cta";
+
 import Link from 'next/link';
 import { Section, SectionHead } from '@/components/ui';
 import { Reveal } from '@/components/reveal';
@@ -126,7 +128,7 @@ export function Advantages() {
               </p>
             </div>
             <Link
-              href="/signup"
+              href={ctaUrl("/signup")}
               className="-my-1 inline-flex min-h-11 w-fit items-center gap-2 border-b border-paper py-1 text-sm font-semibold text-paper transition-colors hover:border-accent hover:text-accent"
             >
               Начать с пробного дня

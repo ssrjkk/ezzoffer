@@ -1,3 +1,5 @@
+import { ctaUrl } from "@/lib/cta";
+
 'use client';
 
 import Link from 'next/link';
@@ -101,13 +103,13 @@ export function SiteHeader() {
           ) : (
             <>
               <Link
-                href="/login"
+                href={ctaUrl("/login")}
                 className="hidden text-sm font-medium text-muted transition-colors hover:text-ink sm:block"
               >
                 Войти
               </Link>
               <Link
-                href="/signup"
+                href={ctaUrl("/signup")}
                 className="hidden rounded-sm bg-accent px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-accent-hover sm:block"
               >
                 24 часа бесплатно
@@ -166,14 +168,14 @@ export function SiteHeader() {
               ) : (
                 <>
                   <Link
-                    href="/login"
+                    href={ctaUrl("/login")}
                     onClick={() => setOpen(false)}
                     className="rounded-sm border border-line-strong px-4 py-2.5 text-center text-sm font-semibold text-ink"
                   >
                     Войти
                   </Link>
                   <Link
-                    href="/signup"
+                    href={ctaUrl("/signup")}
                     onClick={() => setOpen(false)}
                     className="rounded-sm bg-accent px-4 py-2.5 text-center text-sm font-semibold text-white"
                   >

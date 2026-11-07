@@ -1,3 +1,5 @@
+import { ctaUrl } from "@/lib/cta";
+
 import type { Metadata } from 'next';
 import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
@@ -89,7 +91,7 @@ export default function ResumeExamplesPage() {
             посчитает ATS-скор.
           </p>
           <Link
-            href="/signup"
+            href={ctaUrl("/signup")}
             className="mt-7 inline-flex items-center gap-2 rounded-sm bg-accent px-7 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
           >
             Улучшить резюме

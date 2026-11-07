@@ -1,3 +1,5 @@
+import { ctaUrl } from "@/lib/cta";
+
 import Link from 'next/link';
 import { PrimaryButton, GhostButton, Eyebrow } from '@/components/ui';
 import { jobs, stats } from '@/lib/data';
@@ -83,7 +85,7 @@ export function Hero() {
             </p>
 
             <div className="mt-10 flex flex-wrap items-center gap-x-8 gap-y-4">
-              <PrimaryButton href="/signup">Попробовать бесплатно</PrimaryButton>
+              <PrimaryButton href={ctaUrl("/signup")}>Попробовать бесплатно</PrimaryButton>
               <GhostButton href="/#how-it-work">Как это работает</GhostButton>
             </div>
 
