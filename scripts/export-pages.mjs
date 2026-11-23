@@ -109,6 +109,18 @@ if (existsSync(path.join(root, 'public'))) {
 }
 
 /*
+ * Иконки app-router (src/app/icon.svg, src/app/favicon.ico) — это маршруты,
+ * которые генерирует сервер: в статической выгрузке их нет, и на GitHub Pages
+ * вкладка остаётся без иконки (замер: /ezzoffer/icon.svg и /favicon.ico -> 404,
+ * хотя HTML ссылается на /ezzoffer/icon.svg?icon.<hash>.svg). Копируем файлы
+ * как есть — Pages игнорирует query-хэш, поэтому путь совпадёт.
+ */
+for (const icon of ['icon.svg', 'favicon.ico']) {
+  const src = path.join(root, 'src', 'app', icon);
+  if (existsSync(src)) cpSync(src, path.join(outDir, icon));
+}
+
+/*
  * .nojekyll обязателен. Без него GitHub Pages прогоняет выгрузку через
  * Jekyll, который начинает обработку с подчёркивания — и каталог _next
  * молча исчезает вместе со всем CSS и скриптами. Страница открывается белой.
