@@ -6,7 +6,7 @@
 
 Сервис автооткликов на вакансии: подбор по резюме, персонализированные письма, контроль этапов и разбор того, что делать дальше. Полноценное приложение на **Next.js 16 + Tailwind CSS v4 + SQLite (better-sqlite3)**.
 
-**Сайт:** [ssrjkk.github.io/ezzoffer](https://ssrjkk.github.io/ezzoffer/)
+**Сайт:** [ssrjkk.github.io/ezzoffer](https://ssrjkk.github.io/ezzoffer/) · **Бот:** [@ezzoffer_bot](https://t.me/ezzoffer_bot) — вход в сервис и стартовый пробный день
 
 ## Скриншоты
 
