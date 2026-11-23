@@ -301,3 +301,9 @@ npm run dev
 ---
 
 **SSRJKK** — [GitHub](https://github.com/ssrjkk) · [Telegram](https://t.me/ssrjkk) · [Projects hub](https://ssrjkk.github.io/) · [Bot catalogue](https://t.me/ssrjkk_bot)
+
+## Документация
+
+- [About](https://ssrjkk.github.io/ezzoffer/about)
+- [FAQ](https://ssrjkk.github.io/ezzoffer/faq)
+- [Pricing](https://ssrjkk.github.io/ezzoffer/pricing)
