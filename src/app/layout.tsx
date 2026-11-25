@@ -74,11 +74,13 @@ export const metadata: Metadata = {
     locale: 'ru_RU',
     type: 'website',
     siteName: 'EZOffer',
+    images: [{ url: `${siteUrl}/og.png`, width: 1200, height: 630 }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'EZOffer — поиск работы без рутины',
     description: 'Подберём вакансии, улучшим резюме и отправим отклики за вас.',
+    images: [`${siteUrl}/og.png`],
   },
 };
 
