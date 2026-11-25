@@ -47,7 +47,7 @@ const inter = Inter({
   display: 'swap',
 });
 
-const siteUrl = envBaseUrl(process.env, 'SITE_URL', 'https://ezoffer.ru');
+const siteUrl = envBaseUrl(process.env, 'SITE_URL', 'https://ssrjkk.github.io/ezzoffer');
 
 export const metadata: Metadata = {
   // envBaseUrl, а не `process.env.SITE_URL ?? ...`: пустое значение из

@@ -35,6 +35,7 @@ jobs:
       # Публичная витрина. Секретов здесь нет и быть не должно: то, что
       # попадает в браузер посетителя, не является секретом.
       NEXT_PUBLIC_BASE_PATH: /ezzoffer
+      SITE_URL: https://ssrjkk.github.io/ezzoffer
       NEXT_TELEMETRY_DISABLED: 1
       NEXT_PUBLIC_STATIC_EXPORT: "1"
       # Куда ведут CTA витрины (/signup, /login): на Pages этих роутов нет
