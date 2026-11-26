@@ -7,7 +7,12 @@ personalized cover letters, application tracking and Telegram notifications.
 The full Russian documentation is in [README.ru.md](README.ru.md).
 
 **Site:** https://ssrjkk.github.io/ezzoffer/  
-**Bot:** https://t.me/ezzoffer_bot
+**Bot:** https://t.me/ezzoffer_bot  
+**Source:** https://github.com/ssrjkk/ezzoffer
+
+## Screenshot
+
+![EZOffer](docs/screenshots/home.png)
 
 ## Features
 
