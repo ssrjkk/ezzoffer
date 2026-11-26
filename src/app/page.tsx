@@ -23,7 +23,7 @@ export const metadata: Metadata = pageMeta('/', {
     'Подбор вакансий по резюме, автоотклик с сопроводительным письмом и уведомления о приглашениях и отказах.',
 });
 
-const siteUrl = envBaseUrl(process.env, 'SITE_URL', 'https://ezoffer.ru');
+const siteUrl = envBaseUrl(process.env, 'SITE_URL', 'https://ssrjkk.github.io/ezzoffer');
 
 export default function Home() {
   return (
