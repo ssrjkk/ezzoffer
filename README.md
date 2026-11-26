@@ -1,9 +1,5 @@
 # EZOffer
 
-[![CI](https://github.com/ssrjkk/ezzoffer/actions/workflows/ci.yml/badge.svg)](https://github.com/ssrjkk/ezzoffer/actions/workflows/ci.yml)
-[typescript](https://img.shields.io/badge/typescript-blue.svg)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
 Сервис автооткликов на вакансии: подбор по резюме, персонализированные письма, контроль этапов и разбор того, что делать дальше. Полноценное приложение на **Next.js 16 + Tailwind CSS v4 + SQLite (better-sqlite3)**.
 
 **Сайт:** [ssrjkk.github.io/ezzoffer](https://ssrjkk.github.io/ezzoffer/) · **Бот:** [@ezzoffer_bot](https://t.me/ezzoffer_bot) — вход в сервис и стартовый пробный день
