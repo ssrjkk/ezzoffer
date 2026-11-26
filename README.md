@@ -1,305 +1,82 @@
 # EZOffer
 
-Сервис автооткликов на вакансии: подбор по резюме, персонализированные письма, контроль этапов и разбор того, что делать дальше. Полноценное приложение на **Next.js 16 + Tailwind CSS v4 + SQLite (better-sqlite3)**.
+> **Languages:** [English](README.md) · [Русский](README.ru.md)
 
-**Сайт:** [ssrjkk.github.io/ezzoffer](https://ssrjkk.github.io/ezzoffer/) · **Бот:** [@ezzoffer_bot](https://t.me/ezzoffer_bot) — вход в сервис и стартовый пробный день
+Job-search automation for hh.ru and other vacancy sources: resume matching,
+personalized cover letters, application tracking and Telegram notifications.
+The full Russian documentation is in [README.ru.md](README.ru.md).
 
-## Скриншоты
+**Site:** https://ssrjkk.github.io/ezzoffer/  
+**Bot:** https://t.me/ezzoffer_bot
 
-Сняты с работающей сборки автоматически, в реальном браузере.
+## Features
 
-| Главная                                                                 | Тарифы                                                                    |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| <img src="docs/screenshots/home.png" width="420" alt="Главная EZOffer"> | <img src="docs/screenshots/pricing.png" width="420" alt="Тарифы EZOffer"> |
+- Landing, pricing, FAQ, blog, jobs and resume-example pages.
+- Dashboard with funnel statistics, daily limits and activity charts.
+- Resume CRUD and AI-assisted improvement.
+- Vacancy catalog with search, filters, autosearch and external-source leads.
+- Application status tracking and cover-letter templates.
+- Interview preparation, saved vacancies, skill-gap analysis and learning plans.
+- Telegram bot for service access and candidate workflows.
+- Metadata, canonical URLs, Open Graph, sitemap and robots.
 
-<p align="center"><img src="docs/screenshots/faq.png" width="680" alt="Вопросы и ответы EZOffer"></p>
+Real application submission through an API is available for hh.ru after OAuth
+configuration. Other sources provide manual leads unless their own API is connected.
+Payments are disabled in demo mode.
 
-> Кабинет здесь не показан: автоматический вход не выдал сессию, и снимки
-> получились бы страницей входа под чужим именем. Лучше отсутствие, чем
-> неправда.
-
-## Возможности
-
-### Лендинг
-
-- Главная: Hero со сводкой каталога, «Как это работает», преимущества, интерактивный слайдер «до/после» резюме, Telegram-бот, безопасность, тарифы с переключением периода (с активацией тарифа прямо со страницы в демо-режиме), пример работы, FAQ-аккордеон, команда, вакансии, блог, CTA.
-- Страницы: `/`, `/about`, `/blog` + `/blog/[slug]`, `/faq`, `/forgot-password`, `/internships`, `/jobs` + `/jobs/[slug]`, `/login`, `/platform-rules`, `/pricing`, `/reset-password`, `/resume-examples` + `/resume-examples/[slug]`, `/reviews`, `/signup`, кастомная `/404`.
-- SEO: metadata, canonical, OG-изображение, sitemap.xml, robots.txt; публичные страницы — SSG, кроме входа/регистрации/восстановления пароля (там `force-dynamic`, т.к. нужен редирект по сессии).
-
-### Личный кабинет (`/dashboard`)
-
-- Авторизация: регистрация/вход/выход (scrypt N=65536 с версионированным форматом хеша и прозрачным обновлением старых паролей при входе, httpOnly-кука `ez_session`, 30 дней), ротация сессии на каждом запросе в кабинет, защита кабинета через `proxy.ts`. Смена пароля и email требует текущий пароль; смена email сбрасывает подтверждение и отправляет новое письмо.
-- Защита API: CSRF-проверка Origin для изменяющих запросов, rate-limit по IP (при `TRUST_PROXY=1`, иначе общий анонимный бакет) с раздельным потолком для анонимов, SSRF-фильтр для исходящих запросов (только http/https, блокировка приватных диапазонов и loopback), фильтрация внешних ссылок (только http/https).
-- `Обзор` — статистика воронки (отправлено → просмотрено → ответ HR → приглашения), конверсии, лимит откликов за день, график за 7 дней, обновление каждые 5 секунд.
-- `Резюме` — CRUD + «Улучшить с AI»: детект ключевых навыков по каталогу, добавление разделов, скоринг до/после.
-- `Вакансии` — единый каталог с фильтрами: локальный демо-набор из `data.ts` + реальные вакансии из «Работа России» (trudvsem), «Работа.ру» и при настройке токена — hh.ru; ручной отклик, кнопка «По email» у вакансий с контактами работодателя, внешние вакансии открываются на сайте-источнике, автопоиск (ключевые слова, уровень, формат, город, вилка, чёрный список компаний) с запуском/паузой.
-- `Отклики` — таблица статусов с живым обновлением, отзыв откликов, фильтры по статусу.
-- `Письма` — CRUD сопроводительных писем + шаблон.
-- `Консультации` — заявки на встречу с карьерным стратегом.
-- `Настройки` — профиль, пароль, тарифы и пробный период.
-
-### Тарифы и «оплата»
-
-- Планы: Старт (50 откликов/день, 5 резюме), Про (100, 20 резюме), Эксперт (250, резюме без ограничения); пробный период — 24 часа.
-- Оплата отключена (демо): бесплатная активация через `/api/plan` работает только с `DEMO_MODE_PLAN=1` (локальная разработка, в проде не включать), пробный период — через `/api/trial`.
-
-### Подготовка к собеседованию, избранное и подсказки
-
-- В Telegram: `/собеседование` строит вопросы из того же резюме, которое компания
-  уже видела; `/избранное` листается кнопками; `/советы` показывает, что делать.
-- `/dashboard/skills` — пробелы в навыках, посчитанные по вашим же откликам и по
-  вакансиям в подборе. Порядок задаётся отказами, а не популярностью навыка.
-  Рядом — учебные планы с проверяемым критерием по каждому пункту.
-- `/dashboard/gigs` — подработка и заказы, с фильтрами по режиму работы,
-  направлению и грейду. Занятость читается из поля площадки, а не выводится из
-  текста: GeekJob отдаёт `jobFormat.parttime`, Работа России — `employment` и
-  `schedule` с готовыми значениями.
-
-### Реальный каталог вакансий
-
-- Каталог кабинета собирается из 13 источников: локальный демо-набор (`src/lib/data.ts`, работает всегда), «Работа России» (trudvsem, без токена), «Работа.ру» (парсинг JSON-LD без токена) и hh.ru (после настройки токена приложения). Плюс RemoteOK, We Work Remotely, GeekJob, Jobicy, Greenhouse, Ashby, RSS-фиды компаний, FL.ru и Kwork (фриланс). Отдельных провайдеров X/Twitter и Telegram-каналов пока нет — метки зарезервированы.
-- Внешние вакансии сохраняются в SQLite (`vacancies`) с UPSERT по слагу и обновляются кнопкой «Обновить вакансии» в кабинете (лимит: не чаще ~10 раз за 5 минут).
-- Реальные отклики через API — только hh.ru (нужен токен приложения + подключённый аккаунт пользователя). Trudvsem, Работа.ру и остальные — ручные лиды: переход по ссылке «На сайте» или письмо на контакты, учёт отклика — в кабинете EZOffer.
-
-## Запуск
+## Quick start
 
 ```bash
 npm install
-npm run dev       # dev-сервер http://localhost:3000
-npm run build     # production build
-npm run start:prod # production-сервер (standalone) http://localhost:3000
-npm run lint      # eslint
-npm test          # тесты (node --test, без внешних сервисов)
-npm run seed      # демо-аккаунт с заполненным кабинетом (demo@ezoffer.ru / demo123)
-npm run bot:poll    # опрос Telegram для локального стенда (вместо вебхука)
-npm run bot:menu    # кнопка меню + описание бота (один раз после смены команд)
-npm run check:links # все внутренние ссылки сайта (sitemap + дашборд)
-```
-
-> **Windows / better-sqlite3.** Версия 12.11.1 зафиксирована в `package.json` и имеет
-> готовые бинарники для Node 20/22/24. Если `npm install` всё же падает с
-> «Could not locate the bindings file», значит prebuild не скачался (нет доступа к
-> GitHub Releases или сработал корпоративный прокси). Обойти можно без Visual Studio —
-> скачать бинарник вручную:
->
-> ```powershell
-> # 1) узнать ABI вашей версии Node (напр. 137 для Node 24)
-> node -p "process.versions.modules"
-> # 2) скачать и распаковать в node_modules/better-sqlite3/build/Release/
-> curl.exe -L -o bs3.tar.gz https://github.com/WiseLibs/better-sqlite3/releases/download/v12.11.1/better-sqlite3-v12.11.1-node-v137-win32-x64.tar.gz
-> tar -xzf bs3.tar.gz -C node_modules/better-sqlite3/prebuilds/node-v137-win32-x64
-> New-Item -ItemType Directory -Force node_modules\better-sqlite3\build\Release
-> Copy-Item node_modules\better-sqlite3\prebuilds\node-v137-win32-x64\build\Release\better_sqlite3.node node_modules\better-sqlite3\build\Release\
-> ```
->
-> Не поднимайте `better-sqlite3` до 13.x без готового toolchain C++.
-
-Демо-аккаунт из `npm run seed`: тариф «Про» на 14 дней, резюме, письмо, активный автопоиск — чтобы кабинет сразу выглядел живым.
-
-### Восстановление пароля
-
-На странице входа есть ссылка «Забыли пароль?». Сброс идёт по одноразовой ссылке
-из письма (`/forgot-password` → `/reset-password`), действует 1 час и гасится после
-первого использования. Смена пароля завершает все сессии пользователя.
-
-Для отправки писем настройте SMTP в `.env`:
-
-```
-SMTP_HOST=smtp.example.com
-SMTP_PORT=587
-SMTP_USER=...
-SMTP_PASSWORD=...
-SMTP_FROM=ezoffer@example.com
-```
-
-Без этих переменных сайт работает полностью, но письма не уходят: об этом честно
-сообщает лог, а пользователь видит нейтральный ответ (без утечки информации о том,
-существует ли аккаунт с таким email).
-
-### Как включить реальные отклики на hh.ru
-
-1. Скопируйте конфигурацию: `cp .env.example .env` (Windows: `copy .env.example .env`).
-2. Создайте приложение на **dev.hh.ru** → «Мои приложения»:
-   - Redirect URI: `http://localhost:3000/api/hh/callback` (для продакшена — `https://ваш-домен/api/hh/callback`);
-   - отметьте права: **Отклики** (negotiations), **Чтение откликов**, **Чтение вакансий**, **Резюме**.
-3. Заполните в `.env`:
-   - `HH_CLIENT_ID`, `HH_CLIENT_SECRET`, `HH_REDIRECT_URI` — чтобы каждый пользователь мог подключить **свой** аккаунт кнопкой «Подключить аккаунт hh.ru» в настройках;
-   - `HH_ACCESS_TOKEN` — можно указать как запасной/глобальный токен (вакансии hh.ru подгрузятся даже без OAuth).
-4. Перезапустите сервер, войдите, в кабинете «Настройки» нажмите «Подключить аккаунт hh.ru» и разрешите доступ.
-5. Создайте в кабинете «Резюме» резюме и «Письма» сопроводительное письмо (можно с шаблонами `{вакансия}`, `{компания}` и т.д.).
-6. В разделе «Вакансии» создайте **автопоиск** (ключевые слова, город, зарплата, уровень) и нажмите «Создать и запустить».
-
-После этого планировщик (`SCHEDULER_INTERVAL_MS`, по умолчанию каждые 5 минут) находит подходящие вакансии hh.ru и отправляет реальные отклики через API от имени вашего аккаунта, с естественными паузами между отправками (45–180 с). Кнопка «Откликнуться сейчас» на карточке вакансии hh.ru тоже отправляет отклик по-настоящему.
-
-**Что реально поддерживает автоотклик:** только hh.ru (публичный API откликов). Остальные источники (Работа России, Работа.ру, RemoteOK, We Work Remotely, Jobicy, Greenhouse, Ashby, FL.ru, Kwork, RSS-фиды компаний) работают как единый каталог — отклик по ним делается кнопкой «На сайте» или через контакты компании, а в EZOffer ведётся учёт ваших откликов. Программная рассылка резюме на эти площадки невозможна без их официального API.
-
-Переменные окружения:
-
-- `SITE_URL` — публичный домен для sitemap/robots (по умолчанию `https://ezoffer.ru`).
-- `HH_ACCESS_TOKEN` — токен приложения hh.ru. Без него вакансии hh.ru недоступны, trudvsem и локальный каталог работают.
-- `HH_CLIENT_ID`, `HH_CLIENT_SECRET`, `HH_REDIRECT_URI` — OAuth-приложение hh.ru для подключения личного аккаунта.
-- `AUTOAPPLY_*` — мягкие лимиты и рабочие часы автооткликов (см. `.env.example`).
-- `AUTOAPPLY_ENABLED=0` — полная остановка отправок; `AUTOAPPLY_DRY_RUN=1` — холостой прогон без внешних отправок (см. `.env.example`).
-- `AI_API_KEY` — OpenAI-совместимый ключ для улучшения резюме и персонализации писем (необязательно).
-- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` — Telegram-бот для управления с телефона (необязательно, см. Telegram-бот).
-- `ADMIN_TELEGRAM_CHAT_ID` — chat id владельца: сюда приходят заявки на консультации.
-- `EZOFFER_TOKEN_KEY` — шифрование токенов hh.ru в БД (настоятельно рекомендуется в проде; без него токены лежат открытым текстом).
-- `DEMO_MODE_PLAN=1` — бесплатная активация тарифов через `/api/plan`. Только для локальной разработки, в проде не включать.
-
-## Telegram-бот
-
-EZOffer умеет работать и через Telegram: привяжите аккаунт в «Настройках → Telegram-бот» (6-значный код, живёт 15 минут) и общайтесь с ботом командами `/поиск`, `/отклик`, `/статистика`, `/пауза`, `/выйти`. Ответы и статистика совпадают с кабинетом — бот вызывает те же функции.
-
-Настройка:
-
-1. Создайте бота у @BotFather → токен → `TELEGRAM_BOT_TOKEN`.
-2. Задайте `TELEGRAM_WEBHOOK_SECRET` — им бот подписывает апдейты в заголовке.
-3. Зарегистрируйте вебхук:
-
-   ```bash
-   curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook?url=$SITE_URL/api/telegram/webhook&secret_token=$TELEGRAM_WEBHOOK_SECRET"
-   ```
-
-4. Войдите в кабинет, «Настройки → Telegram-бот», нажмите **«Получить код»** и отправьте боту `/связать <код>`.
-
-Код выдаётся отдельной кнопкой, а не при каждом открытии страницы: код одноразовый
-и живёт 15 минут, поэтому перевыпуск при перезагрузке инвалидировал бы номер,
-который пользователь уже продиктовал боту. Частоту выдачи ограничивает rate-limit.
-Голые 6 цифр без команды тоже привязывают (если чат ещё не привязан).
-
-Меню бота (кнопка слева от ввода) и описание ставятся отдельно — они хранятся
-на стороне Telegram: `npm run bot:menu` после каждой смены команд. Команды меню
-латиницей (`/podbor`, `/svyazat`), бот раскрывает их в русские.
-
-Входящие разбираются дважды: fast-path сразу после вебхука (ответ за секунды)
-и тиком планировщика как страховка. На бессерверном хостинге fast-path
-выключается (`TELEGRAM_FAST_PATH=0`, см. `.env.example`).
-
-Без этих переменных сайт работает полностью, просто бот не отвечает.
-
-### Локальный запуск без публичного домена
-
-Telegram не достучится до `localhost`, поэтому вебхук для локальной разработки
-не регистрируется. Вместо него — опрос через long-polling:
-
-```bash
-npm run build
-npm run start:prod   # терминал 1: сайт на http://localhost:3000
-npm run bot:poll     # терминал 2: опрос Telegram
-```
-
-Скрипт сам снимает вебхук (`deleteWebhook`), забирает апдейты и кладёт их в
-ту же очередь, что и продовый вебхук, — бот ведёт себя один в один. Узнать имя
-бота: `https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getMe`.
-
-Ловушка: если в системе (переменные среды пользователя) задан свой
-`TELEGRAM_BOT_TOKEN` от другого бота, он перекрывает `.env` — и сайт, и поллер
-получат 401 от Telegram, хотя токен в `.env` валиден. Лечение: удалить
-переменную (`Remove-Item Env:\TELEGRAM_BOT_TOKEN` на текущий терминал или
-стереть в «Переменные среды» Windows) и перезапустить оба процесса.
-
-### Копия резюме на hh.ru
-
-A/B-варианты живут локально, а отправляется только то, что есть на hh.
-Кнопка «Копия на hh» у привязанного резюме создаёт копию на стороне hh
-(`POST /resumes?source_resume_id=`); правится она там, а обратно забирается
-штатным «Импортом с hh» и привязывается к варианту. Прямой заливки
-локального текста в структуру hh нет сознательно: маппинг свободного текста
-в блоки hh писал бы человеку в профиль мусор при первой ошибке.
-
-## Деплой
-
-- Сборка `output: standalone` — `.next/standalone` можно копировать на любой сервер/VPS как есть, вместе с папкой `data/` (там живёт SQLite).
-- Не подходит Vercel/Netlify: нативное `better-sqlite3` и запись файлов требуют постоянного диска.
-
-### Docker (рекомендуется)
-
-```bash
-docker compose up -d --build   # поднимет ezoffer на :3000
-```
-
-- Образ multi-stage (`Dockerfile`): сборка → standalone, runtime — минимальный `node:24-slim` с непривилегированным пользователем.
-- Данные живут в `./data:/app/data` (volume) — не пропадут при перезапуске.
-- Переменные окружения (monируются в `docker-compose.yml`): `SITE_URL`, `PORT`.
-
-> Если Docker Hub недоступен из вашей сети (TLS-таймауты), используйте зеркало: `docker pull docker.m.daocloud.io/library/node:24-slim` и замените `FROM node:24-slim` в Dockerfile.
-
-## Структура
-
-- `src/app` — маршруты: публичные страницы, `/dashboard/*` и API-роуты (App Router)
-- `src/app/api` — REST API: auth, resumes, letters, searches, applications, stats, plan, trial, consultations, profile
-- `src/components` — секции лендинга, шапка, формы и компоненты кабинета
-- `src/lib` — data.ts (контент: вакансии, FAQ, тарифы, статьи), vacancies/ (13 провайдеров каталога + индекс/кэш), db.ts (схема SQLite), auth.ts, plans.ts, resume-enhance.ts, applications.ts
-- `data/` — SQLite-база `ezoffer.db` (в `.gitignore`)
-
-## Стек
-
-Next.js 16 (Turbopack), React 19, Tailwind CSS v4, TypeScript, better-sqlite3, ESLint.
-
-### Тесты
-
-```bash
-npm test
-```
-
-Используется встроенный раннер Node (`node --test`) — без Vitest/Jest и без внешних
-сервисов: БД работает в памяти, сетевые вызовы провайдеров подменяются.
-
-Флаг `--experimental-test-module-mocks` нужен для тестов API-роутов: они зовут
-`cookies()` из `next/headers`, который вне request-контекста бросает исключение,
-поэтому сессия подменяется на уровне модуля `@/lib/auth`
-(см. `tests/helpers/route-session.ts`).
-
-Покрыты: логика домена, пароли и их миграция, SSRF-фильтр, HTTP-клиент с повторами,
-контраст палитры по формуле WCAG, API-роуты (включая проверки владения ресурсами
-на чужие данные) и постраничная выдача откликов.
-
-Отдельно проверки, которые нельзя выполнить типами и линтером:
-
-- `tests/site-browser.test.ts` открывает все публичные страницы в настоящем
-  Chromium и смотрит на то же, на что смотрит человек: ошибки консоли, неудавшиеся
-  запросы, изображения, не загрузившиеся ни во что, ссылки без подписи, `lang`,
-  заголовок вкладки. Каждая страница открывается ещё раз с отключённым
-  JavaScript: контент, появляющийся при прокрутке, не должен от него зависеть.
-- `tests/dashboard-checks.test.ts` ходит по кабинету с настоящим cookie-jar.
-  Это важно: промежуточный слой ротирует токен сессии на каждом запросе, и клиент
-  со статичной cookie-кукой видит «сломанный кабинет», которого нет.
-- `tests/security-baseline.test.ts` проверяет правила из скилла
-  `security-best-practices` (референс по Next.js): атрибуты сессионной cookie,
-  заголовки безопасности, CSP, покрытие middleware, отказ на запрос без Origin.
-- `tests/catalog-invariants.test.ts` прогоняет инварианты по всему живому
-  каталогу и следит за распределением направлений: правило, разросшееся на пятую
-  часть каталога, означает, что оно слишком широкое.
-- `tests/site-checks.test.ts` обходит все внутренние ссылки и ищет заголовки,
-  обещающие то, чего продукт не делает.
-
-Проверки, которым нужен браузер или сервер, пропускаются, если те недоступны.
-
-> Демо-набор на витрине (`/jobs`, `/internships`, главная) — выдуманные компании
-> для показа формата. Живой каталог — в кабинете после регистрации. Оплата картой/СБП
-> не подключена (способы показывают «не настроено»); крипта — только с кошельком
-> в `PAYMENT_CRYPTO_USDT_WALLET`.
-
-## Installation
-
-```bash
-git clone https://github.com/ssrjkk/ezzoffer.git
-cd ezzoffer
-npm install
-```
-
-## Usage
-
-```bash
 npm run dev
+npm run build
+npm run start:prod
 ```
 
----
+The development server runs at http://localhost:3000.
 
-**SSRJKK** — [GitHub](https://github.com/ssrjkk) · [Telegram](https://t.me/ssrjkk) · [Projects hub](https://ssrjkk.github.io/) · [Bot catalogue](https://t.me/ssrjkk_bot)
+## Seed and checks
 
-## Документация
+```bash
+npm run seed
+npm test
+npm run lint
+npm run check:links
+npm run bot:poll
+npm run bot:menu
+```
 
+`npm run seed` creates the documented demo account and dashboard data. Change demo
+credentials before a shared deployment.
+
+## Configuration
+
+Copy `.env.example` and configure the database, auth secret, application URLs and
+Telegram bot token. SMTP variables are required for password-reset and verification
+email; without them the site runs but email is not sent.
+
+Windows prebuilt binaries are pinned for `better-sqlite3`. Do not upgrade it without
+a matching C++ toolchain or compatible prebuild.
+
+## Stack
+
+Next.js 16, React, TypeScript, Tailwind CSS v4, SQLite, `better-sqlite3`, aiogram and
+Node's built-in test runner.
+
+## Security
+
+- Password hashing with scrypt and httpOnly sessions.
+- CSRF origin checks, rate limits and SSRF-safe outbound requests.
+- Production-safe session handling and protected dashboard routes.
+- No live payment credentials in the repository.
+
+## Documentation
+
+- [Russian README](README.ru.md)
 - [About](https://ssrjkk.github.io/ezzoffer/about)
 - [FAQ](https://ssrjkk.github.io/ezzoffer/faq)
-- [Pricing](https://ssrjkk.github.io/ezzoffer/pricing)
+- [Security policy](SECURITY.md)
+
+## License
+
+MIT — see [LICENSE](LICENSE).
