@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter, Playfair_Display, IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
 import { SiteHeader } from '@/components/site-header';
@@ -49,11 +49,14 @@ const inter = Inter({
 
 const siteUrl = envBaseUrl(process.env, 'SITE_URL', 'https://ssrjkk.github.io/ezzoffer');
 
+export const viewport: Viewport = {
+  themeColor: '#f7f5f0',
+};
+
 export const metadata: Metadata = {
   // envBaseUrl, а не `process.env.SITE_URL ?? ...`: пустое значение из
   // .env.example доходило до new URL("") и роняло сборку на Invalid URL.
   metadataBase: new URL(siteUrl),
-  themeColor: '#f7f5f0',
   title: {
     default: 'EZOffer — поиск работы без рутины',
     template: '%s | EZOffer',
