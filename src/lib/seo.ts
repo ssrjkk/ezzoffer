@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { envBaseUrl } from './env';
 
 /**
  * Метаданные публичной страницы: canonical + честный og:url.
@@ -11,6 +12,10 @@ export function pageMeta(path: string, meta: Metadata): Metadata {
   return {
     ...meta,
     alternates: { canonical: path },
-    openGraph: { ...(meta.openGraph ?? {}), url: path },
+    openGraph: {
+      ...(meta.openGraph ?? {}),
+      url: path,
+      images: [{ url: `${envBaseUrl(process.env, 'SITE_URL', 'https://ssrjkk.github.io/ezzoffer')}/og.png`, width: 1200, height: 630 }],
+    },
   };
 }
