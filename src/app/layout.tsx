@@ -53,6 +53,7 @@ export const metadata: Metadata = {
   // envBaseUrl, а не `process.env.SITE_URL ?? ...`: пустое значение из
   // .env.example доходило до new URL("") и роняло сборку на Invalid URL.
   metadataBase: new URL(siteUrl),
+  themeColor: '#f7f5f0',
   title: {
     default: 'EZOffer — поиск работы без рутины',
     template: '%s | EZOffer',
