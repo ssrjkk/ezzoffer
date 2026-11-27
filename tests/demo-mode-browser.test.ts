@@ -81,6 +81,7 @@ test('баннер демо-режима виден в кабинете на к�
         missing.push(`${path} (лимит запросов не отпустил за 4 попытки)`);
         continue;
       }
+      await page.waitForLoadState('load');
       const banner = page.locator('[data-demo-banner]');
       if ((await banner.count()) === 0) {
         missing.push(path);
@@ -89,7 +90,19 @@ test('баннер демо-режима виден в кабинете на к�
       // Баннер обязан быть видимым, а не присутствовать в разметке: скрытый
       // «напоминатель» — это отсутствие напоминания.
       if (!(await banner.isVisible())) {
-        missing.push(`${path} (есть в разметке, но не виден)`);
+        const state = await banner.evaluate((el) => {
+          const style = getComputedStyle(el);
+          const rect = el.getBoundingClientRect();
+          return {
+            display: style.display,
+            visibility: style.visibility,
+            opacity: style.opacity,
+            width: rect.width,
+            height: rect.height,
+            outerHTML: el.outerHTML.slice(0, 400),
+          };
+        });
+        missing.push(`${path} (есть в разметке, но не виден: ${JSON.stringify(state)})`);
         continue;
       }
       const text = (await banner.innerText()).replace(/\s+/g, ' ').trim();
