@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-Only the latest release is supported with security updates.
+Security updates track the `main` branch; this repository currently has no published releases.
 
 ## Reporting a Vulnerability
 

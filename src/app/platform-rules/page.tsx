@@ -3,6 +3,7 @@ import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
 import { Section, Eyebrow } from '@/components/ui';
 import { Reveal } from '@/components/reveal';
+import { isStaticPublicSite } from '@/lib/public-runtime';
 
 export const metadata: Metadata = pageMeta('/platform-rules', {
   title: 'Правила платформ и безопасность аккаунта',
@@ -117,13 +118,15 @@ export default function PlatformRulesPage() {
             вернуться к откликам можно в любой момент.
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-6">
-            <Link
-              href="/dashboard/settings"
-              className="inline-flex items-center gap-2 rounded-sm bg-accent px-7 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
-            >
-              Перейти в кабинет
-              <span aria-hidden>→</span>
-            </Link>
+            {!isStaticPublicSite && (
+              <Link
+                href="/dashboard/settings"
+                className="inline-flex items-center gap-2 rounded-sm bg-accent px-7 py-3.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover"
+              >
+                Перейти в кабинет
+                <span aria-hidden>→</span>
+              </Link>
+            )}
             <Link
               href="/faq"
               className="inline-flex min-h-11 items-center gap-2 border-b border-ink py-1 text-sm font-semibold text-ink transition-colors hover:border-accent hover:text-accent"

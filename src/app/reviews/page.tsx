@@ -5,6 +5,7 @@ import { pageMeta } from '@/lib/seo';
 import Link from 'next/link';
 import { Section } from '@/components/ui';
 import { HowItWorks } from '@/components/how-it-works';
+import { isStaticPublicSite } from '@/lib/public-runtime';
 
 export const metadata: Metadata = pageMeta('/reviews', {
   title: 'Как это работает',
@@ -77,12 +78,14 @@ export default function HowItWorksPage() {
               Попробовать бесплатно
               <span aria-hidden>→</span>
             </Link>
-            <Link
-              href="/dashboard/resumes"
-              className="-my-1 inline-flex min-h-11 items-center text-sm font-medium text-accent-2 underline-offset-2 hover:underline"
-            >
-              Загрузить резюме →
-            </Link>
+            {!isStaticPublicSite && (
+              <Link
+                href="/dashboard/resumes"
+                className="-my-1 inline-flex min-h-11 items-center text-sm font-medium text-accent-2 underline-offset-2 hover:underline"
+              >
+                Загрузить резюме →
+              </Link>
+            )}
           </div>
         </div>
       </Section>

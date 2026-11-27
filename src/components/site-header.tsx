@@ -50,6 +50,7 @@ export function SiteHeader() {
   const [open, setOpen] = useState(false);
   const [user, setUser] = useState<{ name: string } | null>(null);
   const pathname = usePathname();
+  const normalizedPath = pathname !== '/' && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
 
   useEffect(() => {
     if (isStaticPublicSite) return;
@@ -74,7 +75,7 @@ export function SiteHeader() {
 
         <nav className="hidden items-center gap-6 lg:flex" aria-label="Основная навигация">
           {nav.map((item) => {
-            const active = item.href !== '/#how-it-work' && pathname === item.href;
+            const active = item.href !== '/#how-it-work' && normalizedPath === item.href;
             return (
               <Link
                 key={item.href}

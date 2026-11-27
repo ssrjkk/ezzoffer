@@ -57,16 +57,17 @@ credentials before a shared deployment.
 ## Configuration
 
 Copy `.env.example` and configure the database, auth secret, application URLs and
-Telegram bot token. SMTP variables are required for password-reset and verification
-email; without them the site runs but email is not sent.
+Telegram bot token. SMTP variables are required in production for password-reset and
+verification email; without them production registration is closed. Development runs
+without SMTP for local-only accounts.
 
-Windows prebuilt binaries are pinned for `better-sqlite3`. Do not upgrade it without
-a matching C++ toolchain or compatible prebuild.
+`better-sqlite3` 13.1.1 is pinned and requires Node.js 22 or newer. Do not change it
+without a matching C++ toolchain or compatible prebuild.
 
 ## Stack
 
-Next.js 16, React, TypeScript, Tailwind CSS v4, SQLite, `better-sqlite3`, aiogram and
-Node's built-in test runner.
+Next.js 16, React 19, TypeScript, Tailwind CSS v4, SQLite, `better-sqlite3`, a custom
+Telegram integration and Node's built-in test runner.
 
 ## Security
 
@@ -74,6 +75,7 @@ Node's built-in test runner.
 - CSRF origin checks, rate limits and SSRF-safe outbound requests.
 - Production-safe session handling and protected dashboard routes.
 - No live payment credentials in the repository.
+- GitHub Pages is a static showcase; Next.js security headers apply to the self-hosted app.
 
 ## Documentation
 

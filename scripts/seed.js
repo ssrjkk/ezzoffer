@@ -107,6 +107,43 @@ if (existing) {
   userId = Number(r.lastInsertRowid);
 }
 
+const qaEmail = (process.env.SEED_QA_EMAIL || '').trim().toLowerCase();
+const qaPassword = process.env.SEED_QA_PASSWORD || '';
+if (qaEmail && qaPassword) {
+  const qa = db.prepare('SELECT id FROM users WHERE email = ?').get(qaEmail);
+  if (qa) {
+    db.prepare(
+      'UPDATE users SET name = ?, password_hash = ?, email_verified = 1, plan = ?, plan_period = ?, plan_activated_at = ?, plan_expires_at = ?, trial_started_at = ?, mode = ? WHERE id = ?',
+    ).run(
+      'QA User',
+      hashPassword(qaPassword),
+      'pro',
+      14,
+      now - 24 * 60 * 60 * 1000,
+      now + 13 * DAY,
+      now - 24 * 60 * 60 * 1000,
+      'demo',
+      qa.id,
+    );
+  } else {
+    db.prepare(
+      'INSERT INTO users (email, name, password_hash, email_verified, created_at, plan, plan_period, plan_activated_at, plan_expires_at, trial_started_at, mode) VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(
+      qaEmail,
+      'QA User',
+      hashPassword(qaPassword),
+      now,
+      'pro',
+      14,
+      now - 24 * 60 * 60 * 1000,
+      now + 13 * DAY,
+      now - 24 * 60 * 60 * 1000,
+      'demo',
+    );
+  }
+  console.log('QA-аккаунт готов: ' + qaEmail);
+}
+
 const resumeContent = [
   'Опыт работы',
   '- Frontend-разработчик, 3 года: React, TypeScript, Next.js',

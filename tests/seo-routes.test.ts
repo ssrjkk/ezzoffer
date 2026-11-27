@@ -69,6 +69,12 @@ test('настоящий sitemap: абсолютные URL и все маршр�
   );
 });
 
+test('pageMeta сохраняет тип Open Graph', async () => {
+  const { pageMeta } = await import('../src/lib/seo');
+  const meta = pageMeta('/', { title: 'Главная' });
+  assert.equal((meta.openGraph as { type?: string } | null)?.type, 'website');
+});
+
 // Реальный robots: приватные зоны закрыты.
 test('настоящий robots закрывает приватные зоны', async () => {
   const { default: robots } = await import('../src/app/robots');
