@@ -1,4 +1,4 @@
-import test from 'node:test';
+import test, { before } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
@@ -11,10 +11,17 @@ import {
 prepareInMemoryDb({ NODE_ENV: 'test', TRUST_PROXY: undefined, SMTP_HOST: undefined });
 const mutableEnv = process.env as Record<string, string | undefined>;
 
-const { db } = await import('../src/lib/db');
-const { rateLimit } = await import('../src/lib/rate-limit');
-const { POST: login } = await import('../src/app/api/auth/login/route');
-const { POST: register } = await import('../src/app/api/auth/register/route');
+let db: typeof import('../src/lib/db').db;
+let rateLimit: typeof import('../src/lib/rate-limit').rateLimit;
+let login: typeof import('../src/app/api/auth/login/route').POST;
+let register: typeof import('../src/app/api/auth/register/route').POST;
+
+before(async () => {
+  db = (await import('../src/lib/db')).db;
+  rateLimit = (await import('../src/lib/rate-limit')).rateLimit;
+  login = (await import('../src/app/api/auth/login/route')).POST;
+  register = (await import('../src/app/api/auth/register/route')).POST;
+});
 
 const ACCOUNT_LIMIT = { windowMs: 15 * 60 * 1000, max: 10 };
 

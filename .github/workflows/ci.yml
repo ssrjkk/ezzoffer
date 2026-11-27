@@ -72,9 +72,8 @@ jobs:
           QA_EMAIL: qa2@example.com
           QA_PASSWORD: testpass123
         run: |
-          export EZOFFER_DB_PATH="$RUNNER_TEMP/ezoffer-ci.db"
           export EZOFFER_SILENT=1
-          NODE_ENV=production PORT=3121 APP_HOST=127.0.0.1 AUTOAPPLY_ENABLED=0 \
+          EZOFFER_DB_PATH="$RUNNER_TEMP/ezoffer-ci.db" NODE_ENV=production PORT=3121 APP_HOST=127.0.0.1 AUTOAPPLY_ENABLED=0 \
             npm run start:prod >"$RUNNER_TEMP/ezoffer-server.log" 2>&1 &
           server_pid=$!
           trap 'kill "$server_pid" 2>/dev/null || true' EXIT

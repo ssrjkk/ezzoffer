@@ -91,7 +91,9 @@ test('внутренние ссылки ведут в существующие �
     for (const href of hrefs(html)) {
       let path: string;
       try {
-        path = href.startsWith('http') ? new URL(href).pathname : href.split('#')[0].split('?')[0];
+        const target = new URL(href, BASE);
+        if (target.origin !== new URL(BASE).origin) continue;
+        path = target.pathname;
       } catch {
         continue;
       }
