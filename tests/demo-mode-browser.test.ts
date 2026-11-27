@@ -90,26 +90,14 @@ test('баннер демо-режима виден в кабинете на к�
       }
       await page.waitForLoadState('load');
       const banner = page.locator('[data-demo-banner]');
-      if ((await banner.count()) === 0) {
-        missing.push(path);
-        continue;
-      }
-      // Баннер обязан быть видимым, а не присутствовать в разметке: скрытый
-      // «напоминатель» — это отсутствие напоминания.
-      if (!(await banner.isVisible())) {
-        const state = await banner.evaluate((el) => {
-          const style = getComputedStyle(el);
-          const rect = el.getBoundingClientRect();
-          return {
-            display: style.display,
-            visibility: style.visibility,
-            opacity: style.opacity,
-            width: rect.width,
-            height: rect.height,
-            outerHTML: el.outerHTML.slice(0, 400),
-          };
-        });
-        missing.push(`${path} (есть в разметке, но не виден: ${JSON.stringify(state)})`);
+      try {
+        await banner.waitFor({ state: 'visible', timeout: 10_000 });
+      } catch {
+        const state = await page.evaluate(() => ({
+          url: location.href,
+          text: document.body.innerText.slice(0, 500),
+        }));
+        missing.push(`${path} (баннер не появился: ${JSON.stringify(state)})`);
         continue;
       }
       const text = (await banner.innerText()).replace(/\s+/g, ' ').trim();
