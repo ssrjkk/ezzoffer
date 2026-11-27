@@ -3,13 +3,13 @@
  * Статический экспорт публичных страниц для GitHub Pages.
  *
  * Что здесь происходит и что не происходит. Приложение целиком на Pages не
- * работает и не может: там 38 роутов API, SQLite-файл, планировщик и вебхук
- * Telegram, а GitHub Pages раздаёт файлы и не исполняет ничего. Нужен сервер
- * для кабинета — это docker-compose.prod.yml.
+ * работает и не может: там серверные API-маршруты, SQLite-файл, планировщик и
+ * вебхук Telegram, а GitHub Pages раздаёт файлы и не исполняет ничего. Нужен
+ * сервер для кабинета — это docker-compose.prod.yml.
  *
- * Но ПУБЛИЧНАЯ часть сайта пререндерится при сборке (30 HTML-файлов), и для
- * маркетингового сайта этого достаточно. Скрипт копирует их вместе с
- * ассетами в каталог, который GitHub Pages отдаёт как есть.
+ * ПУБЛИЧНАЯ часть сайта пререндерится при сборке, и для маркетингового сайта
+ * этого достаточно. Скрипт копирует страницы, metadata-маршруты и ассеты в
+ * каталог, который GitHub Pages отдаёт как есть.
  *
  * Почему не `output: "export"`: Next отказывается экспортировать проект с
  * динамическими маршрутами (/dashboard, /login, /api), а они нужны на
@@ -25,7 +25,6 @@ import {
   writeFileSync,
   existsSync,
   readFileSync,
-  renameSync,
   rmSync,
 } from 'node:fs';
 import path from 'node:path';
@@ -108,6 +107,20 @@ if (existsSync(path.join(root, 'public'))) {
   cpSync(path.join(root, 'public'), outDir, { recursive: true });
 }
 
+for (const name of ['robots.txt', 'sitemap.xml', 'manifest.webmanifest']) {
+  let copied = false;
+  for (const candidate of [path.join(appDir, `${name}.body`), path.join(appDir, name)]) {
+    try {
+      writeFileSync(path.join(outDir, name), readFileSync(candidate));
+      copied = true;
+      break;
+    } catch (err) {
+      if (err.code !== 'ENOENT' && err.code !== 'EISDIR') throw err;
+    }
+  }
+  if (!copied) throw new Error(`Next не собрал metadata-маршрут ${name}`);
+}
+
 /*
  * Иконки app-router (src/app/icon.svg, src/app/favicon.ico) — это маршруты,
  * которые генерирует сервер: в статической выгрузке их нет, и на GitHub Pages
@@ -115,7 +128,7 @@ if (existsSync(path.join(root, 'public'))) {
  * хотя HTML ссылается на /ezzoffer/icon.svg?icon.<hash>.svg). Копируем файлы
  * как есть — Pages игнорирует query-хэш, поэтому путь совпадёт.
  */
-for (const icon of ['icon.svg', 'favicon.ico']) {
+for (const icon of ['icon.svg', 'icon-maskable.svg', 'favicon.ico']) {
   const src = path.join(root, 'src', 'app', icon);
   if (existsSync(src)) cpSync(src, path.join(outDir, icon));
 }
@@ -137,29 +150,72 @@ if (existsSync(notFound)) {
   cpSync(notFound, path.join(outDir, '404.html'));
 }
 
-// robots.txt: статическая копия указывает на основной домен, а не на страницу проекта.
-const robots = path.join(outDir, 'robots.txt');
-let robotsBody;
-try {
-  // Файл читаем один раз и сразу в память: проверка existsSync + повторное
-  // чтение оставляло окно, в котором файл могли подменить между вызовами.
-  robotsBody = readFileSync(robots, 'utf8');
-} catch (err) {
-  if (err.code !== 'ENOENT') throw err;
+const siteUrl = (process.env.SITE_URL ?? 'https://ezoffer.ru').replace(/\/+$/, '');
+writeFileSync(
+  path.join(outDir, 'robots.txt'),
+  `User-agent: *\nAllow: /\nSitemap: ${siteUrl}/sitemap.xml\n`,
+);
+
+for (const file of [
+  'robots.txt',
+  'sitemap.xml',
+  'manifest.webmanifest',
+  'icon.svg',
+  'icon-maskable.svg',
+  'og.png',
+  '404.html',
+  '.nojekyll',
+]) {
+  try {
+    readFileSync(path.join(outDir, file));
+  } catch {
+    throw new Error(`В экспорте нет ${file}`);
+  }
 }
-if (robotsBody !== undefined) {
-  const body = robotsBody
-    .replace(
-      /^Sitemap:.*$/m,
-      `Sitemap: ${process.env.SITE_URL ?? 'https://ezoffer.ru'}/sitemap.xml`,
-    )
-    .replace(/^Disallow: \/dashboard.*$/m, 'Disallow: /\nDisallow: /api/');
-  // Пишем через временный файл и rename: страница проекта не остаётся на
-  // несколько миллисекунд полупустой, если сборку прервут между стиранием и
-  // записью, и читатель никогда не видит частичный robots.txt.
-  const tmp = `${robots}.tmp`;
-  writeFileSync(tmp, body);
-  renameSync(tmp, robots);
+
+const sitemap = readFileSync(path.join(outDir, 'sitemap.xml'), 'utf8');
+if (!sitemap.includes(`${siteUrl}/`)) throw new Error('sitemap.xml не использует SITE_URL');
+const manifest = JSON.parse(readFileSync(path.join(outDir, 'manifest.webmanifest'), 'utf8'));
+const expectedStart = `${basePath}/`;
+if (manifest.start_url !== expectedStart && manifest.start_url !== `${siteUrl}${expectedStart}`) {
+  throw new Error(`manifest.start_url должен быть ${expectedStart}`);
+}
+for (const icon of manifest.icons ?? []) {
+  const src = String(icon.src);
+  if (!src.startsWith(`${basePath}/`) && !src.startsWith(`${siteUrl}${basePath}/`)) {
+    throw new Error(`manifest icon без basePath: ${icon.src}`);
+  }
+}
+
+const brokenLinks = [];
+function checkStaticLinks(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      checkStaticLinks(full);
+      continue;
+    }
+    if (!entry.name.endsWith('.html')) continue;
+    const html = readFileSync(full, 'utf8');
+    for (const match of html.matchAll(/href="([^"]+)"/g)) {
+      const href = match[1];
+      const pathname = href.split(/[?#]/, 1)[0];
+      const localPath =
+        basePath && pathname.startsWith(basePath) ? pathname.slice(basePath.length) || '/' : pathname;
+      if (
+        localPath === '/login' ||
+        localPath === '/signup' ||
+        localPath === '/dashboard' ||
+        localPath.startsWith('/dashboard/')
+      ) {
+        brokenLinks.push(`${path.relative(outDir, full)}: ${href}`);
+      }
+    }
+  }
+}
+checkStaticLinks(outDir);
+if (brokenLinks.length > 0) {
+  throw new Error(`Статическая витрина ведёт в серверные маршруты:\n${brokenLinks.join('\n')}`);
 }
 
 const bytes = readdirSync(outDir).length;

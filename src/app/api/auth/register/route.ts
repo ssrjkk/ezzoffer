@@ -56,6 +56,13 @@ export async function POST(request: Request) {
     );
   }
 
+  if (!mailConfigured() && process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      { error: 'Регистрация временно недоступна: не настроена отправка писем' },
+      { status: 503 },
+    );
+  }
+
   const existing = getUserByEmail(email);
   if (existing) {
     /*
@@ -83,12 +90,9 @@ export async function POST(request: Request) {
    * Аккаунт рождается НЕподтверждённым — см. src/lib/auth/verify.ts, почему
    * `email_verified = 1` сразу был дырой (account pre-takeover).
    *
-   * Два режима, и оба честные:
-   *  - SMTP настроен: токен + письмо, сессии нет. Вход до подтверждения не
-   *    пустит (проверка в login уже была, теперь она живая).
-   *  - SMTP нет: подтвердить нечем, требовать подтверждение — значит закрыть
-   *    регистрацию. Аккаунт сразу подтверждён, как раньше, но это видно в
-   *    логе и в /api/health.
+   * Production без SMTP закрыт: нельзя выдать аккаунт за неподтверждённый
+   * чужой адрес. В разработке SMTP не обязателен — там аккаунт сразу
+   * подтверждён, чтобы локальный сценарий не требовал почтового сервера.
    */
   const verifiedUpfront = !mailConfigured();
   let userId: number;

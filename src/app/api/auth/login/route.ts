@@ -9,16 +9,13 @@ import {
 } from '@/lib/auth';
 import { hashPassword, needsRehash } from '@/lib/password';
 import { readJson } from '@/lib/api';
-import { rateLimit, resetRateLimit, clientIp } from '@/lib/rate-limit';
+import { rateLimit, clientIp } from '@/lib/rate-limit';
 import { recordAuthFailure, clearAuthFailures } from '@/lib/auth-attempts';
 
-// Защита от перебора: лимит привязан к аккаунту (работает и без TRUST_PROXY),
-// а не к глобальному "local"-ключу, который заблокировал бы всех пользователей.
+// Защита от перебора: лимит привязан к аккаунту (работает и без TRUST_PROXY)
+// и проверяется только после неверного пароля, поэтому владельца нельзя
+// заблокировать чужими попытками.
 const ACCOUNT_LIMIT = { windowMs: 15 * 60 * 1000, max: 10 };
-
-// Защита от перебора: лимит привязан к аккаунту (работает и без TRUST_PROXY),
-// а не к глобальному "local"-ключу, который заблокировал бы всех пользователей.
-// Проверяется только на неуспехе — верный пароль проходит всегда (см. ниже).
 
 /**
  * Фиктивный хеш для выравнивания времени проверки несуществующего аккаунта:
@@ -55,14 +52,6 @@ export async function POST(request: Request) {
     }
   }
 
-  const accountLimiter = rateLimit(`login-account:${email}`, ACCOUNT_LIMIT);
-  if (!accountLimiter.allowed) {
-    return NextResponse.json(
-      { error: 'Слишком много попыток входа для этого аккаунта. Попробуйте позже.' },
-      { status: 429, headers: { 'Retry-After': String(accountLimiter.retryAfterSeconds) } },
-    );
-  }
-
   const user = getUserByEmail(email);
   // Всегда выполняем scrypt-проверку (против хэша аккаунта или фиктивного),
   // чтобы время ответа не зависело от существования email.
@@ -87,7 +76,6 @@ export async function POST(request: Request) {
   }
 
   clearAuthFailures(`login-account:${email}`);
-  resetRateLimit(`login-account:${email}`);
 
   /*
    * Неподтверждённый email — тот же 401, что и неверный пароль.

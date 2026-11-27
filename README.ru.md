@@ -4,7 +4,7 @@
 
 Сервис автооткликов на вакансии: подбор по резюме, персонализированные письма, контроль этапов и разбор того, что делать дальше. Полноценное приложение на **Next.js 16 + Tailwind CSS v4 + SQLite (better-sqlite3)**.
 
-**Сайт:** [ssrjkk.github.io/ezzoffer](https://ssrjkk.github.io/ezzoffer/) · **Бот:** [@ezzoffer_bot](https://t.me/ezzoffer_bot) — вход в сервис и стартовый пробный день
+**Сайт:** [ssrjkk.github.io/ezzoffer](https://ssrjkk.github.io/ezzoffer/) · **Бот:** [@ezzoffer_bot](https://t.me/ezzoffer_bot) — управление сервисом после привязки аккаунта
 
 ## Скриншоты
 
@@ -71,30 +71,17 @@ npm run dev       # dev-сервер http://localhost:3000
 npm run build     # production build
 npm run start:prod # production-сервер (standalone) http://localhost:3000
 npm run lint      # eslint
-npm test          # тесты (node --test, без внешних сервисов)
+npm test          # unit + integration; CI поднимает production-сервер и Chromium
 npm run seed      # демо-аккаунт с заполненным кабинетом (demo@ezoffer.ru / demo123)
 npm run bot:poll    # опрос Telegram для локального стенда (вместо вебхука)
 npm run bot:menu    # кнопка меню + описание бота (один раз после смены команд)
 npm run check:links # все внутренние ссылки сайта (sitemap + дашборд)
 ```
 
-> **Windows / better-sqlite3.** Версия 12.11.1 зафиксирована в `package.json` и имеет
-> готовые бинарники для Node 20/22/24. Если `npm install` всё же падает с
-> «Could not locate the bindings file», значит prebuild не скачался (нет доступа к
-> GitHub Releases или сработал корпоративный прокси). Обойти можно без Visual Studio —
-> скачать бинарник вручную:
->
-> ```powershell
-> # 1) узнать ABI вашей версии Node (напр. 137 для Node 24)
-> node -p "process.versions.modules"
-> # 2) скачать и распаковать в node_modules/better-sqlite3/build/Release/
-> curl.exe -L -o bs3.tar.gz https://github.com/WiseLibs/better-sqlite3/releases/download/v12.11.1/better-sqlite3-v12.11.1-node-v137-win32-x64.tar.gz
-> tar -xzf bs3.tar.gz -C node_modules/better-sqlite3/prebuilds/node-v137-win32-x64
-> New-Item -ItemType Directory -Force node_modules\better-sqlite3\build\Release
-> Copy-Item node_modules\better-sqlite3\prebuilds\node-v137-win32-x64\build\Release\better_sqlite3.node node_modules\better-sqlite3\build\Release\
-> ```
->
-> Не поднимайте `better-sqlite3` до 13.x без готового toolchain C++.
+> **Windows / better-sqlite3.** Версия 13.1.1 зафиксирована в `package.json` и требует
+> Node.js 22 или новее. Если `npm install` падает с «Could not locate the bindings file»,
+> сначала выполните `npm rebuild better-sqlite3`. Если compatible prebuild недоступен,
+> нужен Microsoft C++ Build Tools; не подменяйте native-модуль бинарником от другой версии.
 
 Демо-аккаунт из `npm run seed`: тариф «Про» на 14 дней, резюме, письмо, активный автопоиск — чтобы кабинет сразу выглядел живым.
 
@@ -275,14 +262,15 @@ npm test
 - `tests/site-checks.test.ts` обходит все внутренние ссылки и ищет заголовки,
   обещающие то, чего продукт не делает.
 
-Проверки, которым нужен браузер или сервер, пропускаются, если те недоступны.
+CI поднимает изолированную production-сборку и Chromium, поэтому server/browser-проверки
+в CI не пропускаются. При локальном `npm test` без сервера они честно пропускаются.
 
 > Демо-набор на витрине (`/jobs`, `/internships`, главная) — выдуманные компании
 > для показа формата. Живой каталог — в кабинете после регистрации. Оплата картой/СБП
 > не подключена (способы показывают «не настроено»); крипта — только с кошельком
 > в `PAYMENT_CRYPTO_USDT_WALLET`.
 
-## Installation
+## Установка
 
 ```bash
 git clone https://github.com/ssrjkk/ezzoffer.git
@@ -290,11 +278,19 @@ cd ezzoffer
 npm install
 ```
 
-## Usage
+## Использование
 
 ```bash
 npm run dev
 ```
+
+## Безопасность
+
+- Пароли хешируются через scrypt, сессии используют httpOnly-куки.
+- Изменяющие запросы проверяют Origin, действуют rate limits и SSRF-фильтр.
+- Dashboard защищён проверкой сессии, а хранение токенов в production требует `EZOFFER_TOKEN_KEY`.
+- Платёжные ключи в репозитории не хранятся.
+- GitHub Pages — статическая витрина; security-заголовки Next.js действуют в self-hosted приложении.
 
 ---
 
@@ -305,3 +301,7 @@ npm run dev
 - [About](https://ssrjkk.github.io/ezzoffer/about)
 - [FAQ](https://ssrjkk.github.io/ezzoffer/faq)
 - [Pricing](https://ssrjkk.github.io/ezzoffer/pricing)
+
+## Лицензия
+
+MIT — см. [LICENSE](LICENSE).

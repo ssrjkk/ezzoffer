@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Section, SectionHead, GhostButton } from '@/components/ui';
 import { BOT_COMMANDS, BOT_MESSAGES, type BotMessage } from '@/lib/bot-data';
+import { isStaticPublicSite } from '@/lib/public-runtime';
 
 /**
  * Живое превью Telegram-бота: диалог проигрывается по шагам, как в реальном
@@ -316,9 +317,11 @@ export function TelegramBot() {
             ))}
           </div>
 
-          <div className="mt-8 flex flex-wrap gap-3">
-            <GhostButton href="/dashboard/settings">Включить в кабинете</GhostButton>
-          </div>
+          {!isStaticPublicSite && (
+            <div className="mt-8 flex flex-wrap gap-3">
+              <GhostButton href="/dashboard/settings">Включить в кабинете</GhostButton>
+            </div>
+          )}
         </div>
 
         <div className="order-first lg:order-last">

@@ -47,7 +47,7 @@ const inter = Inter({
   display: 'swap',
 });
 
-const siteUrl = envBaseUrl(process.env, 'SITE_URL', 'https://ssrjkk.github.io/ezzoffer');
+const siteUrl = envBaseUrl(process.env, 'SITE_URL', 'https://ezoffer.ru');
 
 export const viewport: Viewport = {
   themeColor: '#f7f5f0',

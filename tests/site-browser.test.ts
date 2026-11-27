@@ -44,6 +44,9 @@ async function sweep(): Promise<string[]> {
       page.on('console', (m) => {
         if (m.type() === 'error') failed.push(`ошибка в консоли: ${m.text().slice(0, 120)}`);
       });
+      page.on('pageerror', (error) => {
+        failed.push(`ошибка страницы: ${error.message.slice(0, 160)}`);
+      });
       page.on('requestfailed', (r) => {
         // Префетч Next.js отменяется при уходе со страницы — это норма, а не поломка.
         const err = r.failure()?.errorText ?? '';

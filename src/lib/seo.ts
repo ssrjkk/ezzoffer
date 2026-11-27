@@ -13,9 +13,10 @@ export function pageMeta(path: string, meta: Metadata): Metadata {
     ...meta,
     alternates: { canonical: path },
     openGraph: {
+      type: 'website',
       ...(meta.openGraph ?? {}),
       url: path,
-      images: [{ url: `${envBaseUrl(process.env, 'SITE_URL', 'https://ssrjkk.github.io/ezzoffer')}/og.png`, width: 1200, height: 630 }],
+      images: [{ url: `${envBaseUrl(process.env, 'SITE_URL', 'https://ezoffer.ru')}/og.png`, width: 1200, height: 630 }],
     },
   };
 }

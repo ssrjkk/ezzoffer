@@ -17,6 +17,8 @@ import type { MetadataRoute } from 'next';
 const PAPER = '#f7f5f0';
 const INK = '#15130f';
 const ACCENT = '#9a2a22';
+const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/+$/, '');
+const assetUrl = (path: string): string => `${basePath}${path}`;
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
@@ -24,13 +26,13 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: 'EZOffer',
     description:
       'Подбор вакансий по резюме, автоотклик с сопроводительным письмом и уведомления в Telegram.',
-    start_url: '/',
+    start_url: assetUrl('/'),
     display: 'standalone',
     background_color: PAPER,
     theme_color: PAPER,
     icons: [
-      { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
-      { src: '/icon-maskable.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
+      { src: assetUrl('/icon.svg'), sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
+      { src: assetUrl('/icon-maskable.svg'), sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
     ],
   };
 }

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ctaUrl } from '@/lib/cta';
+import { isStaticPublicSite } from '@/lib/public-runtime';
 import { Logo } from './site-header';
 import { ServiceStatus } from './service-status';
 
@@ -81,16 +82,18 @@ export function SiteFooter() {
                 разнесён `space-y`.
               */}
               <ul className="space-y-1.5">
-                {col.links.map((link) => (
-                  <li key={link.label}>
-                    <Link
-                      href={link.href}
-                      className="inline-block py-1 text-sm text-muted transition-colors hover:text-accent"
-                    >
-                      {link.label}
-                    </Link>
-                  </li>
-                ))}
+                {col.links
+                  .filter((link) => !isStaticPublicSite || !link.href.startsWith('/dashboard/'))
+                  .map((link) => (
+                    <li key={link.label}>
+                      <Link
+                        href={link.href}
+                        className="inline-block py-1 text-sm text-muted transition-colors hover:text-accent"
+                      >
+                        {link.label}
+                      </Link>
+                    </li>
+                  ))}
               </ul>
             </div>
           ))}
