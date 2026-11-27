@@ -5,10 +5,10 @@ import {
   authCalls,
   post,
   setVerifyPasswordResult,
-  useInMemoryDb,
+  useInMemoryDb as prepareInMemoryDb,
 } from './helpers/route-session';
 
-useInMemoryDb({ NODE_ENV: 'test', TRUST_PROXY: undefined, SMTP_HOST: undefined });
+prepareInMemoryDb({ NODE_ENV: 'test', TRUST_PROXY: undefined, SMTP_HOST: undefined });
 const mutableEnv = process.env as Record<string, string | undefined>;
 
 const { db } = await import('../src/lib/db');

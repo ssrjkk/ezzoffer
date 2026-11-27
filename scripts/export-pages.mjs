@@ -108,10 +108,17 @@ if (existsSync(path.join(root, 'public'))) {
 }
 
 for (const name of ['robots.txt', 'sitemap.xml', 'manifest.webmanifest']) {
-  const candidates = [path.join(appDir, name), path.join(appDir, `${name}.body`)];
-  const source = candidates.find((file) => existsSync(file));
-  if (!source) throw new Error(`Next не собрал metadata-маршрут ${name}`);
-  cpSync(source, path.join(outDir, name));
+  let copied = false;
+  for (const candidate of [path.join(appDir, `${name}.body`), path.join(appDir, name)]) {
+    try {
+      writeFileSync(path.join(outDir, name), readFileSync(candidate));
+      copied = true;
+      break;
+    } catch (err) {
+      if (err.code !== 'ENOENT' && err.code !== 'EISDIR') throw err;
+    }
+  }
+  if (!copied) throw new Error(`Next не собрал metadata-маршрут ${name}`);
 }
 
 /*
@@ -159,7 +166,11 @@ for (const file of [
   '404.html',
   '.nojekyll',
 ]) {
-  if (!existsSync(path.join(outDir, file))) throw new Error(`В экспорте нет ${file}`);
+  try {
+    readFileSync(path.join(outDir, file));
+  } catch {
+    throw new Error(`В экспорте нет ${file}`);
+  }
 }
 
 const sitemap = readFileSync(path.join(outDir, 'sitemap.xml'), 'utf8');
@@ -178,13 +189,13 @@ for (const icon of manifest.icons ?? []) {
 
 const brokenLinks = [];
 function checkStaticLinks(dir) {
-  for (const entry of readdirSync(dir)) {
-    const full = path.join(dir, entry);
-    if (statSync(full).isDirectory()) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
       checkStaticLinks(full);
       continue;
     }
-    if (!entry.endsWith('.html')) continue;
+    if (!entry.name.endsWith('.html')) continue;
     const html = readFileSync(full, 'utf8');
     for (const match of html.matchAll(/href="([^"]+)"/g)) {
       const href = match[1];
