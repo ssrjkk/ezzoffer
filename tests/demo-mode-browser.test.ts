@@ -35,7 +35,14 @@ async function login(ctx: BrowserContext): Promise<boolean> {
         data: { email: EMAIL, password: PASSWORD },
       }),
     );
-    return res.ok();
+    if (!res.ok()) return false;
+    const mode = await retryOn429(() =>
+      ctx.request.post(`${BASE}/api/mode`, {
+        data: { mode: 'demo' },
+        headers: { 'content-type': 'application/json', origin: BASE, referer: `${BASE}/login` },
+      }),
+    );
+    return mode.ok();
   } catch {
     // Сервера нет — это не «неудачный вход», а «проверять нечего».
     // Вызывающий код пропускает тест.
