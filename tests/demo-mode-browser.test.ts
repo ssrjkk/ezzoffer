@@ -84,6 +84,10 @@ test('баннер демо-режима виден в кабинете на к�
     const missing: string[] = [];
 
     for (const path of PAGES) {
+      if (!(await login(ctx))) {
+        missing.push(`${path} (не удалось войти перед проверкой баннера)`);
+        continue;
+      }
       if (!(await gotoRetry(page, `${BASE}${path}`))) {
         missing.push(`${path} (лимит запросов не отпустил за 4 попытки)`);
         continue;
