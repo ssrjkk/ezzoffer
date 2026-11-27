@@ -9,6 +9,7 @@ import {
 } from './helpers/route-session';
 
 useInMemoryDb({ NODE_ENV: 'test', TRUST_PROXY: undefined, SMTP_HOST: undefined });
+const mutableEnv = process.env as Record<string, string | undefined>;
 
 const { db } = await import('../src/lib/db');
 const { rateLimit } = await import('../src/lib/rate-limit');
@@ -57,9 +58,9 @@ test('одиннадцатая неверная попытка получает 
 });
 
 test('production без SMTP не регистрирует неподтверждённый email', async () => {
-  const previous = process.env.NODE_ENV;
-  process.env.NODE_ENV = 'production';
-  delete process.env.SMTP_HOST;
+  const previous = mutableEnv.NODE_ENV;
+  mutableEnv.NODE_ENV = 'production';
+  delete mutableEnv.SMTP_HOST;
   try {
     const email = 'no-smtp@example.com';
     const response = await register(post({ name: 'No SMTP', email, password: 'testpass123' }));
@@ -69,15 +70,15 @@ test('production без SMTP не регистрирует неподтверж�
     };
     assert.equal(count.count, 0, 'аккаунт не должен появиться после отказа регистрации');
   } finally {
-    if (previous === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = previous;
+    if (previous === undefined) delete mutableEnv.NODE_ENV;
+    else mutableEnv.NODE_ENV = previous;
   }
 });
 
 test('development без SMTP сохраняет локальный сценарий регистрации', async () => {
-  const previous = process.env.NODE_ENV;
-  process.env.NODE_ENV = 'development';
-  delete process.env.SMTP_HOST;
+  const previous = mutableEnv.NODE_ENV;
+  mutableEnv.NODE_ENV = 'development';
+  delete mutableEnv.SMTP_HOST;
   try {
     const email = 'local@example.com';
     const response = await register(post({ name: 'Local', email, password: 'testpass123' }));
@@ -87,7 +88,7 @@ test('development без SMTP сохраняет локальный сценар
     };
     assert.equal(user.email_verified, 1);
   } finally {
-    if (previous === undefined) delete process.env.NODE_ENV;
-    else process.env.NODE_ENV = previous;
+    if (previous === undefined) delete mutableEnv.NODE_ENV;
+    else mutableEnv.NODE_ENV = previous;
   }
 });
